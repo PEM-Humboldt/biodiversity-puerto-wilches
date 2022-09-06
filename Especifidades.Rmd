@@ -1,0 +1,763 @@
+---
+title: "Especificidades de los grupos biologicos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+---
+
+```{r}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE)
+require(openxlsx)
+```
+
+
+En este documento voy a hacer un recapitulativo de todas las especifidades de los grupos biologicos, con el objetivo de entender las posibles dificultades en la integración en una base de datos general.
+
+Se deberían anotar:
+
+* Nombres de los eventID 
+* una lista de los protocolos
+* geometrías asociadas a los protocolos
+* la manera de medir el esfuerzo de muestreo
+* variables extra en la descripción de los eventos
+* tipo de densidad/abundancia colectada
+* variables extra de biometría, o otras
+* utilización de morfoespecies
+
+```{r}
+dataGrupos <- list()
+fol_data <- "../Data_Documents/DwC Finales/"
+```
+
+
+# Anfibios
+
+```{r}
+dataGrupos$Anfibios<-list()
+dataGrupos$Anfibios$event <- read.xlsx(file.path(fol_data,"Anfibios","DwC_ANH_Anfibios_v.2.2_Eventos y RegistrosFN 26_revCCastro_Corregido_19_Ago_2022.xlsx"),sheet="Eventos",startRow = 2)
+dataGrupos$Anfibios$registros <- read.xlsx(file.path(fol_data,"Anfibios","DwC_ANH_Anfibios_v.2.2_Eventos y RegistrosFN 26_revCCastro_Corregido_19_Ago_2022.xlsx"),sheet="Anfibios",startRow = 2)
+```
+
+## Events
+
+```{r}
+regexEventID_Anfibios<- "^ANH_[0-9]{1,3}_Herp_T[1-3]_[DN](_TE2)?$"
+all(grepl(regexEventID_Anfibios,dataGrupos$Anfibios$event$occurrenceID))
+all(grepl(regexEventID_Anfibios,dataGrupos$Anfibios$registros$eventID))
+table(dataGrupos$Anfibios$event$samplingProtocol)
+```
+**Analisis eventID**:
+
+* No sé lo que quiere decir el T1, T2, o T3 en el nombre
+* Tiene la variable de jornada, que podemos deducir de la hora
+* Tiene la variable TE2 que corresponde al año 2022
+
+
+**Protocolos**: Parece que el unico protocolo anotado es la Búsqueda por encuentros visuales.
+
+**Geometría asociada**: Los DwC contienen 3 puntos que corresponden al principio, intermedio y final del recorrido
+
+**Esfuerzo de muestreo**: Existe un "SamplingSize" que corresponde a una distancia recorrida en metros, pero la variable "SamplingEffort" corresponde a un tiempo. 
+
+**Variables extra en evento**: No
+
+## Registros
+
+```{r}
+table(dataGrupos$Anfibios$registros$organismQuantity)
+```
+
+**tipo de abundancia** numeros de individuos, con una mayoria de filas individuales
+
+**Variables especificas**: A notar, existen:
+
+* las diferencias entre observación humana y Especimen preservado
+* La diferencia entre Evento y sonido
+* sex (casi siempre anotado)
+* lifeStage (casi siempre anotado)
+* behavior (categorias definidas)
+* 3 variables de catalogo: catalogNumber, recordNumber y otherCatalogNumbers
+* Referencia/formato de foto con el nombre del fotografo
+* Referencia/formato de grabación audio con el nombre del grabador
+* Recolección de tejido: cola, higado, pata o renacuajo, conciernen solo una parte de los individuos (~10%)
+* Longitud rostro-cloaca (mm), los mismos individuos
+* peso (g) los mismos individuos
+* Longitud cola (mm) menos individuos
+* eventRemarks (ver Notes)
+
+
+
+**Notes** 
+
+1. Algunas filas conciernen más de un individuo pero tienen sexo, comportamiento etc. me parece dificil entender si esos datos son correctos
+2. Los comentarios asociados a los individuos son principalmente unas descripciones finas de los habitats (Suelo desnudo/Hojarasca etc.) pero existen notas más circunstanciales (ej: Individuo registrado inmóvil en el pastizal ) Note that the first part is also recorded in the variable eventRemark
+
+
+# Reptiles
+
+```{r}
+dataGrupos$Reptiles<-list()
+dataGrupos$Reptiles$event <- read.xlsx(file.path(fol_data, "Reptiles","I2D-BIO_2022_060.xlsx"), sheet="Evento")
+dataGrupos$Reptiles$registros <- read.xlsx(file.path(fol_data, "Reptiles","I2D-BIO_2022_060.xlsx"), sheet="Reptiles")
+```
+
+```{r}
+regexEventID_Reptiles<- "^ANH_[0-9]{1,3}_Herp_T[0-9]_[DN](_TE2)?$"
+all(grepl(regexEventID_Reptiles,dataGrupos$Reptiles$event$eventID))
+all(grepl(regexEventID_Reptiles,dataGrupos$Reptiles$registros$eventID))
+table(dataGrupos$Anfibios$event$samplingProtocol)
+```
+
+Averiguar si los eventID corresponden:
+```{r}
+
+length(intersect(dataGrupos$Anfibios$event$occurrenceID, dataGrupos$Reptiles$event$eventID))
+setdiff(dataGrupos$Anfibios$event$occurrenceID, dataGrupos$Reptiles$event$eventID)
+setdiff(dataGrupos$Reptiles$event$eventID, dataGrupos$Anfibios$event$occurrenceID)
+```
+
+
+Nota: 
+
+* Basicamente todo está igual a lo de Anfibios excepto algunas recolecciones de tejidos diferentes
+* We will have a problem: se utilizan los mismos eventID *No parece ser un problema (discusión Whatsapp del 18 de agosto). Los eventID y las variables asociadas a eventos son exactamente las mismas. Son de hecho un solo evento con el mismo metodo, y se pueden separar despues por taxonomía a nivel de clase*
+
+
+# Atropellamiento
+
+```{r}
+dataGrupos$Atropellamientos$event <- read.xlsx(file.path(fol_data, "Atropellamientos", "I2D-BIO_2022_057.xlsx"), sheet="DwCEventos")
+dataGrupos$Atropellamientos$registros <- read.xlsx(file.path(fol_data, "Atropellamientos", "I2D-BIO_2022_057.xlsx"), sheet="Registros")
+```
+
+## Eventos
+```{r}
+regexEventID_Atropellamientos<- "^[A-Z][a-z]+-(CARAC)|(KAPLA)_[0-9]{1,3}$"
+all(grepl(regexEventID_Atropellamientos, dataGrupos$Atropellamientos$event$eventID))
+all(grepl(regexEventID_Atropellamientos, dataGrupos$Atropellamientos$registros$eventID))
+table(dataGrupos$Atropellamientos$event$samplingProtocol)
+```
+**Analisis eventID**:
+
+* Tiene el mes que podemos deducir de la fecha
+* Existen 2 tipos de recorridos: CARAC y KAPLA
+
+**Protocolos**:  Recorridos
+
+**Geometría asociada**: Los DwC contienen 3 puntos que corresponden al principio, intermedio y final del recorrido
+
+**Esfuerzo de muestreo**: longitud del recorrido/tiempo
+
+**Variables extra en evento**: No
+
+**Note**:
+
+1. Los eventos de atropellamientos no se asocian a ninguna plataforma ni ANH... Entonces si queremos poner unas CONSTRAINT NOT NULL en las FOREIGN KEYS de estas tablas, no lo podemos hacer en los casos de los atropellamientos.
+
+## Registros
+
+```{r}
+table(dataGrupos$Atropellamientos$registros$organismQuantity)
+```
+
+**tipo de abundancia** filas individuales
+
+**Variables especificas**: A notar, existen:
+
+* Muchas informaciones sobre las vias recorridas, distancia via/animal (m), tipo de via, ancho de via, numero de carriles etc.
+
+
+# Aves
+
+```{r}
+dataGrupos$Aves$event <- read.xlsx(file.path(fol_data, "Aves","I2D-BIO_2021_050_v6.xlsx"), sheet="Eventos",startRow = 2)
+dataGrupos$Aves$registros <- read.xlsx(file.path(fol_data, "Aves","I2D-BIO_2021_050_v6.xlsx"), sheet="Registros")
+```
+
+## Eventos
+```{r}
+regexEventID_Aves<- c(
+  "^ANH_[0-9]{1,3}_A_R[0-9]{1,2}_T[12]$",#redes
+  "^ANH_[0-9]{1,3}_A_P[1-3]_R[1-3]_T[12]$",#pt fijo
+  "^ANH_[0-9]{1,3}_T[12]$",#recorridos
+  "^(ANH_92_Asio_T2)|(AT_Crotophaga_T2)")#Accidental
+# applying all the regex to occurrenceID of the event sheet result is a dataframe with regex as columns
+A <- sapply(regexEventID_Aves,grepl,x=dataGrupos$Aves$event$occurrenceID)
+all(apply(A, 1, any))
+max(apply(A, 1, sum))
+table(apply(A, 1, function(x)c("Redes de Niebla","Punto Fijo","Recorrido","Accidental")[x]), dataGrupos$Aves$event$samplingProtocol)
+protFromRegex <- apply(A, 1, function(x) c("Redes de Niebla","Punto Fijo","Recorrido","Accidental")[x])
+protFromData <- dataGrupos$Aves$event$samplingProtocol
+dataGrupos$Aves$event[protFromRegex != protFromData & (!(protFromRegex == "Recorrido" & grepl("Recorrido", protFromData))), c("occurrenceID", "samplingProtocol")]
+
+
+
+B <- sapply(regexEventID_Aves,grepl, x=dataGrupos$Aves$registros$eventID)
+all(apply(B,1,any))
+max(apply(B,1,sum))
+
+table(dataGrupos$Aves$event$samplingProtocol)
+```
+
+**Analisis eventID**:
+
+* la forma del eventID está especifica según el tipo de protocolo
+* Parece que las redes de Niebla están separadas y referenciadas con numeros
+* Parece que los puntos fijos tambien están referenciados
+* Sería interesante saber si corresponden a localizaciones, o a algo que se repite en el tiempo y/o el espacio
+
+**Protocolos**: La mayoría de los datos corresponden a **punto fijo**, pero existen tambien las **redes de niebla** que son importantes. Finalmente existen **Accidental**, **Recorrido Libre** y **Recorrido en lancha** que son muy puntuales y se podrían juntar en un solo metodo... (A notar: mucho trabajo para 6 eventos...)
+
+**Geometría asociada**: 
+
+* **Punto fijo**: punto
+* **Redes de niebla**: punto 
+* **Recorridos**: potencialmente lineString pero solo existe una coordenada en el evento
+* **Accidental**: punto
+
+
+**Esfuerzo de muestreo**:
+
+* **punto fijo**: tiempo
+* **redes de niebla**: tiempo por trampa
+* **recorridos**: distancia por tiempo
+* **Accidental**: ninguno
+
+**Variables extra en evento**:
+
+* **punto fijo**: Muchas informaciones sobre los bosques (Altura Dosel, Cobertura Dosel, Tipo de palma, Sotobosque en escala)
+* **otros protocolos**: Casi nunca están esas informaciones, excepto 4 veces en las redes de niebla: tipo de palma
+
+**Note**:
+
+## Registros
+
+```{r}
+table(dataGrupos$Aves$registros$organismQuantity)
+```
+
+**tipo de abundancia**: abundancia, casi siempre filas individuales
+
+**Variables especificas**: 
+
+* Gender
+* reproductiveStatus
+* Muchas variables de biometría en caso de las capturas en redes
+* tipo de observación en caso de punto fijo (no entiendo bien lo que quieren decir primera y segunda distancia de observación)
+
+
+
+# Botanica
+
+
+```{r}
+dataGrupos$Botanica$event <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Eventos",startRow = 1)
+dataGrupos$Botanica$registros_Arborea <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Arbórea",startRow = 2)
+dataGrupos$Botanica$registros_Epi_vas <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Epífitas vasculares",startRow = 2)
+dataGrupos$Botanica$registros_Epi_novas <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Epífitas no vasculares",startRow = 2)
+dataGrupos$Botanica$registros_col <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Colección",startRow = 2)
+```
+
+## Eventos
+```{r}
+regexEventID_Arborea<- "^ANH_[0-9]{1,3}_[0-9]{1,2}(_F)?$"
+all(grepl(regexEventID_Arborea,dataGrupos$Botanica$event$eventID))
+all(grepl(regexEventID_Arborea,dataGrupos$Botanica$registros_Arborea$eventID))
+all(grepl(regexEventID_Arborea,dataGrupos$Botanica$registros_Epi_vas$eventID))
+all(grepl(regexEventID_Arborea,dataGrupos$Botanica$registros_Epi_novas$eventID))
+all(grepl(regexEventID_Arborea,dataGrupos$Botanica$registros_col$eventID))
+table(dataGrupos$Botanica$event$samplingProtocol[dataGrupos$Botanica$event$occurrenceID %in% dataGrupos$Botanica$registros_col$eventID])
+table(dataGrupos$Botanica$event$samplingProtocol[dataGrupos$Botanica$event$occurrenceID %in% dataGrupos$Botanica$registros_Arborea$eventID])
+table(dataGrupos$Botanica$event$samplingProtocol[dataGrupos$Botanica$event$occurrenceID %in% dataGrupos$Botanica$registros_Epi_vas$eventID])
+table(dataGrupos$Botanica$event$samplingProtocol[dataGrupos$Botanica$event$occurrenceID %in% dataGrupos$Botanica$registros_Epi_novas$eventID])
+table(dataGrupos$Botanica$event$samplingProtocol)
+```
+
+**Analisis eventID**: 
+
+* No entiendo si los eventID corresponden a parcelas o a transectos dentro de las parcelas
+* la F corresponde a los muestreos de epifitas
+
+**Protocolos**: Existen 3 protocolos:
+
+1. Muestreo de comunidades de hierbas para estimar coberturas en cuadrantes de un metro cuadrado 
+2. Muestreo de flora epifita no vascular sugerido por la ANLA para solicitudes de licenciamiento ambiental.
+3. Transecto de inventario de flora arbórea (Oliver et al. 2002, Global Patterns of Plant Diversity: Alwyn H. Gentry Forest Transec Data Set, Missouri Botanical Garden Press) ajustado a DAP mínimo de 5 cm 
+
+**Geometría asociada**: Solo existe una coordenada, en todos los eventos
+
+**Esfuerzo de muestreo**: Superficie y/o numero de transectos y/o cuadrantes
+
+**Variables extra en evento**: Las variable eventRemarks es particularmente precisa
+
+**Note**:
+
+1. Parece que los muestreos de hierba solo están en colección, pero también existen datos de protocolos Arboreo en colección.
+2. Los esfuerzos de muestreos parecen solo depender del protocolo y no reflejar las potenciales diferencias en los diferentes eventos
+
+## Registros
+
+```{r}
+table(dataGrupos$Botanica$registros_Arborea$organismQuantity)
+table(dataGrupos$Botanica$registros_Epi_vas$organismQuantity)
+table(dataGrupos$Botanica$registros_Epi_novas$organismQuantity)
+table(dataGrupos$Botanica$registros_col$organismQuantity)
+```
+
+**tipo de abundancia**:
+
+* **Arborea**: filas individuales
+* **Epifitas vasculares**: porcentage de cobertura
+* **Epifitas no vasculares**: cobertura en cm2 y porcentaje de cobertura
+* **Colección**: filas individuales
+
+**Variables especificas**:
+
+* Necesitaria una anotacion de los individuos
+* En arborea, existen  biometría y estado de los individuos
+* Hay una variable samplingProtocol que se repite dentro de los registros, pero no aporta realmente informaciones particulares sabiendo que siempre esta igual segun los protocolos anotados en los eventos
+* los numeros de colección son importantes acá
+
+
+# Collembolos
+
+```{r}
+dataGrupos$Collembolos$event <- read.xlsx(file.path(fol_data,"Collembolos","I2D-BIO_2021_099_v3.xlsx"),sheet="DwC_EvCol_2021-2022")
+dataGrupos$Collembolos$registros <- read.xlsx(file.path(fol_data,"Collembolos","I2D-BIO_2021_099_v3.xlsx"),sheet="DwC RegCol 2021-2022")
+```
+
+## Eventos
+```{r}
+regexEventID_Collembolos<- "^ANH_[0-9]{1,3}_(Pitfall)|(Berlese)[0-9]_202[12]-[0-9]{1,2}-[0-9]{1,2}/202[12]-[0-9]{1,2}-[0-9]{1,2}$"
+all(grepl(regexEventID_Collembolos,dataGrupos$Collembolos$event$eventID))
+all(grepl(regexEventID_Collembolos,dataGrupos$Collembolos$registros$eventID))
+table(dataGrupos$Collembolos$event$samplingProtocol)
+```
+
+**Analisis eventID**:
+
+* Contienen los numeros de pitfall y berlese
+* contienen las fechas que se puede encontrar tambien en la variable correspondiente
+**Protocolos**:  2 protocolos que corresponden a 2 trampas: Berlese y pitfall
+
+**Geometría asociada**: puntos
+
+**Esfuerzo de muestreo**: Berlese: cm cubicos / tiempo (dias), pitfall: tiempo
+
+**Variables extra en evento**: Datos de cobertura, principalmente texto
+
+**Note**:
+
+## Registros
+
+```{r}
+table(dataGrupos$Collembolos$registros$organismQuantity)
+```
+
+**tipo de abundancia**: Numero de individuos
+
+**Variables especificas**: colecciones 
+
+Notar que existe una pestaña en los DwC para las referencias de fotos
+
+
+# Escarabajos
+
+```{r}
+dataGrupos$Escarabajos$event <- read.xlsx(file.path(fol_data,"Escarabajos","I2D-BIO_2021_069_v2_ev.xlsx"),sheet="I2D-BIO_2021_069_event")
+dataGrupos$Escarabajos$registros <- read.xlsx(file.path(fol_data,"Escarabajos","I2D-BIO_2021_069_v3_rrbb.xlsx"),sheet="Sheet4")
+```
+
+## Eventos
+```{r}
+regexEventID_Escarabajos<- c("^ANH_[0-9]{1,3}_Captura manual[0-9]_202[12]-[0-9]{2}-[0-9]{2}$","^ANH_[0-9]{1,3}_T. Exc. Human[0-9]_202[12]-[0-9]{2}-[0-9]{2}/202[12]-[0-9]{2}-[0-9]{2}$")
+tabRegexTest_Escarabajos_event <- sapply(regexEventID_Escarabajos,grepl,x=dataGrupos$Escarabajos$event$eventID)
+all(apply(tabRegexTest_Escarabajos_event,1,sum)==1)
+tabRegexTest_Escarabajos_reg <- sapply(regexEventID_Escarabajos,grepl,x=dataGrupos$Escarabajos$registros$eventID)
+all(apply(tabRegexTest_Escarabajos_reg,1,sum)==1)
+
+
+table(dataGrupos$Escarabajos$event$samplingProtocol)
+```
+
+**Analisis eventID**:
+
+* Contienen los numeros de trampa, o de esfuerzo de capturas
+* Contienen las fechas
+
+
+**Protocolos**: Capturas manuales y trampas de excremento humano
+
+**Geometría asociada**: puntos
+
+**Esfuerzo de muestreo**: En el caso de las capturas manuales se nota muchas veces solo un tiempo (imagino el tiempo de principio), y la superficie (1m2), pero el tiempo de recolección podría ser interesante. En las trampas, el tiempo es de 48h por trampa.
+
+**Variables extra en evento**: Habitat y cobertura local
+
+**Note**:
+
+## Registros
+
+```{r}
+table(dataGrupos$Escarabajos$registros$organismQuantity)
+```
+
+**tipo de abundancia**: Numero de individuos
+
+**Variables especificas**: Preparacion de la coleccion
+
+
+**Note**: 
+
+1. existe una pestaña multimedia para las fotos
+2. a veces podemos ver un gran numero de individuos asociados con una colección de un individuo
+3. Existen codigos de identificacion raros : p.ej. 01H
+4. lifeStage
+
+
+# Hormigas
+
+```{r}
+dataGrupos$Hormigas$event <- read.xlsx(file.path(fol_data,"Hormigas","I2D-BIO_2021_096_v2_ev.xlsx"),sheet="Eventos")
+dataGrupos$Hormigas$registros <- read.xlsx(file.path(fol_data,"Hormigas","I2D-BIO_2021_096_v2_rrbb.xlsx"),sheet="Hoja1")
+```
+
+## Eventos
+```{r}
+regexEventID_Hormigas<- "^ANH_[0-9]{1,3}_(Captura manual)|(Pitfall)|(Trampa de caída atún)|(Winkler)[0-9]{1,2}_202[12]-[0-9][0-9]-[0-9][0-9]/202[12]-[0-9][0-9]-[0-9][0-9]$"
+all(grepl(regexEventID_Hormigas,dataGrupos$Hormigas$event$eventID))
+all(grepl(regexEventID_Hormigas,dataGrupos$Hormigas$registros$eventID))
+table(dataGrupos$Hormigas$event$samplingProtocol)
+```
+
+**eventID**:
+
+* Contienen los numeros de trampa
+* Contienen las fechas
+
+**Protocolos**: Captura manual / Pitfall / Trampa de caída atún / Winkler
+
+**Geometría asociada**: puntos
+
+**Esfuerzo de muestreo**: Captura manual: superficie/tiempo, Pitfall: tiempo, Trampa de caída atún: tiempo, Winkler: tiempo
+
+**Variables extra en evento**: Datos de cobertura (podrían ser más especificos que los datos satelitales)
+
+**Note**:
+
+## Registros
+
+```{r}
+table(dataGrupos$Hormigas$registros$organismQuantity)
+```
+
+**tipo de abundancia**: Numero de individuos
+
+**Variables especificas**: sexo, lifestage, preparaciones, clase de individuo (obrera etc.)
+
+
+**Note** : 
+
+1. vamos a necesitar una variable que define los alados... parece que la variable occurrenceRemarks es la variable que tiene la información por ahora
+
+# Mamiferos
+
+```{r}
+dataGrupos$Mamiferos$event <- read.xlsx(file.path(fol_data,"Mamiferos","I2D-BIO_2021_083_v2.xlsx"),sheet="Evento")
+dataGrupos$Mamiferos$registros <- read.xlsx(file.path(fol_data,"Mamiferos","I2D-BIO_2021_083_v2.xlsx"),sheet="Registros")
+```
+
+## Eventos
+```{r}
+regexEventID_Mamiferos<- "^ANH_[0-9]{1,3}_M_[RS][0-9]{1,3}(_T2)?$"
+all(grepl(regexEventID_Mamiferos,dataGrupos$Mamiferos$event$eventID))
+all(grepl(regexEventID_Mamiferos,dataGrupos$Mamiferos$registros$eventID))
+table(dataGrupos$Mamiferos$event$samplingProtocol)
+```
+
+**eventID**: 
+
+* la S + numero corresponde a las trampas sherman, la R + numero corresponde a las redes de niebla
+
+**Protocolos**: Los dos protocolos principales son Red niebla y Trampa Sherman, pero existen eventos de captura manual, trampa pitfall, encuentro y Busqueda por encuentros visuales (esos corresponden a los eventos de herpetología)
+
+**Geometría asociada**: puntos
+
+**Esfuerzo de muestreo**: En las redes de niebla es una superficie de trampa por un tiempo, en los sherman, un numero de trampa (1) por tiempo (numero de noches)
+
+**Variables extra en evento**: Variables de habitat (palma, dosel, altura de vegetación etc) puede ser más preciso que las variables que vienen de SIG
+
+**Note**:
+
+En los nombres de eventID, hay unos que refieren eventos de herpetología, unos que seguramente refieren a eventos de captura manual, por esta razón las regex no funcionan en todos casos: tengo que saber primero que hacer con estos eventos
+
+## Registros
+
+```{r}
+table(dataGrupos$Mamiferos$registros$organismQuantity)
+```
+
+**tipo de abundancia**: Numero de individuos
+
+**Variables especificas**:
+
+* archivos de sonido
+* biometría
+* numeros de colección (+ otherCatalogs)
+* recaptura?
+* preparaciones
+
+
+# Mariposas
+
+```{r}
+dataGrupos$Mariposas$event <- read.xlsx(file.path(fol_data, "Mariposas","I2D-BIO_2021_084_v3_ev.xlsx"), sheet="DwCEventos", detectDates = T)
+dataGrupos$Mariposas$registros <- read.xlsx(file.path(fol_data, "Mariposas","I2D-BIO_2021_084_v2_rrbb (1).xlsx"),sheet="Plantilla")
+```
+
+## Eventos
+```{r}
+regexEventID_Mariposas<- "^ANH_[0-9]{1,3}_T\\. Van Someren-Rydon[0-9]_202[12]-[0-9][0-9]-[0-9][0-9]/202[12]-[0-9][0-9]-[0-9][0-9]$"
+all(grepl(regexEventID_Mariposas, dataGrupos$Mariposas$event$eventID))
+all(grepl(regexEventID_Mariposas, dataGrupos$Mariposas$registros$eventID))
+table(dataGrupos$Mariposas$event$samplingProtocol)
+```
+
+**eventID**
+
+* tiene el numero de trampa
+* tiene la fecha
+
+**Protocolos**: Trampa Van Someren-Rydon
+
+**Geometría asociada**: punto
+
+**Esfuerzo de muestreo**: Tiempo de la trampa
+
+**Variables extra en evento**: Varias variables de habitat, precisas
+
+* registros fotograficos
+* Habitat
+* Cobertura (a separar)
+* temperatura
+* Humedad relativa
+* DAP
+
+**Note**
+
+## Registros
+
+```{r}
+table(dataGrupos$Mariposas$registros$organismQuantity)
+```
+
+**tipo de abundancia**: Numero de individuos
+
+**Variables especificas**:
+ Tejidos colectados (siempre especimenes incompletos: Torax abdomen patas)
+
+# Peces
+
+```{r}
+dataGrupos$Peces$event <- read.xlsx(file.path(fol_data, "Peces","I2D-BIO_2021_049_v3.xlsx"),sheet="Evento")
+dataGrupos$Peces$registros <- read.xlsx(file.path(fol_data, "Peces","I2D-BIO_2021_049_v3.xlsx"),sheet="Registro")
+```
+
+## Eventos
+```{r}
+regexEventID_Peces<- "^ANH_[0-9]{1,3}_[ARET]_[DC](_T2)?$"
+all(grepl(regexEventID_Peces,dataGrupos$Peces$event$occurrenceID))
+all(grepl(regexEventID_Peces,dataGrupos$Peces$registros$eventID))
+table(dataGrupos$Peces$event$samplingProtocol)
+table(dataGrupos$Peces$event$samplingProtocol,sapply(strsplit(dataGrupos$Peces$event$occurrenceID,"_"),function(x)x[3]))
+```
+
+**eventID**:
+
+* [ARET] corresponde al protocolo
+* [DC] ?
+* incluyen el T2 en caso de provenir de la campaña de 2022
+
+
+**Protocolos**: En orden de importancia:
+
+* Atarraya
+* Red de arrastre 
+* Electropesca
+* trasmallo
+
+**Geometría asociada**: puntos (raro, pero siempre son puntos unicos)
+
+**Esfuerzo de muestreo**: tiempo + sample size (Arrastres y lances)
+
+**Variables extra en evento**: 
+
+* Habitat lotico/lentico
+* nombre del cuerpo de agua
+* locationremarks
+* orden de drenaje
+* temperatura
+* pH
+* Oxigeno disuelto
+* conductividad
+
+**Note**:
+
+## Registros
+
+```{r}
+table(dataGrupos$Peces$registros$organismQuantity)
+```
+
+**tipo de abundancia**: Numero de individuos
+
+**Variables especificas**:
+
+* tejidos muestreados
+* "Lotes liquidos"?
+* Parece que hay numeros de colección para los tejidos que se llaman "IAvH-CT" en el archivo
+
+# Hidrobiologico
+
+```{r}
+dataGrupos$Hidrobiologico$event <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx"),sheet="Hidrobiologicos evento", startRow = 1)
+dataGrupos$Hidrobiologico$registros_macroinvertebrados <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Macroinvertebrados acuáticos", startRow = 1)
+dataGrupos$Hidrobiologico$registros_macrofitas <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Macrofitas acuáticas", startRow = 1)
+dataGrupos$Hidrobiologico$registros_zooplancton <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Zooplancton ", startRow = 1)
+dataGrupos$Hidrobiologico$registros_fitoplancton <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Fitoplancton", startRow = 1)
+dataGrupos$Hidrobiologico$registros_perifiton <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Perifiton ", startRow = 1)
+```
+
+## Eventos
+```{r}
+regexEventID_Hidrobiologico<- "^ANH[0-9]{1,3}-(F)|(MA)|(MI)|(P)|(Z)-[ABC](-Bajas)?$"
+all(grepl(regexEventID_Hidrobiologico,dataGrupos$Hidrobiologico$event$eventID))
+all(grepl(regexEventID_Hidrobiologico,dataGrupos$Hidrobiologico$registros_macroinvertebrados$eventID))
+all(grepl(regexEventID_Hidrobiologico,dataGrupos$Hidrobiologico$registros_macrofitas$eventID))
+all(grepl(regexEventID_Hidrobiologico,dataGrupos$Hidrobiologico$registros_zooplancton$eventID))
+all(grepl(regexEventID_Hidrobiologico,dataGrupos$Hidrobiologico$registros_perifiton$eventID))
+table(dataGrupos$Hidrobiologico$event$samplingProtocol, sapply(strsplit(dataGrupos$Hidrobiologico$event$eventID, "-"),function(x)x[2]))
+```
+**eventID**:
+
+* No entiende a que corresponde [ABC]
+* (F)|(MA)|(MI)|(P)|(Z) corresponde al grupo biologico
+* Imagino que Bajas corresponde a la temporada de aguas bajas (confirmar)
+
+**Protocolos**: 
+
+* **Fitoplancton**: Botella Van Dorn
+* **Macrofitas**: Cuadrante 1x1 m
+* **Macroinvertebrados**:
+    1. Draga
+    2. Draga/Red tipo D - Asociados a macrofitas
+    3. Kick Sampling Red Tipo D
+    4. Red tipo D - Asociados a macrofitas
+* **Perifiton**:
+    1. 12 raspados
+    1. Raspados de epifiton
+    1. Raspados de epifiton/Raspados en sustratos duros con cuadrante de 3x3 cm
+    1. Raspados en plantas acuáticas con cuadrante de 3x3 cm
+    1. Raspados en sustratos duros con cuadrante de 3x3 cm
+* **Zooplancton**: Botella Van Dorn
+
+**Geometría asociada**: puntos (raro, pero siempre son puntos unicos)
+
+**Esfuerzo de muestreo**: Numero de replicas del protocolo, + superficie o volumen
+
+**Variables extra en evento**: 
+
+* Lotico y/o lentico
+* nombre del cuerpo de agua
+* clasificacion del cuerpo de agua
+
+**Note**:
+
+* Me parece que faltan los datos fisico-quimicos (o corresponden a las campañas de peces?)
+
+## Registros Macroinvertebrados
+
+```{r}
+#table(dataGrupos$Hidrobiologico$registros_macroinvertebrados$organismQuantity)
+```
+
+**tipo de abundancia**: ind/m2, pero tambien numero de individuos por muestras
+
+**Variables especificas**:
+
+* fotos
+* codigo de estación
+* variables suplementarias de esfuerzo de muestreo
+
+## Registros Macrofitas
+
+```{r}
+#table(dataGrupos$Hidrobiologico$registros_macrofitas$organismQuantity)
+```
+
+**tipo de abundancia**: ind/m2, pero tambien porcentaje de cobertura
+
+**Variables especificas**:
+
+* fotos
+* codigo de estación
+* variables suplementarias de esfuerzo de muestreo
+
+## Registros Zooplancton
+
+```{r}
+#table(dataGrupos$Hidrobiologico$registros_zooplancton$organismQuantity)
+```
+
+**tipo de abundancia**: ind/m2, pero tambien porcentaje de cobertura
+
+**Variables especificas**:
+
+* fotos
+* codigo de estación
+* variables suplementarias de esfuerzo de muestreo
+
+
+
+## Registros Fitoplancton
+
+
+
+```{r}
+#table(dataGrupos$Hidrobiologico$registros_zooplancton$organismQuantity)
+```
+
+**tipo de abundancia**: ind/L, pero tambien numero de individuos por muestra
+
+**Variables especificas**:
+
+* fotos
+* profundidad
+* codigo de estación
+* variables suplementarias de esfuerzo de muestreo
+
+
+## Registros Perifiton
+
+```{r}
+#table(dataGrupos$Hidrobiologico$registros_zooplancton$organismQuantity)
+```
+
+**tipo de abundancia**: ind/cm2, pero tambien individuos por muestra
+
+**Variables especificas**:
+
+* fotos
+* codigo de estación
+* variables suplementarias de esfuerzo de muestreo
+# Sonido mamiferos
+
+
+
+```{r}
+save(dataGrupos, file = "dataGrupos.RData")
+```
+

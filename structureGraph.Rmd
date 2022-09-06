@@ -1,0 +1,15 @@
+---
+title: "Stucture of the database"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r, fig.width=20,fig.height=20}
+require(RPostgreSQL)
+require(dm)
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+dm_object <- dm_from_con(fracking_db, schema="main")
+dm_draw(dm_object, view_type = "all")
+```
+

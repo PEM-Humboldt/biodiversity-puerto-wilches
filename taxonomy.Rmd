@@ -1,0 +1,3354 @@
+---
+title: "Estructura y manejo de la taxonomía en la base de datos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+       latex_engine: xelatex
+---
+
+
+************************
+
+```{r setup}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db")
+require(openxlsx)
+require(RPostgreSQL)
+
+```
+
+```{r}
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+```
+
+# Probar la taxonomía en los datos DarwinCore
+
+```{r}
+load("dataGrupos.RData")
+```
+
+## Buscar las variables de taxonomía
+
+```{r}
+
+names_gp_sheets <- lapply(dataGrupos,names)
+DF_gp_sheets <- data.frame(gp_biol = rep(names(names_gp_sheets),sapply(names_gp_sheets, length)), sheet=Reduce(c, names_gp_sheets))
+DF_gp_sheets$registro <- grepl("registro", DF_gp_sheets$sheet)
+column_registros <- apply(DF_gp_sheets[DF_gp_sheets$registro,],1,function(x,l)
+{
+  colnames(l[[x[1]]][[x[2]]])
+}, l=dataGrupos
+  )
+#sort(table(Reduce(c,column_registros)),decreasing = T)
+
+taxonomic_col<-c(
+  "kingdom",
+  "phylum",
+  "class",
+  "order",
+  "family",
+  "genus",
+  "scientificName",
+  "specificEpithet",
+  "taxonRank",
+  "vernacularName",
+  "scientificNameAuthorship",
+  "identificationQualifier",
+  "identificationRemarks",
+  "higherClassification"
+  )
+#lapply(column_registros,function(x,c)c[!c%in%x],c=taxonomic_col)
+colnames(dataGrupos$Hidrobiologico$registros_fitoplancton)[colnames(dataGrupos$Hidrobiologico$registros_fitoplancton)=="Family"]<-"family"
+```
+
+
+Extraer una tabla total de taxonomía
+```{r}
+taxonomicTotal <- Reduce(rbind,apply(DF_gp_sheets[DF_gp_sheets$registro,],1,function(x,l,c)
+{
+  tabReg <- l[[x[1]]][[x[2]]]
+  MissingVar <- c[!c%in%colnames(tabReg)]
+  if(length(MissingVar) > 0){
+  MissingTab <- as.data.frame(matrix(NA, nrow=nrow(tabReg), ncol=length(MissingVar)))
+  colnames(MissingTab) <- MissingVar
+  tabReg <- data.frame(tabReg,MissingTab,row.names = NULL)
+  }
+  data.frame(gp = x[1], sheet=x[2],tabReg[,c],row.names = NULL)
+}, l=dataGrupos, c=taxonomic_col
+  ))
+
+```
+## Correcciones de forma
+
+**Reemplazar vacíos por NA**
+
+```{r}
+taxonomicTotal[which(taxonomicTotal=="",arr.ind = T)]<-NA
+```
+
+
+
+**Suprimir los "trailing whitespace"**
+
+```{r}
+
+for(i in 1:ncol(taxonomicTotal))
+{
+  
+  taxonomicTotal[,i]<-trimws(taxonomicTotal[,i])
+}
+
+```
+
+
+**Los nombres taxonomico deben empezar por una mayuscula (al menos en la primera palabra)**
+
+```{r}
+mayu1_col<-c("kingdom","phylum", "class","order","family","genus","scientificName") 
+for(i in 1:length(mayu1_col))
+{
+  taxonomicTotal[,mayu1_col[i]]<-gsub("^([a-z])","\\U\\1", taxonomicTotal[,mayu1_col[i]],perl = T)
+}
+```
+
+## Creación tabla sin repetición
+
+```{r}
+dim(taxonomicTotal)
+taxonomicTotal_un <- unique(taxonomicTotal)
+dim(taxonomicTotal_un)
+
+```
+
+# Buscar los errores de taxonomía
+
+
+
+
+
+
+## Inconsistencias en los nombres superiores de taxones
+
+
+Lo que hacemos acá es, para cada caso de cada nivel taxonomico, averiguar que el nivel superior sea siempre lo mismo:
+
+```{r}
+toTest<-c("kingdom","phylum","class","order","family","genus","scientificName")
+error_diffSup<-list()
+for(i in 1:length(toTest))
+{
+  if(i>1)
+  {
+    sup <- tapply(taxonomicTotal_un[,toTest[i-1]],taxonomicTotal_un[toTest[i]],unique,simplify = F)
+    if(i>2)
+    {
+      sup <- tapply(dplyr::coalesce(taxonomicTotal_un[,toTest[i-1]],taxonomicTotal_un[,toTest[i-2]]),taxonomicTotal_un[toTest[i]],unique,simplify = F)
+    }
+    nb_sup<-sapply(sup,length)
+    error_diffSup[[toTest[i]]]<-sup[nb_sup>1]
+  }
+}
+```
+
+Mostrar los resultados:
+
+```{r, results='asis'}
+for(i in 1:length(error_diffSup))
+{
+  nivel=names(error_diffSup)[i]
+  if(!length(error_diffSup[[i]])){next}
+  for(j in 1:length(error_diffSup[[i]]))
+  {
+    taxon_inf <- names(error_diffSup[[i]])[j]
+    tabConcerned <- taxonomicTotal[taxonomicTotal[,nivel] == taxon_inf,]
+    cat("El taxon \"", taxon_inf, "\" (nivel:",nivel,", presente en los grupos: ",paste(unique(na.omit(tabConcerned$gp)), collapse=", "),")\n se encuentra con los taxones superiores siguientes:", paste(error_diffSup[[i]][[j]], collapse=", "),"\n\n")
+  }
+}
+```
+
+<!--
+
+
+## Inconsistencias en las autorías
+
+```{r}
+# TODO: buscar las errores con las autorías
+```
+
+## Inconsistencias en los niveles taxonomicos
+
+
+```{r}
+# Buscar los nombres que no parecen ser de su nivel taxonomico
+```
+
+-->
+
+# Integrating the taxonomy from the raw_dwc schema
+
+Creating a complete temporary table:
+
+\tiny
+
+```{sql}
+/*todo: averiguar cuales son las pestañas de registros que tienen identificationRemarks, identificationQualifier, subfamilia (mariposas)
+Note: las macrofitas tienen en identification_remarks helofitas o hidrofitas, podemos guardarlo pero no tiene nada que ver con lo que esta en identificacion_remarks en los demás grupos
+*/
+DROP TABLE IF EXISTS raw_dwc.taxonomy_total;
+CREATE TABLE raw_dwc.taxonomy_total AS(
+--------------------------- ANFIBIOS -----------------------------------------------------------------
+SELECT 
+'anfibios_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  NULL AS identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.anfibios_registros
+UNION ALL
+------------------------------- REPTILES --------------------------------------------------------------
+SELECT
+  'reptiles_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  NULL AS identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.reptiles_registros
+UNION ALL
+
+------------------------------- ATROPELLAMIENTOS --------------------------------------------------------------
+SELECT
+  'atropellamientos_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(infraspecific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(vernacular_name,'^\s+',''),'\s+$',''),'\s+',' ') AS vernacular_name,
+  NULL AS identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.atropellamientos_registros
+UNION ALL
+------------------------------- AVES --------------------------------------------------------------
+SELECT
+  'aves_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  NULL AS identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.aves_registros
+UNION ALL 
+-------------------------------- BOTANICA ----------------------------------------------------------
+SELECT
+  'botanica_registros_arborea' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(infraspecific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  identification_remarks
+FROM raw_dwc.botanica_registros_arborea
+UNION ALL
+SELECT
+  'botanica_registros_col' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  identification_remarks::text
+FROM raw_dwc.botanica_registros_col
+UNION ALL
+SELECT
+  'botanica_registros_epi_novas' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  identification_remarks
+FROM raw_dwc.botanica_registros_epi_novas
+UNION ALL
+SELECT
+  'botanica_registros_epi_vas' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.botanica_registros_epi_vas
+UNION ALL
+-------------------------------- COLEMBOLOS  ----------------------------------------------------------
+SELECT
+  'collembolos_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  identification_remarks
+FROM raw_dwc.collembolos_registros
+UNION ALL
+-------------------------------- ESCARABAJOS  ----------------------------------------------------------
+SELECT
+  'escarabajos_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  identification_remarks
+FROM raw_dwc.escarabajos_registros
+UNION ALL
+-------------------------------- HIDROBIOLOGICOS  ----------------------------------------------------------
+SELECT
+  'hidrobiologico_registros_fitoplancton' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.hidrobiologico_registros_fitoplancton
+UNION ALL
+SELECT
+  'hidrobiologico_registros_macrofitas' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.hidrobiologico_registros_macrofitas
+UNION ALL
+SELECT
+  'hidrobiologico_registros_macroinvertebrados' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  identification_remarks
+FROM raw_dwc.hidrobiologico_registros_macroinvertebrados
+UNION ALL
+SELECT
+  'hidrobiologico_registros_perifiton' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.hidrobiologico_registros_perifiton
+UNION ALL
+SELECT
+  'hidrobiologico_registros_zooplancton' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.hidrobiologico_registros_zooplancton
+UNION ALL
+-------------------------------- HORMIGAS  ----------------------------------------------------------
+SELECT
+ 'hormigas_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  identification_remarks
+FROM raw_dwc.hormigas_registros
+UNION ALL
+-------------------------------- MAMIFEROS  ----------------------------------------------------------
+SELECT
+  'mamiferos_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.mamiferos_registros
+UNION ALL
+-------------------------------- MARIPOSAS  ----------------------------------------------------------
+SELECT
+  'mariposas_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  subfamilia as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(infraspecific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.mariposas_registros
+UNION ALL
+-------------------------------- PECES  ----------------------------------------------------------
+SELECT
+  'peces_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.peces_registros
+UNION ALL
+-------------------------------- ULTRASONIDOS  ----------------------------------------------------------
+SELECT
+  'mamiferos_us_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier,
+  NULL AS identification_remarks
+FROM raw_dwc.peces_registros
+)
+;
+```
+
+\normalsize
+
+
+Correcciones basicas sobre la tabla de taxonomía total:
+
+```{sql}
+-- suppressing trailing space in taxon_rank
+UPDATE raw_dwc.taxonomy_total
+SET taxon_rank=REGEXP_REPLACE(taxon_rank,'\s+$','')
+WHERE taxon_rank ~ '\s+$'
+RETURNING taxon_rank;
+```
+
+Existen espacios raros en scientific_name
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total
+SET scientific_name=REGEXP_REPLACE(scientific_name,' ',' ')
+WHERE scientific_name ~ ' '
+RETURNING scientific_name
+```
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total
+SET genus=REGEXP_REPLACE(genus,'[^a-z]+$','')
+WHERE genus ~ '[^a-z]+$'
+RETURNING genus;
+
+```
+
+Problema de especies que tienen solo el genero en scientific_name:
+
+\tiny
+
+```{sql}
+SELECT * FROM raw_dwc.taxonomy_total WHERE scientific_name ~ '^[A-Z][a-z]+$' AND taxon_rank ~ '^[Ee]specie';
+```
+
+\normalsize
+
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total
+SET scientific_name= genus || ' ' ||specific_epithet
+WHERE scientific_name ~ '^[A-Z][a-z]+$' AND taxon_rank ~ '^[Ee]specie'
+RETURNING genus || specific_epithet;
+```
+
+
+
+
+
+
+
+
+
+Checking on especies:
+
+\tiny
+
+```{sql, max.print=NA}
+SELECT table_orig, "row.names", genus, specific_epithet, infraspecific_epithet, scientific_name, taxon_rank 
+FROM raw_dwc.taxonomy_total
+WHERE taxon_rank ~ '^[Ee]specie' AND (genus || ' ' || specific_epithet) != scientific_name
+```
+
+```{sql, max.print=NA}
+SELECT table_orig, "row.names", genus, specific_epithet, infraspecific_epithet, scientific_name, taxon_rank 
+FROM raw_dwc.taxonomy_total
+WHERE taxon_rank ~ '^[Ee]specie' AND scientific_name !~ '^[A-Z][a-z]+ [a-z-]+$'
+```
+
+
+\normalsize
+
+Averiguando los rangos inferiores a especie:
+
+\tiny
+
+```{sql, max.print=NA}
+SELECT genus, specific_epithet, infraspecific_epithet, scientific_name, taxon_rank, ARRAY_AGG(DISTINCT table_orig) 
+FROM raw_dwc.taxonomy_total t 
+LEFT JOIN main.def_tax_rank d 
+  ON 
+    LOWER(t.taxon_rank)=d.tax_rank_spa 
+    OR
+    LOWER(t.taxon_rank)=d.tax_rank 
+WHERE d.rank_level<10
+GROUP BY genus, specific_epithet, infraspecific_epithet, scientific_name, taxon_rank, d.rank_level ORDER BY d.rank_level;
+```
+
+```{sql, max.print=NA}
+SELECT genus, specific_epithet, infraspecific_epithet, scientific_name, taxon_rank, ARRAY_AGG(DISTINCT table_orig) 
+FROM raw_dwc.taxonomy_total t 
+LEFT JOIN main.def_tax_rank d 
+  ON 
+    LOWER(t.taxon_rank)=d.tax_rank_spa 
+    OR
+    LOWER(t.taxon_rank)=d.tax_rank 
+WHERE d.rank_level<10 AND scientific_name != genus || ' ' || specific_epithet || ' ' || infraspecific_epithet
+GROUP BY genus, specific_epithet, infraspecific_epithet, scientific_name, taxon_rank, d.rank_level ORDER BY d.rank_level;
+```
+
+PROBLEMAS DE FORMA
+
+```{sql, max.print=NA}
+SELECT genus, specific_epithet, infraspecific_epithet, scientific_name, taxon_rank, ARRAY_AGG(DISTINCT table_orig) 
+FROM raw_dwc.taxonomy_total t 
+LEFT JOIN main.def_tax_rank d 
+  ON 
+    LOWER(t.taxon_rank)=d.tax_rank_spa 
+    OR
+    LOWER(t.taxon_rank)=d.tax_rank 
+WHERE 
+  CASE
+    WHEN d.cd_rank IN ('VAR','SUBSP') THEN scientific_name !~ '[A-Z][a-z-]+ [a-z-]+ [a-z-]+$'
+    WHEN d.cd_rank = 'SP' THEN scientific_name !~ '[A-Z][a-z-]+ [a-z-]+$'
+    WHEN d.cd_rank = 'FAM' THEN scientific_name !~ '[A-Z][a-z-]+ae$'
+    ELSE scientific_name !~ '[A-Z][a-z-]+$'
+  END
+GROUP BY genus, specific_epithet, infraspecific_epithet, scientific_name, taxon_rank, d.rank_level ORDER BY d.rank_level;
+```
+
+\normalsize
+
+Correcciones:
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total
+SET scientific_name='Phacus tortus'
+WHERE genus='Phacus' AND specific_epithet='tortus' AND taxon_rank ~ '^[Ee]specie'
+RETURNING scientific_name;
+
+UPDATE raw_dwc.taxonomy_total
+SET taxon_rank='Subespecie'
+WHERE scientific_name='Phoebis trite trite'
+RETURNING scientific_name;
+
+UPDATE raw_dwc.taxonomy_total
+SET scientific_name=genus
+WHERE scientific_name !~ '^[A-Z][a-z-]+$' AND taxon_rank = 'Género'
+RETURNING scientific_name;
+```
+
+
+Con este comando, los rangos taxonomicos pueden estar incluidos en el sistema de las tablas taxonomicas:
+
+```{sql}
+SELECT d.cd_rank,count(*) FROM raw_dwc.taxonomy_total t LEFT JOIN main.def_tax_rank d ON LOWER(t.taxon_rank)=d.tax_rank_spa OR LOWER(t.taxon_rank)=d.tax_rank GROUP BY d.cd_rank ORDER BY d.rank_level;
+```
+
+
+```{sql}
+WITH a AS(
+SELECT table_orig, 'kingdom' AS tax_rank, kingdom AS name
+FROM raw_dwc.taxonomy_total
+UNION
+SELECT table_orig, 'phylum' ,phylum
+FROM raw_dwc.taxonomy_total
+UNION
+SELECT table_orig, 'class' ,class
+FROM raw_dwc.taxonomy_total
+UNION
+SELECT table_orig, 'order' ,"order"
+FROM raw_dwc.taxonomy_total
+UNION
+SELECT table_orig, 'family' ,family
+FROM raw_dwc.taxonomy_total
+UNION
+SELECT table_orig, 'subfamily' ,subfamily
+FROM raw_dwc.taxonomy_total
+UNION
+SELECT table_orig, 'genus' ,genus
+FROM raw_dwc.taxonomy_total
+)
+SELECT name, ARRAY_AGG(DISTINCT tax_rank) ranks, ARRAY_AGG(DISTINCT table_orig)
+FROM a
+WHERE name IS NOT NULL
+GROUP BY name
+HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT tax_rank),1)>1
+```
+
+
+Temporalmente, vamos a suprimir estas filas:
+
+```{sql}
+DELETE
+FROM raw_dwc.taxonomy_total
+WHERE
+  class='Collembola' OR "order"='Collembola'
+  OR
+  class='Trebouxiophyceae' OR "order"='Trebouxiophyceae' OR family='Trebouxiophyceae'
+RETURNING *
+```
+
+
+## Integración en el sistema taxonomico
+
+```{r}
+knitr::opts_chunk$set(max.print=100)
+```
+
+
+La integración se hará en 3 etapas para cada nivel taxonomico:
+
+1. integración de los taxones de este rango por scientificName
+2. averiguar los problemas potenciales
+3. integración de los taxones de este rango por las columnas de las tablas taxonómicas
+
+### Reinos
+
+```{sql}
+SELECT tt.scientific_name, tt.scientific_name_authorship,dtr.cd_rank,count(*)
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='KG'
+GROUP BY tt.scientific_name, tt.scientific_name_authorship,dtr.cd_rank
+ORDER BY tt.scientific_name, tt.scientific_name_authorship,dtr.cd_rank,count(*) DESC
+```
+
+```{sql}
+INSERT INTO main.taxo(name_tax, authorship,cd_rank)
+SELECT DISTINCT tt.scientific_name, tt.scientific_name_authorship,dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='KG'
+ORDER BY tt.scientific_name, tt.scientific_name_authorship,dtr.cd_rank
+RETURNING cd_tax
+```
+```{sql}
+SELECT tt.kingdom, 'KG' AS cd_rank, count(*)
+FROM raw_dwc.taxonomy_total tt
+GROUP BY tt.kingdom
+ORDER BY tt.kingdom, count(*) DESC
+```
+
+
+```{sql}
+INSERT INTO main.taxo(name_tax,cd_rank)
+SELECT DISTINCT tt.kingdom, 'KG' AS cd_rank
+FROM raw_dwc.taxonomy_total tt
+WHERE tt.kingdom NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='KG')
+RETURNING cd_tax
+```
+
+
+### Filos
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.kingdom,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='PHY'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*)
+FROM a
+LEFT JOIN main.taxo t ON a.kingdom=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  tt.kingdom,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='PHY'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank
+FROM a
+LEFT JOIN main.taxo t ON a.kingdom=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+RETURNING cd_tax
+```
+
+```{sql}
+SELECT tt.kingdom, t.cd_tax AS cd_parent, tt.phylum, 'PHY' AS cd_rank, count(*)
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.kingdom=t.name_tax
+WHERE tt.phylum IS NOT NULL
+GROUP BY tt.kingdom,tt.phylum, t.cd_tax
+ORDER BY tt.phylum, count(*) DESC
+```
+
+
+```{sql}
+INSERT INTO main.taxo(name_tax,cd_parent,cd_rank)
+SELECT  tt.phylum, t.cd_tax AS cd_parent, 'PHY' AS cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.kingdom=t.name_tax
+WHERE tt.phylum IS NOT NULL AND tt.phylum NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='PHY')
+GROUP BY tt.kingdom,tt.phylum, t.cd_tax
+ORDER BY tt.phylum, count(*) DESC
+RETURNING cd_tax
+
+```
+
+### Clases
+
+Acá empezamos a ver problemas potenciales, con el ejemplo de Chlorophyceae que está 2 veces en la tabla con autorías diferentes. Para evitar esos problemas, voy a añadir una etapa que numerota los casos en función del numero de filas totales que utilizan tal autoría, o otra, por scientific name.
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.phylum,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='CL'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.phylum=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+Para ver solo los casos problematicos, podemos utilizar eso:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.phylum,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='CL'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.phylum=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+
+Para obtener la tabla por insertar:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.phylum,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='CL'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.phylum=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+```
+
+Ahora la inserción:
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  tt.phylum,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='CL'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.phylum=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+RETURNING cd_tax
+```
+
+
+```{sql}
+SELECT tt.phylum, t.cd_tax AS cd_parent, tt.class, 'CL' AS cd_rank, count(*)
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.phylum=t.name_tax
+WHERE tt.class IS NOT NULL
+GROUP BY tt.phylum,tt.class, t.cd_tax
+ORDER BY tt.class, count(*) DESC
+```
+
+
+```{sql}
+INSERT INTO main.taxo(name_tax,cd_parent,cd_rank)
+SELECT  tt.class, t.cd_tax AS cd_parent, 'CL' AS cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.phylum=t.name_tax
+WHERE tt.class IS NOT NULL AND tt.class NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='CL')
+GROUP BY tt.phylum,tt.class, t.cd_tax
+ORDER BY tt.class, count(*) DESC
+RETURNING cd_tax
+```
+
+### Ordenes
+
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.class,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='OR'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.class=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+Casos problematicos:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.class,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='OR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.class=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+
+Por insertar:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.class,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='OR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.class=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+```
+
+Ahora la inserción:
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  tt.class,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='OR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.class=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1 AND scientific_name IS NOT NULL
+RETURNING cd_tax
+```
+
+Desde la columna
+
+```{sql}
+SELECT tt.class, t.cd_tax AS cd_parent, tt."order", 'OR' AS cd_rank, count(*)
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.class=t.name_tax
+WHERE tt."order" IS NOT NULL
+GROUP BY tt.class,tt."order", t.cd_tax
+ORDER BY tt."order", count(*) DESC
+```
+
+
+```{sql}
+INSERT INTO main.taxo(name_tax,cd_parent,cd_rank)
+SELECT  tt."order", t.cd_tax AS cd_parent, 'OR' AS cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.class=t.name_tax
+WHERE tt."order" IS NOT NULL AND tt."order" NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='OR')
+GROUP BY tt."order", t.cd_tax
+ORDER BY tt."order", count(*) DESC
+RETURNING cd_tax
+```
+
+### subordenes
+
+
+```{sql}
+WITH a AS(
+SELECT
+  tt."order",
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SOR'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a."order"=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+Casos problematicos:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt."order",
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SOR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a."order"=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+
+Por insertar:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt."order",
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SOR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a."order"=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+```
+
+Ahora la inserción:
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  tt."order",
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SOR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a."order"=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1 AND scientific_name IS NOT NULL
+RETURNING cd_tax
+```
+
+### Family
+
+```{sql}
+WITH a AS(
+SELECT
+  tt."order",
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='FAM'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a."order"=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+Para ver solo los casos problematicos, podemos utilizar eso:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt."order",
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='FAM'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a."order"=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+
+Para obtener la tabla por insertar:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt."order",
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='FAM'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a."order"=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+```
+
+Ahora la inserción:
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  tt."order",
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='FAM'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a."order"=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+RETURNING cd_tax
+```
+
+
+```{sql}
+SELECT tt."order", t.cd_tax AS cd_parent, tt.family, 'FAM' AS cd_rank, count(*)
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt."order"=t.name_tax
+WHERE tt.family IS NOT NULL
+GROUP BY tt."order",tt.family, t.cd_tax
+ORDER BY tt.family, count(*) DESC
+```
+
+
+```{sql}
+INSERT INTO main.taxo(name_tax,cd_parent,cd_rank)
+SELECT  tt.family, t.cd_tax AS cd_parent, 'FAM' AS cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt."order"=t.name_tax
+WHERE tt.family IS NOT NULL AND tt.family NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='FAM')
+GROUP BY tt."order",tt.family, t.cd_tax
+ORDER BY tt.family, count(*) DESC
+RETURNING cd_tax
+```
+
+### Subfamilias
+
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.family,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SFAM'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.family=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+Para ver solo los casos problematicos, podemos utilizar eso:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.family,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SFAM'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.family=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+
+Para obtener la tabla por insertar:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.family,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SFAM'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.family=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+```
+
+Ahora la inserción:
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  tt.family,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SFAM'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.family=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+RETURNING cd_tax
+```
+
+
+```{sql}
+SELECT tt.family, t.cd_tax AS cd_parent, tt.subfamily, 'SFAM' AS cd_rank, count(*)
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.family=t.name_tax
+WHERE tt.subfamily IS NOT NULL
+GROUP BY tt.family,tt.subfamily, t.cd_tax
+ORDER BY tt.subfamily, count(*) DESC
+```
+
+
+```{sql}
+INSERT INTO main.taxo(name_tax,cd_parent,cd_rank)
+SELECT  tt.subfamily, t.cd_tax AS cd_parent, 'SFAM' AS cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.family=t.name_tax
+WHERE tt.subfamily IS NOT NULL AND tt.subfamily NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='SFAM')
+GROUP BY tt.family,tt.subfamily, t.cd_tax
+ORDER BY tt.subfamily, count(*) DESC
+RETURNING cd_tax
+```
+
+### Tribus
+
+
+```{sql}
+WITH a AS(
+SELECT
+  COALESCE(tt.subfamily,tt.family) sup,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='TR'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.sup=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+Para ver solo los casos problematicos, podemos utilizar eso:
+
+```{sql}
+WITH a AS(
+SELECT
+  COALESCE(tt.subfamily,tt.family) sup,
+  tt.phylum,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='TR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.sup=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+
+Para obtener la tabla por insertar:
+
+```{sql}
+WITH a AS(
+SELECT
+  COALESCE(tt.subfamily,tt.family) sup,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='TR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.sup=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+```
+
+Ahora la inserción:
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  COALESCE(tt.subfamily,tt.family) sup,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='TR'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.sup=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+RETURNING cd_tax
+```
+
+
+### Género
+
+
+```{sql}
+WITH a AS(
+SELECT
+  COALESCE(tt.subfamily,tt.family) sup,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='GN'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.sup=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+Para ver solo los casos problematicos, podemos utilizar eso:
+
+```{sql}
+WITH a AS(
+SELECT
+  COALESCE(tt.subfamily,tt.family) sup,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='GN'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.sup=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+
+Para obtener la tabla por insertar:
+
+```{sql}
+WITH a AS(
+SELECT
+  COALESCE(tt.subfamily,tt.family) sup,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='GN'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.sup=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+```
+
+Ahora la inserción:
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  COALESCE(tt.subfamily,tt.family) sup,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='GN'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.sup=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+RETURNING cd_tax
+```
+
+
+```{sql}
+SELECT  COALESCE(subfamily, family) sup, t.cd_tax AS cd_parent, tt.genus, 'GN' AS cd_rank, count(*)
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON COALESCE(subfamily, family)=t.name_tax
+WHERE tt.genus IS NOT NULL AND tt.genus!=''
+GROUP BY COALESCE(subfamily, family),tt.genus, t.cd_tax
+ORDER BY tt.genus, count(*) DESC
+```
+
+
+```{sql}
+INSERT INTO main.taxo(name_tax,cd_parent,cd_rank)
+SELECT  tt.genus, t.cd_tax AS cd_parent, 'GN' AS cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON COALESCE(subfamily, family)=t.name_tax
+WHERE tt.genus IS NOT NULL AND tt.genus != '' AND tt.genus NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='GN')
+GROUP BY COALESCE(subfamily, family),tt.genus, t.cd_tax
+ORDER BY tt.genus, count(*) DESC
+RETURNING cd_tax
+```
+
+### Especies
+
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.genus,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SP'
+)
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.genus=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+```
+
+Para ver solo los casos problematicos, podemos utilizar eso:
+
+```{sql, max.print=NA}
+WITH a AS(
+SELECT
+  tt.genus,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SP'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.genus=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+
+Para obtener la tabla por insertar:
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.genus,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SP'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.genus=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+```
+
+Ahora la inserción:
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  tt.genus,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.cd_rank='SP'
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.genus=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank
+FROM b 
+WHERE order_cases_in_name=1
+RETURNING cd_tax
+```
+
+#### Añadir las especies que corresponden a los taxones inferiores
+
+```sql
+SELECT tt.genus, t.cd_tax AS cd_parent, tt.genus || ' ' || tt.specific_epithet, 'SP' AS cd_rank, count(*)
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.genus=t.name_tax
+LEFT JOIN main.def_tax_rank d ON LOWER(tt.taxon_rank)=d.tax_rank_spa OR LOWER(tt.taxon_rank)=d.tax_rank
+WHERE d.rank_level<10
+  AND  tt.genus || ' ' || tt.specific_epithet NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='SP')
+GROUP BY tt.genus, tt.genus || ' ' || tt.specific_epithet, t.cd_tax
+ORDER BY tt.genus, count(*) DESC
+```
+
+```{sql}
+INSERT INTO main.taxo(cd_parent,name_tax,cd_rank)
+SELECT t.cd_tax AS cd_parent, tt.genus || ' ' || tt.specific_epithet, 'SP' AS cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.genus=t.name_tax
+LEFT JOIN main.def_tax_rank d ON LOWER(tt.taxon_rank)=d.tax_rank_spa OR LOWER(tt.taxon_rank)=d.tax_rank
+WHERE d.rank_level<10
+  AND  tt.genus || ' ' || tt.specific_epithet NOT IN (SELECT name_tax FROM main.taxo WHERE cd_rank='SP')
+GROUP BY tt.genus, tt.genus || ' ' || tt.specific_epithet, t.cd_tax
+ORDER BY tt.genus, count(*) DESC
+RETURNING cd_tax
+```
+
+
+
+### Infraespecies
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.genus || ' ' || tt.specific_epithet AS species,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.rank_level<10
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.species=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+```
+
+```{sql}
+WITH a AS(
+SELECT
+  tt.genus || ' ' || tt.specific_epithet AS species,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.rank_level<10
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.species=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT * 
+FROM b
+WHERE b.scientific_name IN (SELECT scientific_name FROM b WHERE order_cases_in_name=2)
+```
+
+```{sql}
+INSERT INTO main.taxo(name_tax,authorship,cd_parent,cd_rank)
+WITH a AS(
+SELECT
+  tt.genus || ' ' || tt.specific_epithet AS species,
+  tt.scientific_name,
+  CASE 
+    WHEN tt.scientific_name_authorship='' THEN NULL
+    ELSE tt.scientific_name_authorship
+  END scientific_name_authorship,
+  dtr.cd_rank
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.def_tax_rank dtr ON LOWER(tt.taxon_rank)=dtr.tax_rank_spa OR LOWER(tt.taxon_rank)=dtr.tax_rank
+WHERE dtr.rank_level<10
+), b AS(
+SELECT a.scientific_name, a.scientific_name_authorship, t.cd_tax AS cd_parent, a.cd_rank,count(*), ROW_NUMBER() OVER (PARTITION BY a.scientific_name ORDER BY count(*) DESC) AS order_cases_in_name
+FROM a
+LEFT JOIN main.taxo t ON a.species=t.name_tax
+GROUP BY a.scientific_name, a.scientific_name_authorship,a.cd_rank,t.cd_tax
+ORDER BY a.scientific_name, count(*) DESC
+)
+SELECT scientific_name,scientific_name_authorship,cd_parent,cd_rank 
+FROM b
+WHERE order_cases_in_name=1
+```
+
+
+
+# Analyse of the taxonomic database
+
+Examples of taxa
+
+```{sql}
+SELECT *
+FROM main.taxo
+ORDER BY random()
+LIMIT 10
+```
+
+
+
+Rangos representados en la base de datos
+```{sql max.print=NA}
+SELECT cd_rank,count(*)
+FROM main.taxo t
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+GROUP BY rank_level,cd_rank
+ORDER BY rank_level
+```
+
+Rangos superiores en la base de datos
+
+```{sql max.print=NA}
+SELECT t.cd_rank AS "rank child", tp.cd_rank AS "rank parent",count(*) AS number
+FROM main.taxo t
+LEFT JOIN main.taxo tp ON t.cd_parent=tp.cd_tax
+LEFT JOIN main.def_tax_rank d ON t.cd_rank=d.cd_rank
+GROUP BY t.cd_rank,tp.cd_rank,d.rank_level
+ORDER BY rank_level
+```
+
+
+# Dar codigos taxonomicos a cada fila de la tabla taxonomica total
+
+```{sql}
+WITH a AS(
+SELECT table_orig,"row.names", t.cd_tax
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.taxo t ON tt.scientific_name=t.name_tax
+)
+SELECT table_orig,"row.names",count(*)
+FROM a
+GROUP BY table_orig,"row.names"
+HAVING count(*)!=1
+```
+
+
+
+```{sql}
+ALTER TABLE raw_dwc.taxonomy_total
+ADD COLUMN IF NOT EXISTS cd_tax int REFERENCES main.taxo(cd_tax) ON DELETE SET NULL ON UPDATE CASCADE;
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_tax=t.cd_tax
+FROM main.taxo t
+WHERE tt.scientific_name=t.name_tax
+RETURNING tt.cd_tax;
+
+```
+
+
+# Manejo de las morfo especies
+
+```{r}
+SQL <- "ALTER TABLE raw_dwc.taxonomy_total
+ADD COLUMN IF NOT EXISTS cd_morfo int REFERENCES main.morfo_taxo(cd_morfo) ON DELETE SET NULL ON UPDATE CASCADE"
+dbSendQuery(fracking_db,SQL)
+```
+
+
+
+## Arboreos (botanica)
+
+
+
+
+Esperar la respuesta del Whatsapp, para el caso de los cf.
+
+> Estoy tratando de codificar las morfoespecies... En botanica, hay especies que corresponden a especies... Con nuestro criterio actual quiere decir que el "nivel taxonomica" de la morfoespecie sería subespecie, pero me da la impresion que no es lo que quisieran decir los expertos... lo problematico de eso es que afectaron las especies en scientificName, cuando solo son cf.
+
+
+Ejemplo:
+```{sql}
+SELECT scientific_name, identification_qualifier, identification_remarks
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE table_orig='botanica_registros_arborea' AND rank_level=10 AND identification_qualifier IS NOT NULL
+```
+
+Existen tambien generos que tienen sp. 1 etc
+
+```{sql}
+SELECT cd_tax, scientific_name, identification_qualifier,
+  CASE
+    WHEN identification_remarks='_' THEN NULL
+    ELSE identification_remarks
+  END identification_remarks,
+  cd_rank rank_tax,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='CL' THEN 'OR'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE table_orig='botanica_registros_arborea' AND rank_level>10 AND identification_qualifier IS NOT NULL
+```
+
+```{sql}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, pseudo_rank, description)
+WITH a AS(
+SELECT cd_tax, scientific_name, identification_qualifier,
+  CASE
+    WHEN identification_remarks IN ('_','-') THEN NULL
+    ELSE identification_remarks
+  END identification_remarks,
+  cd_rank rank_tax,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='CL' THEN 'OR'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE table_orig='botanica_registros_arborea' AND rank_level>10 AND identification_qualifier IS NOT NULL
+)
+SELECT 'arbo', cd_tax, identification_qualifier,pseudo_rank,STRING_AGG(DISTINCT identification_remarks, ' | ')
+FROM a
+GROUP BY pseudo_rank, cd_tax, identification_qualifier, scientific_name
+ORDER BY scientific_name, identification_qualifier
+RETURNING cd_morfo
+```
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE tt.table_orig='botanica_registros_arborea' AND tt.cd_tax=m.cd_tax AND tt.identification_qualifier=m.name_morfo
+RETURNING tt.cd_morfo
+```
+
+
+## Epifitas vasculares
+
+```{sql}
+SELECT cd_tax, scientific_name, identification_qualifier, 
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank, count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE table_orig='botanica_registros_epi_vas' AND identification_qualifier IS NOT NULL
+GROUP BY cd_tax,scientific_name,identification_qualifier,cd_rank
+```
+
+```{sql}
+INSERT INTO main.morfo_taxo(cd_gp_biol,cd_tax,name_morfo,pseudo_rank)
+SELECT 'epva',cd_tax, identification_qualifier, 
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE table_orig='botanica_registros_epi_vas' AND identification_qualifier IS NOT NULL
+GROUP BY cd_tax,scientific_name,identification_qualifier,cd_rank
+RETURNING cd_tax
+```
+
+
+## Epifitas no vasculares
+
+```{sql}
+SELECT cd_tax, scientific_name, identification_qualifier, identification_remarks,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank, cd_rank, count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE table_orig='botanica_registros_epi_novas' AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+GROUP BY cd_tax,scientific_name,identification_qualifier,identification_remarks,cd_rank
+ORDER BY scientific_name
+```
+
+Anotar:
+
+* identification_remarks da morfospecies M1, M2, M3 etc
+* identification_qualifier da morfospecies de tipo sp1, sp2 etc.
+* a veces hay más de un M1, M2 etc por un mismo sp1, sp2 etc.
+* en identification_qualifier hay tambien descripción de las caracteristicas biologicas que permitieron la identificación, incluso cuando la identificación se hace a nivel de especie.
+* a veces se ponen un M1, M2 sobre una identificación a nivel de especie
+
+
+Entonces lo que voy a hacer por ahora es:
+
+* solo considerar morfo-taxones para los niveles de taxones superior a especie
+* solo considerar los sp1 sp2 o M1 M2, ninguna de las descripciones dara un morfo-taxon
+* considerar todas las asociaciones unicas entre sp y M como morfo-taxones diferentes
+
+**A confirmar** : es posible que solo los tipos sp1, sp2 etc tengan valor de morfo-taxon: los M1 M2 etc pueden ser los resultados del trabajo de identificación sin tener ningun valor despues de la identificación del scientificName.
+
+
+```{sql}
+INSERT INTO main.morfo_taxo (cd_gp_biol,cd_tax, name_morfo, verbatim_taxon, pseudo_rank)
+WITH a AS(
+SELECT cd_tax, scientific_name, identification_qualifier, identification_remarks,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+  cd_rank,
+  CASE
+    WHEN identification_qualifier ~ '^sp.' THEN identification_qualifier
+    ELSE NULL
+  END morfo_sp,
+  CASE
+    WHEN identification_remarks ~ '^M[0-9]+' THEN identification_remarks
+    ELSE NULL
+  END morfo_m,
+  count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE rank_level>10 AND table_orig='botanica_registros_epi_novas' AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+GROUP BY cd_tax,scientific_name,identification_qualifier,identification_remarks,cd_rank
+ORDER BY scientific_name
+), b AS(
+SELECT cd_tax, 
+  CASE 
+    WHEN morfo_sp IS NOT NULL AND morfo_m IS NOT NULL THEN morfo_sp || ' (' || morfo_m || ')'
+    WHEN morfo_sp IS NOT NULL AND morfo_m IS NULL THEN morfo_sp
+    WHEN morfo_sp IS NULL AND morfo_m IS NOT NULL THEN morfo_m
+    ELSE NULL
+  END name_morfo,
+  scientific_name || ' ' || morfo_sp verbatim_taxon,
+  pseudo_rank
+FROM a 
+WHERE morfo_sp IS NOT NULL OR morfo_m IS NOT NULL
+)
+SELECT 'epnv',*
+FROM b
+GROUP BY cd_tax,name_morfo, verbatim_taxon, pseudo_rank
+
+RETURNING cd_morfo
+;
+```
+
+
+```{sql}
+WITH a AS(
+SELECT
+  table_orig,"row.names",
+  'epnv' AS cd_gp_biol,
+  cd_tax,
+  CASE
+    WHEN identification_qualifier ~ '^sp.' THEN identification_qualifier
+    ELSE NULL
+  END morfo_sp,
+  CASE
+    WHEN identification_remarks ~ '^M[0-9]+' THEN identification_remarks
+    ELSE NULL
+  END morfo_m
+FROM raw_dwc.taxonomy_total
+WHERE table_orig='botanica_registros_epi_novas'
+),b AS (
+SELECT table_orig,"row.names",
+  cd_gp_biol,
+  cd_tax, 
+  CASE 
+    WHEN morfo_sp IS NOT NULL AND morfo_m IS NOT NULL THEN morfo_sp || ' (' || morfo_m || ')'
+    WHEN morfo_sp IS NOT NULL AND morfo_m IS NULL THEN morfo_sp
+    WHEN morfo_sp IS NULL AND morfo_m IS NOT NULL THEN morfo_m
+    ELSE NULL
+  END name_morfo
+FROM a
+),c AS (
+SELECT 
+  table_orig,"row.names",cd_morfo
+FROM b
+JOIN main.morfo_taxo USING(name_morfo,cd_gp_biol,cd_tax)
+)
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=c.cd_morfo
+FROM c
+WHERE tt.table_orig=c.table_orig AND tt."row.names"=c."row.names"
+RETURNING tt.cd_morfo;
+```
+
+
+## Colémbolos
+
+**Algunos morfos tienen el mismo numero pero conciernen taxones diferentes (scientificName diferentes). ¿Será un error?**
+
+
+```{sql, max.print=50}
+SELECT cd_tax, scientific_name, identification_qualifier, identification_remarks,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+  cd_rank,
+  count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND*/ table_orig='collembolos_registros' AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+GROUP BY cd_tax,scientific_name,identification_qualifier,identification_remarks,cd_rank
+ORDER BY identification_remarks,scientific_name
+```
+
+
+```{sql, max.print=50}
+WITH a AS(
+SELECT cd_tax, scientific_name, identification_qualifier,
+SPLIT_PART(identification_remarks,' | ',1) morfo,
+SPLIT_PART(identification_remarks,' | ',2) affinities,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+  cd_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND*/ table_orig='collembolos_registros' AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+), b AS(
+SELECT cd_tax,scientific_name,morfo,affinities,identification_qualifier,count(*), ROW_NUMBER()  OVER (PARTITION BY cd_tax,morfo ORDER BY count(*) DESC) AS order_cases_in_sp_morfo
+FROM a
+GROUP BY cd_tax,scientific_name,morfo,affinities,identification_qualifier
+ORDER BY cd_tax,morfo
+)
+SELECT b.* 
+FROM b
+JOIN (SELECT * FROM b WHERE order_cases_in_sp_morfo=2) AS b2 USING(cd_tax,morfo)
+/*
+GROUP BY cd_tax,scientific_name,identification_qualifier,identification_remarks,cd_rank
+ORDER BY identification_remarks,scientific_name
+*/
+```
+
+Sería posible, con más trabajo, extraer los taxones potenciales, y los rangos etc.
+Pero es mucho trabajo, con incertidumbre: para ir más allá, deberíamos consultar los expertos del grupo.
+
+Por ahora, lo que voy a hacer es:
+
+* Considerar unicamente las associaciones scientific_name/Morfo
+* Considerar unicamente los morfo-taxones construidos sobre rangos superiores a especies
+* Poner el Morfo como name_morfo
+* Poner como verbatim_taxon el identification_qualifier más utilizado
+* Poner todos los morfo/afinities/identification_qualifier en las descripciones
+
+
+```{sql}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax,name_morfo,verbatim_taxon,description,pseudo_rank)
+WITH a AS(
+SELECT cd_tax, scientific_name, identification_qualifier,
+SPLIT_PART(identification_remarks,' | ',1) morfo,
+SPLIT_PART(identification_remarks,' | ',2) affinities,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+  cd_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE rank_level>10 AND table_orig='collembolos_registros' AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+), b AS(
+SELECT cd_tax,scientific_name,morfo,affinities,identification_qualifier,count(*), ROW_NUMBER()  OVER (PARTITION BY cd_tax,morfo ORDER BY count(*) DESC) AS order_cases_in_sp_morfo,pseudo_rank
+FROM a
+GROUP BY cd_tax,scientific_name,morfo,affinities,identification_qualifier,pseudo_rank
+ORDER BY cd_tax,morfo
+)
+SELECT 'cole',cd_tax,morfo, 
+  scientific_name || ' ' || STRING_AGG(DISTINCT identification_qualifier, '|  ') FILTER (WHERE order_cases_in_sp_morfo=1) AS verbatim_name,
+  'affinities: '|| STRING_AGG(DISTINCT affinities, ', ')|| ' | qualifiers: ' || STRING_AGG(DISTINCT identification_qualifier,', '),pseudo_rank
+FROM b
+GROUP BY cd_tax,morfo,scientific_name,pseudo_rank
+ORDER BY morfo
+RETURNING cd_morfo
+```
+
+```{sql}
+UPDATE main.morfo_taxo
+SET description=REGEXP_REPLACE(description,'^affinities:  \|','')
+WHERE cd_gp_biol='cole' AND description ~'^affinities:  \|'
+RETURNING description
+
+```
+
+Afectar el cd_morfo en la tabla taxonomy_total:
+
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='cole' AND tt.cd_tax=m.cd_tax AND SPLIT_PART(tt.identification_remarks,' | ',1)=m.name_morfo
+RETURNING tt.cd_morfo
+```
+
+## Escarabajos
+
+```{sql}
+SELECT cd_tax,scientific_name,identification_qualifier,identification_remarks,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='escarabajos_registros'
+  AND (identification_remarks IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_remarks
+```
+
+```{sql}
+INSERT INTO main.morfo_taxo(cd_gp_biol,cd_tax,verbatim_taxon,name_morfo,pseudo_rank)
+SELECT 'esca',cd_tax,scientific_name || ' ' || identification_qualifier AS verbatim_taxon, identification_remarks AS name_morfo,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='escarabajos_registros'
+  AND (identification_remarks IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_remarks
+```
+
+Afectar cd_morfo a las filas de taxonomy_total
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='esca' AND tt.table_orig='escarabajos_registros' AND tt.cd_tax=m.cd_tax AND tt.identification_remarks=m.name_morfo
+RETURNING tt.cd_morfo
+```
+
+## Macroinvertebrados
+
+En el caso de macroinvertebrados, la columna de identification_qualifier contiene 2 tipos de identificadores: tipo sp y tipo Mf. Por ahora voy a considerar los dos como morfotipos, pero de pronto, los expertos esperaban que solo los Mf sean morfo-taxones.
+
+**Hay una diferencia entre Trombidiformes mf1. y Trombidiformes Mf1? (voy a considerar que no)**
+
+**Que hacer con Coleoptera Mf. (larva) versus Coleoptera Mf. (pupa)?** Por ahora, voy a considera unicamente los que tienen un numero...
+
+\tiny 
+
+```{sql, max.print=100}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo
+  ,identification_remarks,
+  CASE
+    WHEN identification_remarks ~ '[Ll]arva' OR identification_remarks ~ '[Aa]dulto' THEN NULL
+    ELSE identification_remarks 
+  END description,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_macroinvertebrados'
+  AND (identification_qualifier IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+\normalsize
+
+```{sql}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, verbatim_taxon, description, pseudo_rank)
+WITH a AS(
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo
+  ,identification_remarks,
+  CASE
+    WHEN identification_remarks ~ '[Ll]arva' OR identification_remarks ~ '[Aa]dulto' THEN NULL
+    ELSE identification_remarks 
+  END description,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_macroinvertebrados'
+  AND (identification_qualifier IS NOT NULL)
+)
+SELECT 'minv', cd_tax, name_morfo, scientific_name || ' ' || name_morfo verbatim_taxon, STRING_AGG(DISTINCT description, ' | '), pseudo_rank
+FROM a
+WHERE name_morfo IS NOT NULL
+GROUP BY cd_tax,scientific_name, name_morfo, pseudo_rank
+ORDER BY cd_tax,name_morfo
+RETURNING main.morfo_taxo.cd_morfo, main.morfo_taxo.verbatim_taxon
+```
+
+Dar un cd_morfo a las filas de taxonomy_total
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='minv' AND tt.table_orig='hidrobiologico_registros_macroinvertebrados' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+      WHEN tt.identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(tt.identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+      WHEN tt.identification_qualifier ~ '^sp[0-9]\.' THEN tt.identification_qualifier
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
+
+
+## Macrofitas
+
+**Otra vez esta diferencia entre Mf y sp...**
+
+
+```{sql, max.print=100}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_macrofitas'
+  AND (identification_qualifier IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+```{sql, max.print=100}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, verbatim_taxon, pseudo_rank)
+WITH a AS(
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_macrofitas'
+  AND (identification_qualifier IS NOT NULL)
+)
+SELECT 'mafi',cd_tax,name_morfo,scientific_name||' '||name_morfo,pseudo_rank
+FROM a
+WHERE name_morfo IS NOT NULL
+GROUP BY cd_tax,pseudo_rank,scientific_name,name_morfo
+ORDER BY cd_tax,name_morfo
+RETURNING main.morfo_taxo.cd_morfo, main.morfo_taxo.verbatim_taxon
+```
+
+Dar cd_morfo en taxonomy_total
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='mafi' AND tt.table_orig='hidrobiologico_registros_macrofitas' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+      WHEN tt.identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(tt.identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+      WHEN tt.identification_qualifier ~ '^sp[0-9]\.' THEN tt.identification_qualifier
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
+
+
+
+## Zooplancton
+
+Mismo problema de minuscula/mayuscula y mismo problema de mf vs sp
+
+```{sql, max.print=100}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_zooplancton'
+  AND (identification_qualifier IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+```{sql, max.print=100}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, verbatim_taxon, pseudo_rank)
+WITH a AS(
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_zooplancton'
+  AND (identification_qualifier IS NOT NULL)
+)
+SELECT 'zopl',cd_tax,name_morfo,scientific_name||' '||name_morfo,pseudo_rank
+FROM a
+WHERE name_morfo IS NOT NULL
+GROUP BY cd_tax,pseudo_rank,scientific_name,name_morfo
+ORDER BY cd_tax,name_morfo
+RETURNING main.morfo_taxo.cd_morfo, main.morfo_taxo.verbatim_taxon
+```
+
+Dar cd_morfo en taxonomy_total
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='zopl' AND tt.table_orig='hidrobiologico_registros_zooplancton' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+      WHEN tt.identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(tt.identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+      WHEN tt.identification_qualifier ~ '^sp[0-9]\.' THEN tt.identification_qualifier
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
+
+
+
+
+
+## Phytoplancton
+
+Mismo problema de minuscula/mayuscula y mismo problema de mf vs sp
+
+```{sql, max.print=100}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]{1,2}\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_fitoplancton'
+  AND (identification_qualifier IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+```{sql, max.print=100}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, verbatim_taxon, pseudo_rank)
+WITH a AS(
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]{1,2}\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_fitoplancton'
+  AND (identification_qualifier IS NOT NULL)
+)
+SELECT 'fipl',cd_tax,name_morfo,scientific_name||' '||name_morfo,pseudo_rank
+FROM a
+WHERE name_morfo IS NOT NULL
+GROUP BY cd_tax,pseudo_rank,scientific_name,name_morfo
+ORDER BY cd_tax,name_morfo
+RETURNING main.morfo_taxo.cd_morfo, main.morfo_taxo.verbatim_taxon
+```
+
+Dar cd_morfo en taxonomy_total
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='fipl' AND tt.table_orig='hidrobiologico_registros_fitoplancton' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+      WHEN tt.identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(tt.identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
+      WHEN tt.identification_qualifier ~ '^sp[0-9]{1,2}\.' THEN tt.identification_qualifier
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
+
+
+
+
+## Perifiton
+
+Mismo problema de minuscula/mayuscula y mismo problema de mf vs sp
+
+```{sql, max.print=100}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]{1,2}\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9]{1,2})\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]{1,2}\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_perifiton'
+  AND (identification_qualifier IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+```{sql, max.print=100}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, verbatim_taxon, pseudo_rank)
+WITH a AS(
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^[Mm]f[0-9]{1,2}\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9]{1,2})\.','\1')||'.'
+    WHEN identification_qualifier ~ '^sp[0-9]{1,2}\.' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hidrobiologico_registros_perifiton'
+  AND (identification_qualifier IS NOT NULL)
+)
+SELECT 'peri',cd_tax,name_morfo,scientific_name||' '||name_morfo,pseudo_rank
+FROM a
+WHERE name_morfo IS NOT NULL
+GROUP BY cd_tax,pseudo_rank,scientific_name,name_morfo
+ORDER BY cd_tax,name_morfo
+RETURNING main.morfo_taxo.cd_morfo, main.morfo_taxo.verbatim_taxon
+```
+
+Dar cd_morfo en taxonomy_total
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='peri' AND tt.table_orig='hidrobiologico_registros_perifiton' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+      WHEN tt.identification_qualifier ~ '^[Mm]f[0-9]{1,2}\.' THEN 'Mf'||REGEXP_REPLACE(tt.identification_qualifier,'^[Mm]f([0-9]{1,2})\.','\1')||'.'
+      WHEN tt.identification_qualifier ~ '^sp[0-9]{1,2}\.' THEN tt.identification_qualifier
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
+
+## Mamiferos
+No morfotipos, scientificName es lo que hay!
+
+## Mariposas
+
+
+Parece que solo hay Cynea sp1 y Cynea sp2
+
+```{sql, max.print=100}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^sp[0-9]{1,2}' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='mariposas_registros'
+  AND (identification_qualifier IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+```{sql, max.print=100}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, verbatim_taxon, pseudo_rank)
+WITH a AS(
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^sp[0-9]{1,2}' THEN identification_qualifier
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='mariposas_registros'
+  AND (identification_qualifier IS NOT NULL)
+)
+SELECT 'mari',cd_tax,name_morfo, scientific_name||' '||name_morfo AS verbatim_taxon, pseudo_rank
+FROM a
+WHERE name_morfo IS NOT NULL
+GROUP BY cd_tax,cd_rank,scientific_name, pseudo_rank, name_morfo
+ORDER BY cd_tax, name_morfo
+RETURNING main.morfo_taxo.cd_morfo, verbatim_taxon
+```
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='mari' AND tt.table_orig='mariposas_registros' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+      WHEN tt.identification_qualifier ~ '^sp[0-9]{1,2}' THEN tt.identification_qualifier
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
+
+## Peces
+
+Parece que existen sp1 y sp2 principalmente
+
+No sé que hacer con:
+'Gen. nov. et sp. nov.'
+
+\tiny
+
+```{sql}
+SELECT *
+FROM raw_dwc.taxonomy_total
+WHERE identification_qualifier = 'Gen. nov. et sp. nov.'
+```
+
+\normalsize
+
+```{sql, max.print=100}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^sp. [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_qualifier,'^(sp. [0-9]{1,2}) *$', '\1')
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+  identification_remarks,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='peces_registros'
+  AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+```{sql, max.print=100}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, verbatim_taxon, pseudo_rank)
+WITH a AS(
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_qualifier ~ '^sp. [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_qualifier,'^(sp. [0-9]{1,2}) *$', '\1')
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='peces_registros'
+  AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+)
+SELECT 'pece',cd_tax,name_morfo, scientific_name||' '||name_morfo AS verbatim_taxon, pseudo_rank
+FROM a
+WHERE name_morfo IS NOT NULL
+GROUP BY cd_tax,cd_rank,scientific_name, pseudo_rank, name_morfo
+ORDER BY cd_tax, name_morfo
+RETURNING main.morfo_taxo.cd_morfo, verbatim_taxon
+```
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='pece' AND tt.table_orig='peces_registros' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+    WHEN identification_qualifier ~ '^sp. [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_qualifier,'^(sp. [0-9]{1,2}) *$', '\1')
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
+
+
+
+## Hormigas
+
+**Averiguar: *Genus sp.* tal vez no es la mejor manera para diferenciar los morfotipos de los taxones que solo tienen un genero**
+
+
+```{sql, max.print=100}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_remarks ~ '^Morfotipo [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_remarks, '^(Morfotipo [0-9]{1,2}) *$', '\1')
+    ELSE NULL
+  END name_morfo,
+  identification_remarks,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hormigas_registros'
+  AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+```{sql, max.print=100}
+INSERT INTO main.morfo_taxo(cd_gp_biol, cd_tax, name_morfo, verbatim_taxon, pseudo_rank)
+WITH a AS(
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN identification_remarks ~ '^Morfotipo [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_remarks, '^(Morfotipo [0-9]{1,2}) *$', '\1')
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='hormigas_registros'
+  AND (identification_qualifier IS NOT NULL)
+)
+SELECT 'horm',cd_tax,name_morfo, scientific_name||' sp'||SPLIT_PART(name_morfo,' ',2) AS verbatim_taxon, pseudo_rank
+FROM a
+WHERE name_morfo IS NOT NULL
+GROUP BY cd_tax,cd_rank,scientific_name, pseudo_rank, name_morfo
+ORDER BY cd_tax, name_morfo
+RETURNING main.morfo_taxo.cd_morfo, verbatim_taxon
+```
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='horm' AND tt.table_orig='hormigas_registros' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+      WHEN identification_remarks ~ '^Morfotipo [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_remarks, '^(Morfotipo [0-9]{1,2}) *$', '\1')
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
+
+
+# CREATING sql taxonomic function
+
+Para poder aprovechar todas las posibilidades de las tablas taxonomicas y sus INDEX, es importante crear las funciones que permiten buscar las relaciones entre taxones
+
+```{sql}
+CREATE OR REPLACE FUNCTION find_higher(id1 int,lev character varying(6), OUT idfin int, OUT type_res character varying(10))
+AS $$
+DECLARE
+	finallev int;
+	starthigher boolean;
+	currentid int;
+	currentlev smallint;
+BEGIN
+currentid := id1;
+-- define final level
+SELECT rank_level INTO finallev FROM main.def_tax_rank WHERE cd_rank=lev;
+-- define current level
+SELECT r.rank_level INTO currentlev FROM main.taxo n JOIN main.def_tax_rank r ON n.cd_rank=r.cd_rank WHERE cd_tax=currentid;
+
+-- starting level is higher than final level
+starthigher := (currentlev>finallev);
+IF starthigher THEN
+	idfin := NULL;
+	type_res := 'start_higher';
+END IF;
+
+-- loop to browse the parent levels
+WHILE currentlev<finallev LOOP
+	SELECT cd_parent INTO currentid FROM main.taxo WHERE main.taxo.cd_tax=currentid;
+	SELECT r.rank_level INTO currentlev FROM main.taxo n JOIN main.def_tax_rank r ON n.cd_rank=r.cd_rank WHERE cd_tax=currentid;
+	-- RAISE NOTICE 'current level is (%) \n', currentlev;
+	-- RAISE NOTICE 'current id is (%) \n', currentid;
+END LOOP;
+
+-- missing rank
+IF (currentlev>finallev AND NOT starthigher) THEN
+	idfin := NULL;
+	type_res := 'absent_rank';
+END IF;
+
+-- We are good!
+IF (currentlev=finallev) THEN
+	idfin := currentid;
+	type_res := 'ok';
+END IF;
+
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION find_higher_id(id1 int,lev character varying(4), OUT idfin int)
+AS $$
+DECLARE
+	finallev int;
+	starthigher boolean;
+	currentid int;
+	currentlev smallint;
+BEGIN
+currentid := id1;
+SELECT rank_level INTO finallev FROM main.def_tax_rank WHERE cd_rank=lev;
+SELECT r.rank_level INTO currentlev FROM main.taxo n JOIN main.def_tax_rank r ON n.cd_rank=r.cd_rank WHERE cd_tax=currentid;
+starthigher := (currentlev>finallev);
+IF starthigher THEN
+	idfin := NULL;
+END IF;
+
+WHILE currentlev IS NOT NULL AND currentlev<finallev LOOP
+	SELECT cd_parent INTO currentid FROM main.taxo WHERE main.taxo.cd_tax=currentid;
+	SELECT r.rank_level INTO currentlev FROM main.taxo n JOIN main.def_tax_rank r ON n.cd_rank=r.cd_rank WHERE cd_tax=currentid;
+	--RAISE NOTICE 'current level is (%) \n', currentlev;
+	--RAISE NOTICE 'current id is (%) \n', currentid;	
+END LOOP;
+
+IF (currentlev>finallev AND NOT starthigher) THEN
+	idfin := NULL;
+END IF;
+
+IF (currentlev=finallev) THEN
+	idfin := currentid;
+END IF;
+
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT true;
+```
+
+## Ejemplos de utilización
+
+
+```{sql}
+WITH a AS(
+SELECT t.cd_tax,find_higher_id(t.cd_tax,'FAM') cd_family
+FROM main.taxo t
+ORDER BY random()
+LIMIT 10
+)
+SELECT a.cd_tax,t.name_tax, a.cd_family, t2.name_tax
+FROM a
+LEFT JOIN main.taxo t ON a.cd_tax=t.cd_tax
+LEFT JOIN main.taxo t2 ON cd_family=t2.cd_tax
+```
+
+Numero de taxa en cada clase, por tabla de origen
+
+```{sql}
+WITH a AS(
+SELECT DISTINCT table_orig,"row.names",cd_tax
+FROM raw_dwc.taxonomy_total
+), b AS(
+SELECT a.*,find_higher_id(a.cd_tax,'CL') cd_cl
+FROM a
+)
+SELECT table_orig, t.name_tax as class, count(*)
+FROM raw_dwc.taxonomy_total tt
+JOIN b USING (table_orig,"row.names")
+JOIN main.taxo t ON b.cd_cl=t.cd_tax
+GROUP BY table_orig, t.name_tax
+ORDER BY table_orig, count(*)
+```
+
+```{r}
+dbDisconnect(fracking_db)
+```
+
+

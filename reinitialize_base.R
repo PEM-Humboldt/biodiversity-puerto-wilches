@@ -1,0 +1,10 @@
+require(RPostgreSQL)
+require(rmarkdown)
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+dbSendQuery(fracking_db,"DROP SCHEMA main CASCADE")
+dbSendQuery(fracking_db,paste(readLines("./tableCreation.sql"),collapse="\n"))
+dbDisconnect(fracking_db)
+render("./rawdata.Rmd")
+render("./taxonomy.Rmd")
+render("./integración_estructura_muestreo.Rmd")
+
