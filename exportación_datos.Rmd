@@ -1,0 +1,50 @@
+---
+title: "Exportación de los datos de los grupos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+       latex_engine: xelatex
+---
+
+
+************************
+
+Se trata en este documento de crear los "VIEWs" principales de exportación de los datos, y de crear los archivos excel desde R. 
+
+
+
+```{r setup}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+require(openxlsx)
+require(RPostgreSQL)
+
+```
+
+# Escarabajos
+
+
+```{r}
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+```
+
+
+
+
+
+
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
+

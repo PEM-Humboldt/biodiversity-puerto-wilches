@@ -1,0 +1,68 @@
+---
+title: "Descripción de los datos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+       latex_engine: xelatex
+---
+
+
+************************
+
+Se trata en este documento de hacer unos análisis generales sobre los datos que están en la base de datos. 
+
+
+
+```{r setup}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+require(openxlsx)
+require(RPostgreSQL)
+
+```
+
+# Colémbolos
+
+## Taxonomía, casos particulares 
+
+```{sql}
+SELECT r.cd_tax, r.cd_morfo, name_tax, t.cd_rank, mt.pseudo_rank, verbatim_taxon, name_morfo, count(*)
+FROM main.registros r
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+WHERE ge.cd_gp_biol='cole' AND cd_morfo IS NOT NULL 
+GROUP BY r.cd_tax, r.cd_morfo, name_tax, t.cd_rank, verbatim_taxon, name_morfo, mt.pseudo_rank, dtrm.rank_level
+ORDER BY dtrm.rank_level DESC, count(*) DESC
+;
+```
+
+
+
+
+```{r}
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+```
+
+
+
+
+
+
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
+
