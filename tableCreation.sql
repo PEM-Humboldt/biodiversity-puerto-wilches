@@ -379,6 +379,7 @@ CREATE TABLE main.def_ind_charac_categ
     cd_var_ind_char smallint REFERENCES main.def_var_ind_charac(cd_var_ind_char),
     categ_spa text,
     order_categ int,
+    comment_categ text,
     UNIQUE (cd_var_ind_char,categ)
     --it might be useful to work a unique constraint and/or index on (cd_var, order_categ) but since order_categ might be null, that's not trivial
 );
@@ -410,7 +411,7 @@ CREATE TABLE main.def_behaviour
 */
 CREATE TABLE main.individual_characteristics
 (
-    cd_reg int PRIMARY KEY REFERENCES main.registros(cd_reg),
+    cd_reg int REFERENCES main.registros(cd_reg),
     cd_var_ind_char smallint REFERENCES main.def_var_ind_charac,
     cd_categ integer REFERENCES main.def_ind_charac_categ,
     ind_char_int integer,
