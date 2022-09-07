@@ -111,17 +111,73 @@ RETURNING ic.cd_reg, ic.cd_categ, ic.cd_var_ind_char
 **Pusé como nulo el sexo de los cocones y huevos, así como sus castas, pero no sé si es la mejor opción**
 
 
-#
+# Escarabajos
+
+## Individual characteristics
 
 
 
+Es muy importante añadir las caracteristicas individuales de los escarabajos en la base de datos, porque eso hace parte de los filtros para las exportaciones de los datos (larvas/coprofagos)
+Esas están en la variable life_stage que contiene esas categorias:
 
 
 
+```{sql}
+SELECT life_stage, count(*)
+FROM raw_dwc.escarabajos_registros
+GROUP BY life_stage;
+```
 
+```{sql}
+INSERT INTO main.def_var_ind_charac(var_ind_char, type_var, var_ind_char_spa)
+VALUES
+ ('Life stage','categorial', 'Estado de vida')
+RETURNING cd_var_ind_char,var_ind_char, type_var, var_ind_char_spa
+;
+```
 
+```{sql}
+INSERT INTO main.def_ind_charac_categ(categ,cd_var_ind_char,categ_spa)
+VALUES
+ ('Larva',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage'),'Larva'),
+ ('Adult',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage'),'Adulto')
+RETURNING cd_categ,categ,cd_var_ind_char,categ_spa
+```
 
+```{sql}
+INSERT INTO main.individual_characteristics AS ic (cd_reg,cd_categ,cd_var_ind_char)
+WITH a AS(
+SELECT  
+ cd_reg,
+  CASE
+    WHEN life_stage ~ '[Ll]arva' THEN 'Larva'
+    WHEN life_stage ~ '[Aa]dulto' THEN 'Adult'
+  END lifestage
+FROM raw_dwc.escarabajos_registros
+)
+SELECT a.cd_reg, dc.cd_categ, dc.cd_var_ind_char
+FROM a
+JOIN main.def_ind_charac_categ dc ON lifestage=categ AND dc.cd_var_ind_char=(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage')
+RETURNING ic.cd_reg, ic.cd_categ, ic.cd_var_ind_char
+```
 
+```{sql}
+WITH a AS(
+SELECT dicc.categ life_stage, find_higher_id(cd_tax, 'SFAM') cd_tax, protocol,qt_int
+FROM main.registros r 
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event USING (cd_event) 
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE ge.cd_gp_biol='esca'
+)
+SELECT life_stage, name_tax subfamily, protocol,count(*) occurrences, sum(qt_int) total_abundance
+FROM a
+LEFT JOIN main.taxo USING (cd_tax)
+GROUP BY life_stage, name_tax, protocol
+;
+```
 
 
 
