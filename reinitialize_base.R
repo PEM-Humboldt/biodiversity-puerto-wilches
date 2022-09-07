@@ -7,4 +7,5 @@ dbDisconnect(fracking_db)
 render("./rawdata.Rmd")
 render("./taxonomy.Rmd")
 render("./integración_estructura_muestreo.Rmd")
+render("./datos_registros_suplementarios.Rmd")
 

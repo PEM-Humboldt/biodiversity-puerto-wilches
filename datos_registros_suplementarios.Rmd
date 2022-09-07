@@ -21,20 +21,101 @@ Se trata en este documento de añadir los datos que no hacen parte de las variab
 
 
 ```{r setup}
+require(openxlsx)
+require(RPostgreSQL)
+fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
 knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
   paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
 })
-require(openxlsx)
-require(RPostgreSQL)
-
 ```
 
-```{r}
-fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+
+# Hormigas
+
+## Individual characteristics
+Es muy importante añadir las caracteristicas individuales de las hormigas en la base de datos, porque eso hace parte de los filtros para las exportaciones de los datos (alados se excluyen)
+Esas están en la variable occurrence_remarks que contiene esas categorias:
+
+
+
+```{sql}
+SELECT occurrence_remarks, count(*)
+FROM raw_dwc.hormigas_registros
+GROUP BY occurrence_remarks;
 ```
+
+**Anotar: eso complica mucho el tratamiento de este campo, una categoria como Obreras y huevos impide totalmente la codificación clara de los individuos: debería haber una fila para los adultos, y otra para los huevos...**
+
+Lo que voy a hacer es no considerar los huevos y cocones... y transformar en 2 variables: caste y sexo
+
+```{sql}
+INSERT INTO main.def_var_ind_charac(var_ind_char, type_var, var_ind_char_spa)
+VALUES
+ ('Ant caste','categorial', 'Casta de hormiga'),
+ ('Sex', 'categorial', 'Sexo')
+RETURNING cd_var_ind_char,var_ind_char, type_var, var_ind_char_spa
+;
+```
+
+```{sql}
+INSERT INTO main.def_ind_charac_categ(categ,cd_var_ind_char,categ_spa)
+VALUES
+('Worker',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Ant caste'),'Obrera'),
+ ('Alate',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Ant caste'),'Alado'),
+ ('Queen',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Ant caste'),'Reina'),
+ ('Male',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Sex'),'Macho'),
+ ('Female',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Sex'),'Hembra'),
+ ('Sterile',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Sex'),'Estéril')
+RETURNING cd_categ,categ,cd_var_ind_char,categ_spa
+```
+
+```{sql}
+INSERT INTO main.individual_characteristics AS ic (cd_reg,cd_categ,cd_var_ind_char)
+WITH a AS(
+SELECT  
+ cd_reg,
+  CASE
+    WHEN occurrence_remarks ~ '[Rr]eina' THEN 'Queen'
+    WHEN occurrence_remarks ~ '[Aa]lado' THEN 'Alate'
+    WHEN occurrence_remarks ~ '[Oo]brera' THEN 'Worker'
+  END caste
+FROM raw_dwc.hormigas_registros
+)
+SELECT a.cd_reg, dc.cd_categ, dc.cd_var_ind_char
+FROM a
+JOIN main.def_ind_charac_categ dc ON caste=categ AND dc.cd_var_ind_char=(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Ant caste')
+RETURNING ic.cd_reg, ic.cd_categ, ic.cd_var_ind_char
+```
+
+```{sql}
+INSERT INTO main.individual_characteristics AS ic (cd_reg,cd_categ,cd_var_ind_char)
+WITH a AS(
+SELECT  
+ cd_reg,
+  CASE
+    WHEN occurrence_remarks ~ '[Rr]eina' OR occurrence_remarks ~ '[Hh]embra' THEN 'Female'
+    WHEN occurrence_remarks ~ '[Mmacho]' THEN 'Male'
+    WHEN occurrence_remarks ~ '[Oo]brera' THEN 'Sterile'
+  END sex
+FROM raw_dwc.hormigas_registros
+)
+SELECT a.cd_reg, dc.cd_categ, dc.cd_var_ind_char
+FROM a
+JOIN main.def_ind_charac_categ dc ON sex=categ AND dc.cd_var_ind_char=(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Sex')
+RETURNING ic.cd_reg, ic.cd_categ, ic.cd_var_ind_char
+```
+
+**Pusé como nulo el sexo de los cocones y huevos, así como sus castas, pero no sé si es la mejor opción**
+
+
+#
+
+
+
+
 
 
 
