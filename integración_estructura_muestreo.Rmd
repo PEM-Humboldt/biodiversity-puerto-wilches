@@ -4541,36 +4541,36 @@ Dar los codigos a las tables de origen:
 ALTER TABLE raw_dwc.mamiferos_tot_registros ADD COLUMN cds_recorded_by int[];
 
 WITH a AS(
-SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))),'- ','-') AS name_person
+SELECT table_orig,"row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))),'- ','-') AS name_person
 FROM raw_dwc.mamiferos_tot_registros
 ),b AS(
-SELECT "row.names", ARRAY_AGG(cd_person) cds
+SELECT table_orig,"row.names", ARRAY_AGG(cd_person) cds
 FROM a 
 LEFT JOIN main.people p ON a.name_person=p.verbatim_person
-GROUP BY "row.names"
+GROUP BY table_orig, "row.names"
 )
 UPDATE raw_dwc.mamiferos_tot_registros AS r
 SET cds_recorded_by=b.cds
 FROM b
-WHERE r."row.names"=b."row.names"
+WHERE r."row.names"=b."row.names" AND r.table_orig=b.table_orig
 RETURNING r."row.names", cds_recorded_by
 ;
 
 ALTER TABLE raw_dwc.mamiferos_tot_registros ADD COLUMN cds_identified_by int[];
 
 WITH a AS(
-SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | ')))),'- ','-') AS name_person
+SELECT table_orig,"row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | ')))),'- ','-') AS name_person
 FROM raw_dwc.mamiferos_tot_registros
 ),b AS(
-SELECT "row.names", ARRAY_AGG(cd_person) cds
+SELECT table_orig,"row.names", ARRAY_AGG(cd_person) cds
 FROM a 
 LEFT JOIN main.people p ON a.name_person=p.verbatim_person
-GROUP BY "row.names"
+GROUP BY table_orig,"row.names"
 )
 UPDATE raw_dwc.mamiferos_tot_registros AS r
 SET cds_identified_by=b.cds
 FROM b
-WHERE r."row.names"=b."row.names"
+WHERE r."row.names"=b."row.names" AND r.table_orig=b.table_orig
 RETURNING r."row.names", cds_identified_by
 ;
 
@@ -6655,36 +6655,36 @@ Dar los codigos a las tables de origen:
 ALTER TABLE raw_dwc.hidrobiologico_registros ADD COLUMN cds_recorded_by int[];
 
 WITH a AS(
-SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))),'- ','-') AS name_person
+SELECT table_orig,"row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))),'- ','-') AS name_person
 FROM raw_dwc.hidrobiologico_registros
 ),b AS(
-SELECT "row.names", ARRAY_AGG(cd_person) cds
+SELECT table_orig,"row.names", ARRAY_AGG(cd_person) cds
 FROM a 
 LEFT JOIN main.people p ON a.name_person=p.verbatim_person
-GROUP BY "row.names"
+GROUP BY table_orig,"row.names"
 )
 UPDATE raw_dwc.hidrobiologico_registros AS r
 SET cds_recorded_by=b.cds
 FROM b
-WHERE r."row.names"=b."row.names"
+WHERE r."row.names"=b."row.names" AND r.table_orig=b.table_orig
 RETURNING r."row.names", cds_recorded_by
 ;
 
 ALTER TABLE raw_dwc.hidrobiologico_registros ADD COLUMN cds_identified_by int[];
 
 WITH a AS(
-SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | ')))),'- ','-') AS name_person
+SELECT table_orig,"row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | ')))),'- ','-') AS name_person
 FROM raw_dwc.hidrobiologico_registros
 ),b AS(
-SELECT "row.names", ARRAY_AGG(cd_person) cds
+SELECT table_orig,"row.names", ARRAY_AGG(cd_person) cds
 FROM a 
 LEFT JOIN main.people p ON a.name_person=p.verbatim_person
-GROUP BY "row.names"
+GROUP BY table_orig,"row.names"
 )
 UPDATE raw_dwc.hidrobiologico_registros AS r
 SET cds_identified_by=b.cds
 FROM b
-WHERE r."row.names"=b."row.names"
+WHERE r."row.names"=b."row.names" AND r.table_orig=b.table_orig
 RETURNING r."row.names", cds_identified_by
 ;
 
