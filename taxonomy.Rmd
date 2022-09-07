@@ -385,7 +385,7 @@ SELECT
   INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
   INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
   INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
-  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(SPLIT_PART(higher_classification,'|',6),'^\s+',''),'\s+$',''),'\s+',' ')) as subfamily,
   INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
   REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
   NULL AS infraspecific_epithet,
