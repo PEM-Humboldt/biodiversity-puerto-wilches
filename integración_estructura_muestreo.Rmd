@@ -229,8 +229,8 @@ RETURNING cd_var_ind_qt,var_qt_ind
 ```{sql}
 INSERT INTO main.def_protocol(protocol,protocol_spa,cd_var_samp_eff_1,cd_var_samp_eff_2,samp_eff_1_implicit,samp_eff_2_implicit,cd_var_ind_qt,description_spa)
 VALUES(
-  'Visual transect',
-  'Transecto visual',
+  'Visual encounter survey',
+  'Búsqueda por encuentros visuales',
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Covered distance'),
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Elapsed time'),
   false,
@@ -399,7 +399,7 @@ UNION ALL
 SELECT cd_pt_ref, EXTRACT(isoyear FROM TO_DATE(event_date,'YYYY-MM-DD')) AS year
 FROM raw_dwc.reptiles_event
 )
-SELECT 'herp', (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Visual transect'),cd_pt_ref, ROW_NUMBER() OVER (PARTITION BY cd_pt_ref  ORDER BY year) num_gp
+SELECT 'herp', (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Visual encounter survey'),cd_pt_ref, ROW_NUMBER() OVER (PARTITION BY cd_pt_ref  ORDER BY year) num_gp
 FROM a 
 JOIN main.punto_referencia USING (cd_pt_ref)
 GROUP BY cd_pt_ref, name_pt_ref, year
@@ -430,7 +430,7 @@ ORDER BY cd_pt_ref, year
 SELECT "row.names",ge.cd_gp_event
 FROM raw_dwc.anfibios_event e
 LEFT JOIN b ON EXTRACT(isoyear FROM TO_DATE(event_date,'YYYY-MM-DD'))=year AND e.cd_pt_ref=b.cd_pt_ref
-LEFT JOIN main.gp_event ge ON b.num_gp=ge.campaign_nb AND ge.cd_gp_biol='herp' AND cd_protocol= (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Visual transect') AND ge.cd_pt_ref=e.cd_pt_ref
+LEFT JOIN main.gp_event ge ON b.num_gp=ge.campaign_nb AND ge.cd_gp_biol='herp' AND cd_protocol= (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Visual encounter survey') AND ge.cd_pt_ref=e.cd_pt_ref
 )
 UPDATE raw_dwc.anfibios_event e
 SET cd_gp_event=c.cd_gp_event
@@ -454,7 +454,7 @@ ORDER BY cd_pt_ref, year
 SELECT "row.names",ge.cd_gp_event
 FROM raw_dwc.reptiles_event e
 LEFT JOIN b ON EXTRACT(isoyear FROM TO_DATE(event_date,'YYYY-MM-DD'))=year AND e.cd_pt_ref=b.cd_pt_ref
-LEFT JOIN main.gp_event ge ON b.num_gp=ge.campaign_nb AND ge.cd_gp_biol='herp' AND cd_protocol= (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Visual transect') AND ge.cd_pt_ref=e.cd_pt_ref
+LEFT JOIN main.gp_event ge ON b.num_gp=ge.campaign_nb AND ge.cd_gp_biol='herp' AND cd_protocol= (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Visual encounter survey') AND ge.cd_pt_ref=e.cd_pt_ref
 )
 UPDATE raw_dwc.reptiles_event e
 SET cd_gp_event=c.cd_gp_event
@@ -1488,7 +1488,7 @@ SELECT cd_gp_event,
   event_date,
   TO_DATE(SPLIT_PART(event_date,'/',1), 'YYYY-MM-DD') date_1,
   TO_DATE(SPLIT_PART(event_date,'/',2), 'YYYY-MM-DD') date_2,
-  REGEXP_REPLACE(SPLIT_PART(event_time,'/',1),'\s+','','g') hora_1,
+  REGEXP_REPLACE(REGEXP_REPLACE(SPLIT_PART(event_time,'/',1),'\s+','','g'),'[^0-9]+$','') hora_1,
   CASE
   	WHEN REGEXP_REPLACE(SPLIT_PART(event_time,'/',2),'\s+','','g')='' THEN NULL
 	ELSE REGEXP_REPLACE(SPLIT_PART(event_time,'/',2),'\s+','','g')
@@ -3924,12 +3924,13 @@ Associar las tablas de eventos (Anotar: yo no utilizo un VIEW acá, porque voy a
 ```{sql}
 CREATE TABLE raw_dwc.mamiferos_tot_event AS(
 SELECT 
-  'mamiferos_event' AS table_orig,
-  "row.names",
- "event_id",
- "parent_event_id",
- "sample_size_value",
- "sample_size_unit",
+ 'mamiferos_event' AS table_orig,
+ "row.names",
+ "occurrence_id" AS event_id,
+ NULL::text AS "parent_event_id",
+ "basis_of_record",
+ "sampling_size_value"::text AS sample_size_value,
+ "sampling_size_unit" AS "sample_size_unit",
  "sampling_protocol",
  "sampling_effort",
  "event_date",
@@ -3952,16 +3953,16 @@ SELECT
  "decimal_longitude",
  "geodetic_datum",
  "coordinate_uncertainty_in_meters",
- "institution_code",
+ "identified_by",
  NULL::text AS "title",
- NULL::text AS "type",
  "measurement_type__plataforma_",
+ NULL::text AS "type",
  NULL::text AS "format",
  "measurement_value__plataforma_",
  "measurement_type__distancia_",
  NULL::text AS "creator",
- "measurement_value__distancia_",
  NULL::text AS "created",
+ "measurement_value__distancia_",
  "measurement_unit__distancia_",
  "measurement_type__tipo_de_palma_",
  "measurement_value__tipo_de_palma_",
@@ -3969,8 +3970,8 @@ SELECT
  "measurement_value__edad_",
  "measurement_type__altura_promedio_de_la_vegetación_",
  NULL::text AS "measurement_type__grupo_",
- "measurement_value__altura_promedio_de_la_vegetación_",
  NULL::text AS "measurement_value__grupo_",
+ "measurement_value__altura_promedio_de_la_vegetación_",
  "measurement_unit__altura_promedio_de_la_vegetación_",
  "measurement_type__cobertura_del_dosel_índice_ca_co_",
  "measurement_value__cobertura_del_dosel_índice_ca_co_",
@@ -3979,9 +3980,10 @@ FROM raw_dwc.mamiferos_event
 UNION ALL
 SELECT 
   'mamiferos_us_event' AS table_orig,
-  "row.names",
+   "row.names",
  "event_id",
  "parent_event_id",
+ NULL::text AS "basis_of_record",
  "sample_size_value"::text,
  "sample_size_unit",
  "sampling_protocol",
@@ -4006,16 +4008,16 @@ SELECT
  "decimal_longitude",
  "geodetic_datum",
  "coordinate_uncertainty_in_meters",
- NULL::text AS "institution_code",
+ NULL::text AS "identified_by",
  "title",
- "type",
  "measurement_type__plataforma_",
+ "type",
  "format",
  "measurement_value__plataforma_",
  "measurement_type__distancia_",
  "creator",
- "measurement_value__distancia_",
  "created",
+ "measurement_value__distancia_",
  "measurement_unit__distancia_",
  NULL::text AS "measurement_type__tipo_de_palma_",
  NULL::text AS "measurement_value__tipo_de_palma_",
@@ -4023,8 +4025,8 @@ SELECT
  NULL::text AS "measurement_value__edad_",
  NULL::text AS "measurement_type__altura_promedio_de_la_vegetación_",
  "measurement_type__grupo_",
- NULL::text AS "measurement_value__altura_promedio_de_la_vegetación_",
  "measurement_value__grupo_",
+ NULL::text AS "measurement_value__altura_promedio_de_la_vegetación_",
  NULL::text AS "measurement_unit__altura_promedio_de_la_vegetación_",
  NULL::text AS "measurement_type__cobertura_del_dosel_índice_ca_co_",
  NULL::double precision AS "measurement_value__cobertura_del_dosel_índice_ca_co_",
@@ -4078,7 +4080,7 @@ SELECT
  "recorded_by",
  "organism_id",
  "organism_quantity",
- "organism_quantity_type",
+ organism_quantity_1 "organism_quantity_type",
  "sex",
  "life_stage",
  "reproductive_condition",
@@ -5277,15 +5279,15 @@ Hay un error raro y es que en caso de electropesca, sampling_size_unit da 1 minu
 INSERT INTO main.def_unit(cd_measurement_type, unit, unit_spa, abbv_unit,factor)
 VALUES(
   (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='number of traps'),
-  'Number of sets',
+  'Number of throws',
   'Número de lances',
-  'sets',
+  'throws',
   1
   ),(
   (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='number of traps'),
-  'Number of trawl nets',
+  'Number of drag nets',
   'Número de arrastres',
-  'trawl nets',
+  'drag nets',
   1
   )
 RETURNING cd_unit, unit, unit_spa
@@ -5296,14 +5298,14 @@ RETURNING cd_unit, unit, unit_spa
 INSERT INTO main.def_var_samp_eff(var_samp_eff, var_samp_eff_spa, cd_unit, type_variable)
   VALUES
     (
-    'Number of sets',
+    'Number of throws',
     'Número de lances',
-    (SELECT cd_unit FROM main.def_unit WHERE unit='Number of sets'),
+    (SELECT cd_unit FROM main.def_unit WHERE unit='Number of throws'),
     'int'
     ),(
-    'Number of trawl nets',
+    'Number of drag nets',
     'Número de arrastres',
-    (SELECT cd_unit FROM main.def_unit WHERE unit='Number of trawl nets'),
+    (SELECT cd_unit FROM main.def_unit WHERE unit='Number of drag nets'),
     'int'
     )
 
@@ -5317,18 +5319,18 @@ RETURNING cd_var_samp_eff,var_samp_eff;
 ```{sql}
 INSERT INTO main.def_protocol(protocol,protocol_spa,cd_var_samp_eff_1,cd_var_samp_eff_2,samp_eff_1_implicit,samp_eff_2_implicit,cd_var_ind_qt,description_spa)
 VALUES(
-  'Thrownets',
+  'Cast nets',
   'Atarraya',
-  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of sets'),
+  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of throws'),
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Elapsed time'),
   false,
   true,
   (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Number of individuals'),
   'Tal vez sería bueno añadir las caracteristicas de los artes de pesca, pero no tengo acceso a esta información'
 ),(
-  'Trawlnet',
+  'Drag net',
   'Arrastre',
-  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of trawl nets'),
+  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of drag nets'),
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Elapsed time'),
   false,
   true,
@@ -5344,7 +5346,7 @@ VALUES(
   (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Number of individuals'),
   NULL
 ),(
-  'Trammel fishing',
+  'Gillnets',
   'Trasmallo',
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Elapsed time'),
   NULL,
@@ -5694,8 +5696,44 @@ WHERE  event_remarks IS NOT NULL
 
 ```
 
+### Añadir la jornada
+
+```{sql}
+INSERT INTO main.def_var_event_extra(var_event_extra, type_var, var_event_extra_spa, var_event_extra_comment)
+VALUES
+  ('period',
+  'categorial',
+  'jornada',
+  NULL
+  );
+INSERT INTO main.def_categ_event_extra(categ,cd_var_event_extra,categ_spa)
+VALUES
+  ('Day',
+  (SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period'),
+  'Día'
+  ),
+  ('Night',
+  (SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period'),
+  'Noche'
+  ),
+  ('Dusk',
+  (SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period'),
+  'Crepuscular'
+  );
+INSERT INTO main.event_extra(cd_event,cd_categ_event_extra,cd_var_event_extra)
+SELECT cd_event,
+  CASE
+    WHEN description_replicate~'D$' THEN (SELECT cd_categ_event_extra FROM main.def_categ_event_extra WHERE categ='Day')
+    WHEN description_replicate~'C$' THEN (SELECT cd_categ_event_extra FROM main.def_categ_event_extra WHERE categ='Dusk')
+  END cd_categ,
+  (SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period')
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='pece' AND description_replicate ~ '[DC]$'
+;
 
 
+```
 ## registros
 
 
@@ -6493,7 +6531,13 @@ VALUES
   'Absolute coverage',
   'Cobertura absoluta',
   (SELECT cd_unit FROM main.def_unit WHERE cd_measurement_type=(SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='area') AND unit='Square meter'),
-  'int'
+  'double precision'
+),
+(
+  'Cover (%)',
+  'Cobertura (%)',
+  (SELECT cd_unit FROM main.def_unit WHERE cd_measurement_type=(SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='percentage') AND unit='Percentage'),
+  'double precision'
 )
 RETURNING cd_var_ind_qt,var_qt_ind
 ;
@@ -6584,11 +6628,11 @@ VALUES(
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of quadrats'),
   false,
   false,
-  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Individual density (ind/m2)'),
+  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Cover (%)'),
   NULL
 )
 ,(
-  'Kick Sampling',
+  'D net kick sampling',
   'Kick',
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Sampling area'),
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of kicks'),
@@ -6608,8 +6652,8 @@ VALUES(
   NULL
 )
 ,(
-  'Type D net',
-  'Red tipo D',
+  'D net (associated with macrophytes)',
+  'Red tipo D asociados con macrofitas',
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Sampling area'),
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of trawl nets'),
   false,
@@ -6775,10 +6819,10 @@ SELECT
   cd_pt_ref
 FROM raw_dwc.hidrobiologico_event
 ), campaign AS(
-SELECT año,aguas_bajas, anh_name,grupo, ROW_NUMBER() OVER (PARTITION BY anh_name,grupo ORDER BY año,aguas_bajas) campaign_nb
+SELECT año,aguas_bajas, a.metodo,anh_name,grupo, ROW_NUMBER() OVER (PARTITION BY anh_name,grupo ORDER BY año,aguas_bajas) campaign_nb
 FROM a
-GROUP BY año,grupo,aguas_bajas, anh_name
-ORDER BY año,grupo,aguas_bajas, anh_name
+GROUP BY año,grupo,metodo,aguas_bajas, anh_name
+ORDER BY año,grupo,metodo,aguas_bajas, anh_name
 )
 SELECT 
 CASE
@@ -6789,20 +6833,20 @@ CASE
  WHEN a.grupo='Z' THEN 'zopl'
 END cd_gp_biol,  
 CASE
-    WHEN metodo='D' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Grab collector')
-    WHEN metodo='Ra' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Substrate scraping')
-    WHEN metodo='C' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Sampling quadrats')
-    WHEN metodo='K' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Kick Sampling')
-    WHEN metodo='B' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Van Dorn Bottle')
-    WHEN metodo='DR' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Grab collector + type D net')
-    WHEN metodo='R' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Type D net')
+    WHEN a.metodo='D' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Grab collector')
+    WHEN a.metodo='Ra' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Substrate scraping')
+    WHEN a.metodo='C' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Sampling quadrats')
+    WHEN a.metodo='K' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='D net kick sampling')
+    WHEN a.metodo='B' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Van Dorn Bottle')
+    WHEN a.metodo='DR' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Grab collector + type D net')
+    WHEN a.metodo='R' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='D net (associated with macrophytes)')
   END cd_protocol,
   cd_pt_ref,
   c.campaign_nb
 FROM a
-LEFT JOIN campaign c ON c.aguas_bajas=a.aguas_bajas AND (c.anh_name=a.anh_name OR (c.anh_name IS NULL AND a.anh_name IS NULL))
+LEFT JOIN campaign c ON c.aguas_bajas=a.aguas_bajas AND (c.anh_name=a.anh_name OR (c.anh_name IS NULL AND a.anh_name IS NULL)) AND a.metodo=c.metodo
 LEFT JOIN main.punto_referencia USING (cd_pt_ref)
-GROUP BY a.grupo, cd_pt_ref, name_pt_ref,a.año, a.aguas_bajas, metodo, c.campaign_nb
+GROUP BY a.grupo, cd_pt_ref, name_pt_ref,a.año, a.aguas_bajas, a.metodo, c.campaign_nb
 ORDER BY a.año,a.aguas_bajas,cd_pt_ref, a.grupo, cd_protocol
 RETURNING cd_gp_event,cd_gp_biol,cd_protocol,cd_pt_ref,campaign_nb,subpart
 ;
@@ -6834,10 +6878,10 @@ SELECT
   cd_pt_ref
 FROM raw_dwc.hidrobiologico_event
 ), campaign AS(
-SELECT año,aguas_bajas, anh_name,grupo, ROW_NUMBER() OVER (PARTITION BY anh_name,grupo ORDER BY año,aguas_bajas) campaign_nb
+SELECT año,aguas_bajas, metodo,anh_name,grupo, ROW_NUMBER() OVER (PARTITION BY anh_name,grupo ORDER BY año,aguas_bajas) campaign_nb
 FROM a
-GROUP BY año,grupo,aguas_bajas, anh_name
-ORDER BY año,grupo,aguas_bajas, anh_name
+GROUP BY año,grupo,metodo,aguas_bajas, anh_name
+ORDER BY año,grupo,metodo,aguas_bajas, anh_name
 ),b AS(
 SELECT event_id,
 CASE
@@ -6851,15 +6895,15 @@ CASE
     WHEN metodo='D' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Grab collector')
     WHEN metodo='Ra' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Substrate scraping')
     WHEN metodo='C' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Sampling quadrats')
-    WHEN metodo='K' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Kick Sampling')
+    WHEN metodo='K' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='D net kick sampling')
     WHEN metodo='B' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Van Dorn Bottle')
     WHEN metodo='DR' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Grab collector + type D net')
-    WHEN metodo='R' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Type D net')
+    WHEN metodo='R' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol='D net (associated with macrophytes)')
   END cd_protocol,
   cd_pt_ref,
   c.campaign_nb
 FROM a
-LEFT JOIN campaign c USING (grupo,año,aguas_bajas,anh_name)
+LEFT JOIN campaign c USING (grupo,año,metodo,aguas_bajas,anh_name)
 LEFT JOIN main.punto_referencia USING (cd_pt_ref)
 ),d AS(
 SELECT b.*,cd_gp_event
@@ -6876,6 +6920,7 @@ RETURNING e.event_id, e.cd_gp_event
 SELECT event_id
 FROM raw_dwc.hidrobiologico_event
 WHERE cd_gp_event IS NULL;
+
 ```
 
 ## event
@@ -7094,7 +7139,87 @@ WHERE super_gp='Hydrobiology'
 ```
 
 
+# Attribución de los puntos de referencias a la plataformas
 
+TODO
+
+
+
+# Correcciones
+## Macroinvertebrados
+
+
+A veces las areas que están en la pestaña de registros están mal, lo que resulta en errores en el calculo de las densidades:
+
+**Nota: son 171 casos donde la diferencia entre mi calculo y lo que hay en el DwC es de más de 20%**
+
+```{sql, max.print=NA}
+SELECT event_id,protocol,samp_effort_1 area,qt_int abs_ab,qt_int/samp_effort_1 calculado,qt_double val_dwc
+FROM main.registros r
+LEFT JOIN main.event USING(cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE cd_gp_biol='minv' AND samp_effort_1 IS NOT NULL AND qt_int IS NOT NULL
+ AND ( ((qt_int/samp_effort_1)/qt_double)>1.2 OR ((qt_int/samp_effort_1)/qt_double)<0.8 )
+```
+
+Así que lo que voy a hacer para macroinvertebrados es hacer el calculo y reemplazar todos los valores (incluso los que tenían menos de 20% de diferencia)
+
+```{sql, results='hide'}
+WITH a AS(
+  SELECT cd_reg,qt_int/samp_effort_1 calculado
+  FROM main.registros r
+  LEFT JOIN main.event USING(cd_event)
+  LEFT JOIN main.gp_event USING (cd_gp_event)
+  LEFT JOIN main.def_protocol USING (cd_protocol)
+  WHERE cd_gp_biol='minv' AND samp_effort_1 IS NOT NULL AND qt_int IS NOT NULL
+)
+UPDATE main.registros r
+SET qt_double=a.calculado
+FROM a 
+WHERE r.cd_reg=a.cd_reg
+RETURNING r.cd_reg;
+```
+
+## Macrofitas
+
+### Errores con la suma de abundancia de los cuadrantes
+No es un error real sino una imprecisión en las unidades y variables utilizada, la cantidad expresada en el campo organism_quantity es la area total de cobertura en metros, lo que vamos a utilizar acá es la cobertura en porcentaje.
+
+```{sql max.print=NA}
+WITH a AS(
+SELECT cd_reg,cd_event, REGEXP_REPLACE("measurement_value__cobertura_de_cada_una_de_las_especies__%__",',','.')::double precision sum_cov
+FROM raw_dwc.hidrobiologico_registros
+)
+SELECT event_id,samp_effort_1 area, sum_cov, sum_cov/samp_effort_1 calculado,qt_double val_dwc
+FROM a
+LEFT JOIN main.registros USING (cd_reg,cd_event)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING(cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE cd_gp_biol='mafi'
+AND (((sum_cov/samp_effort_1)/qt_double)>1.2 OR ((sum_cov/samp_effort_1)/qt_double)<0.8 )
+```
+
+```{sql}
+WITH a AS(
+SELECT cd_reg,cd_event, REGEXP_REPLACE("measurement_value__cobertura_de_cada_una_de_las_especies__%__",',','.')::double precision sum_cov
+FROM raw_dwc.hidrobiologico_registros
+),b AS(
+SELECT cd_reg,event_id,samp_effort_1 area, sum_cov, sum_cov/samp_effort_1 calculado,qt_double val_dwc
+FROM a
+LEFT JOIN main.registros USING (cd_reg,cd_event)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING(cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE cd_gp_biol='mafi'
+)
+UPDATE main.registros r
+SET qt_double=b.calculado
+FROM b
+WHERE r.cd_reg=b.cd_reg
+RETURNING r.cd_reg, qt_double
+```
 
 ```{r}
 dbDisconnect(fracking_db)

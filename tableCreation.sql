@@ -249,7 +249,7 @@ CREATE TABLE main.taxo
     CHECK(cd_rank IN ('KG', 'DOM') OR cd_parent IS NOT NULL),
     CHECK(
         CASE
-            WHEN cd_rank IN ('SGN', 'GN', 'TR', 'SFAM', 'FAM', 'SPFAM', 'SOR', 'OR', 'LEG', 'SCL', 'CL', 'SPCL', 'SPHY', 'PHY', 'SPPHY', 'SKG', 'KG', 'SPKG', 'SDOM', 'DOM') THEN name_tax ~ '^[A-Z][a-z-]+$'
+            WHEN cd_rank IN ('SGN', 'GN', 'TR', 'SFAM', 'FAM', 'SPFAM', 'SOR', 'OR', 'LEG', 'SCL', 'CL', 'SPCL', 'SPHY', 'PHY', 'SPPHY', 'SKG', 'KG', 'SPKG', 'SDOM', 'DOM') THEN name_tax ~ '^[A-Z][a-z-]+$' OR name_tax ~ '^[A-Z][a-z-]+ (ordo )?incertae sedis$'
             WHEN cd_rank='SP' THEN name_tax ~ '^[A-Z][a-z-]+ [a-z-]+$'
             WHEN cd_rank IN ('FORM','SUBVAR','VAR','SUBSP') THEN name_tax ~ '^[A-Z][a-z-]+ [a-z-]+ [a-z-]+$'
         END
@@ -451,7 +451,7 @@ CREATE TABLE main.def_categ_habitat
 (
     cd_categ serial PRIMARY KEY,
     categ text NOT NULL,
-    cd_var_habitat smallint REFERENCES main.def_var_habitat(cd_var_habitat),
+    cd_var_habitat smallint REFERENCES main.def_var_habitat(cd_var_habitat) NOT NULL,
     categ_spa text,
     order_categ int,
     UNIQUE (cd_var_habitat, categ)
@@ -489,7 +489,7 @@ CREATE TABLE main.def_categ_event_extra
 (
     cd_categ_event_extra serial PRIMARY KEY,
     categ text NOT NULL,
-    cd_var_event_extra smallint REFERENCES main.def_var_event_extra(cd_var_event_extra),
+    cd_var_event_extra smallint REFERENCES main.def_var_event_extra(cd_var_event_extra) NOT NULL,
     categ_spa text,
     order_categ int,
     UNIQUE (cd_var_event_extra,categ)
@@ -541,3 +541,38 @@ CREATE TABLE main.registros_extra
     value_text text,
     CHECK (cd_categ_registros_extra IS NOT NULL OR value_bool IS NOT NULL OR value_int IS NOT NULL OR value_double IS NOT NULL OR value_text IS NOT NULL)
 );
+
+CREATE TABLE main.def_season
+(
+   cd_tempo char(2) PRIMARY KEY,
+   date_range tsrange,
+   season varchar(10) NOT NULL,
+   temporada varchar(20) NOT NULL,
+   EXCLUDE USING GIST (date_range WITH &&)
+);
+
+INSERT INTO main.def_season
+VALUES
+  ('T1', '[2021-06-01,2021-12-31 23:59:59]'::tsrange,'Rainy','Aguas altas'),
+  ('T2', '[2022-01-01,2022-08-31 23:59:59]'::tsrange,'Dry','Aguas bajas')
+;
+
+
+/* Schema spatial */
+CREATE SCHEMA spat;
+
+CREATE TABLE spat.def_landcov
+(
+   cd_landcov smallserial PRIMARY KEY,
+   landcov varchar(50) UNIQUE NOT NULL,
+   landcov_spa varchar(50) UNIQUE NOT NULL
+);
+
+CREATE TABLE spat.landcov
+(
+  gid serial PRIMARY KEY,
+  cd_landcov smallint REFERENCES spat.def_landcov(cd_landcov) ON DELETE SET NULL ON UPDATE CASCADE
+);
+SELECT AddGeometryColumn('spat', 'landcov', 'the_geom', 3116, 'POLYGON', 2);
+CREATE INDEX spat_landcov_the_geom_idx ON spat.landcov USING GIST(the_geom);
+CREATE INDEX spat_landcov_cd_landcov_fkey ON spat.landcov(cd_landcov);

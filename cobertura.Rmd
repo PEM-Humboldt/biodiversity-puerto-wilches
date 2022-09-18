@@ -1,0 +1,39 @@
+---
+title: "Datos de cobertura para la base de datos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+---
+
+```{r}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE)
+require(RPostgreSQL)
+require(openxlsx)
+require(readxl)
+```
+
+
+
+Eso es un documento inicial para tratar los datos de cobertura que me envió Francisco.
+
+
+Según lo que entendí: se determinarón coberturas generales que corresponden a una simplificación de la clasificación N3_cobertura.
+Luego, cada clase de cobertura se homologa para cada grupo biologico, es decir que cada categoria simplificada de N3_cobertura se traduce en una clasificación diferente para cada grupo biologico.
+
+Anotar que yo necesitaría una forma un poco diferente de los datos: 
+
+* necesitaría para cada ANH, que se determine la cobertura general (como esta definida en la pestaña N3 Cobertura)
+* Una vez que 
+
+
+
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
+

@@ -779,9 +779,9 @@ HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT tax_rank),1)>1
 ```
 
 
-Temporalmente, vamos a suprimir estas filas:
+Temporalmente, ya había suprimido estas filas:
 
-```{sql}
+```sql
 DELETE
 FROM raw_dwc.taxonomy_total
 WHERE
@@ -791,6 +791,19 @@ WHERE
 RETURNING *
 ```
 
+Las modificaciones que hay que hacer para Trebouxiophyceae es lo siguiente:
+
+```{sql results='hide'}
+UPDATE raw_dwc.taxonomy_total
+SET "order"='Trebouxiophyceae ordo incertae sedis'
+WHERE "order"= 'Trebouxiophyceae'
+```
+
+```{sql results='hide'}
+UPDATE raw_dwc.taxonomy_total
+SET "family"='Trebouxiophyceae incertae sedis'
+WHERE "family"= 'Trebouxiophyceae'
+```
 
 ## Integración en el sistema taxonomico
 
@@ -2534,6 +2547,7 @@ SELECT cd_tax,scientific_name,
   CASE 
     WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
     WHEN identification_qualifier ~ '^sp[0-9]\.' THEN identification_qualifier
+    WHEN identification_qualifier ~ '^Mf\.' THEN 'Mf1.'
     ELSE NULL
   END name_morfo
   ,identification_remarks,
@@ -2580,6 +2594,7 @@ WHERE m.cd_gp_biol='minv' AND tt.table_orig='hidrobiologico_registros_macroinver
    CASE 
       WHEN tt.identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(tt.identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
       WHEN tt.identification_qualifier ~ '^sp[0-9]\.' THEN tt.identification_qualifier
+    WHEN identification_qualifier ~ '^Mf\.' THEN 'Mf1.'
       ELSE NULL
     END = m.name_morfo)
 RETURNING tt."row.names", tt.cd_morfo
@@ -2814,6 +2829,7 @@ SELECT cd_tax,scientific_name,
   CASE 
     WHEN identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
     WHEN identification_qualifier ~ '^sp[0-9]{1,2}\.' THEN identification_qualifier
+    WHEN identification_qualifier ~ '^cf. [A-Z][a-z]+ sp\.$' THEN 'sp.'
     ELSE NULL
   END name_morfo,
   cd_rank,
@@ -2855,6 +2871,7 @@ WHERE m.cd_gp_biol='fipl' AND tt.table_orig='hidrobiologico_registros_fitoplanct
    CASE 
       WHEN tt.identification_qualifier ~ '^[Mm]f[0-9]\.' THEN 'Mf'||REGEXP_REPLACE(tt.identification_qualifier,'^[Mm]f([0-9])\.','\1')||'.'
       WHEN tt.identification_qualifier ~ '^sp[0-9]{1,2}\.' THEN tt.identification_qualifier
+      WHEN tt.identification_qualifier ~ '^cf. [A-Z][a-z]+ sp\.$' THEN 'sp.'
       ELSE NULL
     END = m.name_morfo)
 RETURNING tt."row.names", tt.cd_morfo
@@ -3233,6 +3250,7 @@ Para poder aprovechar todas las posibilidades de las tablas taxonomicas y sus IN
 
 ```{sql}
 CREATE OR REPLACE FUNCTION find_higher(id1 int,lev character varying(6), OUT idfin int, OUT type_res character varying(10))
+IMMUTABLE
 AS $$
 DECLARE
 	finallev int;
@@ -3277,6 +3295,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION find_higher_id(id1 int,lev character varying(4), OUT idfin int)
+IMMUTABLE
 AS $$
 DECLARE
 	finallev int;
@@ -3346,6 +3365,23 @@ JOIN main.taxo t ON b.cd_cl=t.cd_tax
 GROUP BY table_orig, t.name_tax
 ORDER BY table_orig, count(*)
 ```
+
+## INDEX
+
+Los calculos para buscar elementos taxonomicos (en particular en operaciones JOIN) pueden tomar mucho tiempo de calculo, los INDEX siguientes permiten accelerar mucho el proceso!
+
+```{sql, results='hide'}
+CREATE INDEX registros_genus_idx ON main.registros USING BTREE(find_higher_id(cd_tax,'GN'));
+CREATE INDEX registros_family_idx ON main.registros USING BTREE(find_higher_id(cd_tax,'FAM'));
+CREATE INDEX registros_order_idx ON main.registros USING BTREE(find_higher_id(cd_tax,'OR'));
+CREATE INDEX registros_class_idx ON main.registros USING BTREE(find_higher_id(cd_tax,'CL'));
+CREATE INDEX registros_phylum_idx ON main.registros USING BTREE(find_higher_id(cd_tax,'PHY'));
+CREATE INDEX registros_kingdom_idx ON main.registros USING BTREE(find_higher_id(cd_tax,'KG'));
+CREATE INDEX registros_subfamily_idx ON main.registros USING BTREE(find_higher_id(cd_tax,'SFAM'));
+SELECT True ;
+```
+
+
 
 ```{r}
 dbDisconnect(fracking_db)

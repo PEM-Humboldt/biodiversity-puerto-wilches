@@ -179,6 +179,54 @@ GROUP BY life_stage, name_tax, protocol
 ;
 ```
 
+# Hidrobiologicos
+## Cantidades que permiten pasar de la abundancia contada a las densidades
+
+
+```{sql}
+SELECT hr.event_id,sample_size_value, he.sampling_effort, measurement_value__volumen_filtrado_,measurement_value__área_total_muestreada_por_estación_,measurement_value__área_total_raspada_por_muestra_, e.samp_effort_1, e.samp_effort_2
+FROM raw_dwc.hidrobiologico_registros hr
+LEFT JOIN raw_dwc.hidrobiologico_event he USING (event_id)
+LEFT JOIN main.event e ON hr.cd_event=e.cd_event
+ORDER BY he.sampling_protocol,event_id
+```
+
+
+```{sql}
+SELECT qt_int/samp_effort_1, qt_double
+FROM main.registros --USING (cd_reg)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='fipl'
+```
+```{sql}
+SELECT event_id,protocol_spa,qt_int/samp_effort_1, qt_double
+FROM main.registros --USING (cd_reg)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE cd_gp_biol='minv'
+```
+
+```{sql}
+SELECT qt_int/samp_effort_1, qt_double
+FROM main.registros --USING (cd_reg)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='zopl'
+```
+
+```{sql}
+SELECT qt_int/samp_effort_1, qt_double
+FROM main.registros --USING (cd_reg)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='peri'
+```
+
+
+
+
 
 
 ```{r}

@@ -7,7 +7,6 @@ output:
        number_sections: true
        toc: true
        toc_depth: 4
-       latex_engine: xelatex
 ---
 
 
@@ -15,10 +14,17 @@ output:
 
 Se trata en este documento de crear los "VIEWs" principales de exportación de los datos, y de crear los archivos excel desde R. 
 
+*************
 
+**Note**:
+
+1. En este documento, mostramos usualmente unicamente las 50 primeras filas de las tablas 
+1. En las matrices, se excluyen los eventos de muestreo vacíos (sin organismos registrados)
+
+*************
 
 ```{r setup}
-knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
@@ -29,22 +35,1827 @@ require(RPostgreSQL)
 
 ```
 
-# Escarabajos
-
-
 ```{r}
 fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
 ```
 
 
+# Definición de la functiones
+
+
+## Pasar a un formato de matriz
+
+```{r code=readLines("./dbTab2mat.R")}
+eval(parse(text=readLines("./dbTab2mat.R")))
+```
+
+## Exportar en Excel
+
+```{r code=readLines("./saveInExcel.R")}
+eval(parse(text=readLines("./saveInExcel.R")))
+```
+
+# Escarabajos
+
+
+En escarabajos, exportamos dos matrices diferentes para los análisis:
+
+1. coprofagos
+2. larvas
+
+Para filtrar los coprofagos: adultos de la subfamilia Scarabaeinae
+
+Para filtrar las larvas:
+
+* larvas
+* todas las subfamilias sin Scarabaeinae
+* En la capturas manuales solo los gp_event que tienen las trampas 1 a 4
+
+
+```{sql}
+WITH a AS(
+SELECT dicc.categ life_stage, find_higher_id(cd_tax, 'SFAM') cd_tax, protocol,qt_int
+FROM main.registros r 
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event USING (cd_event) 
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE ge.cd_gp_biol='esca'
+)
+SELECT life_stage, name_tax subfamily, protocol,count(*) occurrences, sum(qt_int) total_abundance
+FROM a
+LEFT JOIN main.taxo USING (cd_tax)
+GROUP BY life_stage, name_tax, protocol
+;
+```
+
+Realmente el filtro coprofagos corresponde al filtro de protocol: todos los que son de "Human excrement trap" son adultos de Scarabaeinae!
+
+El filtro de larvas tambien se puede simplificar: todas las larvas de los Insect hand collection no pertenecen a la subfamilia Scarabaeinae.
+
+
+## Matriz
+
+### Coprofagos
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW esca_coprophage_matrix AS(
+SELECT 
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  --r.cd_tax,
+  COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax) taxon,
+  SUM(qt_int) abundance--,
+  -- find_higher_id(r.cd_tax,'SFAM') cd_sfam, 
+  -- dicc.categ life_stage,
+  -- protocol
+FROM main.registros r
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax) --cuidado, hay más de un cd_tax, pero todos deberían ser iguales
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON COALESCE(mt.pseudo_rank,t.cd_rank)=dtr.cd_rank
+WHERE 
+  ge.cd_gp_biol='esca' 
+  AND protocol='Human excrement trap' 
+  AND dtr.rank_level <= 10
+  -- AND dicc.categ='Adult' -- no es util..
+  -- AND find_higher_id(r.cd_tax,'SFAM')=(SELECT cd_tax FROM main.taxo WHERE name_tax='Scarabaeinae') -- no es util
+GROUP BY 
+  ge.cd_gp_event,
+  name_pt_ref,
+  COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax),
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+```{sql}
+SELECT * FROM esca_coprophage_matrix;
+```
+
+Los registros **excluidos** son:
+
+```{sql}
+SELECT 
+  ge.cd_gp_event,
+  name_pt_ref,
+  cd_tempo,
+  --r.cd_tax,
+  COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax) taxon,
+  qt_int abundance,
+  --t2.name_tax subfamily, 
+  dicc.categ life_stage,
+  protocol
+  -- EXTRACT(YEAR FROM date_time) AS "year"
+FROM main.registros r
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax) --cuidado, hay más de un cd_tax, pero todos deberían ser iguales
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON COALESCE(mt.pseudo_rank,t.cd_rank)=dtr.cd_rank
+--LEFT JOIN main.taxo t2 ON find_higher_id(r.cd_tax,'SFAM')=t2.cd_tax
+WHERE 
+  ge.cd_gp_biol='esca'
+  AND NOT (protocol='Human excrement trap' 
+  AND dtr.rank_level <= 10)
+  -- AND dicc.categ='Adult' -- no es util..
+  -- AND find_higher_id(r.cd_tax,'SFAM')=(SELECT cd_tax FROM main.taxo WHERE name_tax='Scarabaeinae') -- no es util
+ORDER BY 
+  name_pt_ref||'_'||EXTRACT(YEAR FROM r.date_time),
+  qt_int DESC
+;
+```
+
+### Larvas
+
+<!--
+Los grupos de eventos que no tienen los 4 eventos de captura manual son los siguientes:
 
 
 
 
+```sql
+SELECT ge.cd_gp_event,name_pt_ref, cd_tempo ,protocol, count(DISTINCT num_replicate)
+FROM main.registros r
+FULL OUTER JOIN main.event e USING (cd_event)
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE 
+ cd_gp_biol='esca'
+  AND protocol = 'Insect hand collection'
+GROUP BY ge.cd_gp_event,name_pt_ref,cd_tempo, protocol
+HAVING count(DISTINCT num_replicate)<4
+```
+
+
+**Suma de abundancia excluída en los casos cuando no hay 4 eventos de captura manual en un grupo**:
+
+```sql
+WITH a AS(
+SELECT ge.cd_gp_event,name_pt_ref, cd_tempo ,protocol, count(DISTINCT num_replicate)
+FROM main.registros r
+FULL OUTER JOIN main.event e USING (cd_event)
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE 
+ cd_gp_biol='esca'
+  AND protocol = 'Insect hand collection'
+GROUP BY ge.cd_gp_event,name_pt_ref,cd_tempo, protocol
+HAVING count(DISTINCT num_replicate)<4
+)
+SELECT SUM(qt_int) abundancia_excluida
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_event IN (SELECT cd_gp_event FROM a)
+```
+
+**Evento de captura manual que tiene un numero 5**
+
+```sql
+SELECT qt_int,protocol
+FROM main.registros 
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE num_replicate=5 AND cd_gp_biol='esca' AND protocol_spa='Insect hand collection'
+```
+
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW esca_larva_matrix AS(
+WITH excl AS(--excluding because they are not complete (less than 4 events)
+SELECT ge.cd_gp_event
+FROM main.registros r
+FULL OUTER JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE 
+ cd_gp_biol='esca'
+  AND protocol = 'Insect hand collection'
+GROUP BY ge.cd_gp_event
+HAVING count(DISTINCT num_replicate)<4
+)
+SELECT 
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  --r.cd_tax,
+  CASE
+    WHEN r.cd_morfo IS NOT NULL AND mt.pseudo_rank='GN' THEN verbatim_taxon||' ('||name_morfo||')'
+    ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance/*,
+  find_higher_id(r.cd_tax,'SFAM') cd_sfam, 
+  dicc.categ life_stage,
+  protocol*/
+FROM main.registros r
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON t.cd_tax=find_higher_id(r.cd_tax,'GN') --cuidado, hay más de un cd_tax, pero todos deberían ser iguales
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON COALESCE(mt.pseudo_rank,t.cd_rank)=dtr.cd_rank
+WHERE 
+  ge.cd_gp_biol='esca' 
+  AND protocol='Insect hand collection' 
+  AND dtr.rank_level <= (SELECT rank_level FROM main.def_tax_rank WHERE cd_rank='GN')
+  AND cd_gp_event NOT IN (SELECT cd_gp_event FROM excl)
+  AND dicc.categ='Larva'
+  AND find_higher_id(r.cd_tax,'SFAM')!=(SELECT cd_tax FROM main.taxo WHERE name_tax='Scarabaeinae')
+  AND num_replicate <=4
+GROUP BY 
+  ge.cd_gp_event,
+  name_pt_ref,
+  r.cd_morfo,
+  verbatim_taxon,
+  name_morfo,
+  t.name_tax,
+  mt.pseudo_rank,
+  cd_tempo,
+  find_higher_id(r.cd_tax,'SFAM'), 
+  dicc.categ,
+  protocol
+ORDER BY 
+  protocol,
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+-->
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW esca_larva_matrix AS(
+SELECT 
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  --r.cd_tax,
+  CASE
+    WHEN r.cd_morfo IS NOT NULL AND mt.pseudo_rank='GN' THEN verbatim_taxon||' ('||name_morfo||')'
+    ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance/*,
+  find_higher_id(r.cd_tax,'SFAM') cd_sfam, 
+  dicc.categ life_stage,
+  protocol*/
+FROM main.registros r
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON t.cd_tax=find_higher_id(r.cd_tax,'GN') --cuidado, hay más de un cd_tax, pero todos deberían ser iguales
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON COALESCE(mt.pseudo_rank,t.cd_rank)=dtr.cd_rank
+WHERE 
+  ge.cd_gp_biol='esca' 
+  AND protocol='Insect hand collection' 
+  AND dtr.rank_level <= (SELECT rank_level FROM main.def_tax_rank WHERE cd_rank='GN')
+  AND dicc.categ='Larva'
+  AND find_higher_id(r.cd_tax,'SFAM')!=(SELECT cd_tax FROM main.taxo WHERE name_tax='Scarabaeinae')
+GROUP BY 
+  ge.cd_gp_event,
+  name_pt_ref,
+  r.cd_morfo,
+  verbatim_taxon,
+  name_morfo,
+  t.name_tax,
+  mt.pseudo_rank,
+  cd_tempo,
+  find_higher_id(r.cd_tax,'SFAM'), 
+  dicc.categ,
+  protocol
+ORDER BY 
+  protocol,
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+
+
+## Listas
+
+### Lista completa
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW esca_list_tot AS(
+WITH a AS(
+  SELECT DISTINCT cd_tax,find_higher_id(cd_tax,'GN') cd_gn,find_higher_id(cd_tax,'SFAM') cd_sfam
+  FROM main.registros r
+  LEFT JOIN main.event USING (cd_event)
+  LEFT JOIN main.gp_event USING (cd_gp_event)
+), b AS(
+  SELECT a.cd_tax, t.name_tax, tsf.name_tax subfamily, tg.name_tax genus
+  FROM a
+  LEFT JOIN main.taxo t USING (cd_tax)
+  LEFT JOIN main.taxo tsf ON a.cd_sfam=tsf.cd_tax
+  LEFT JOIN main.taxo tg ON a.cd_gn=tg.cd_tax
+)
+SELECT 
+   subfamily,
+   genus,
+   COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   dicc.categ life_stage,
+   ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   count(*) occurrence_number,
+   SUM(qt_int) total_abundance
+FROM main.registros r
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN b USING (cd_tax)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='esca'
+GROUP BY 
+   subfamily,
+   genus,
+   COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax),
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   dicc.categ
+ORDER BY subfamily,genus,COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax)
+)
+```
+
+### Lista por temporada
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW esca_list_tempo AS(
+WITH a AS(
+  SELECT DISTINCT cd_tax,find_higher_id(cd_tax,'GN') cd_gn,find_higher_id(cd_tax,'SFAM') cd_sfam
+  FROM main.registros r
+  LEFT JOIN main.event USING (cd_event)
+  LEFT JOIN main.gp_event USING (cd_gp_event)
+), b AS(
+  SELECT a.cd_tax, t.name_tax, tsf.name_tax subfamily, tg.name_tax genus
+  FROM a
+  LEFT JOIN main.taxo t USING (cd_tax)
+  LEFT JOIN main.taxo tsf ON a.cd_sfam=tsf.cd_tax
+  LEFT JOIN main.taxo tg ON a.cd_gn=tg.cd_tax
+)
+SELECT 
+   cd_tempo temporada,
+   subfamily,
+   genus,
+   COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   dicc.categ life_stage,
+   ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   count(*) occurrence_number,
+   SUM(qt_int) total_abundance
+FROM main.registros r
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN b USING (cd_tax)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='esca'
+GROUP BY 
+   cd_tempo,
+   subfamily,
+   genus,
+   COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax),
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   dicc.categ
+ORDER BY cd_tempo,subfamily,genus,COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax)
+)
+```
+
+### Lista por zona y temporada
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW esca_list_zona_tempo AS(
+WITH a AS(
+  SELECT DISTINCT cd_tax,find_higher_id(cd_tax,'GN') cd_gn,find_higher_id(cd_tax,'SFAM') cd_sfam
+  FROM main.registros r
+  LEFT JOIN main.event USING (cd_event)
+  LEFT JOIN main.gp_event USING (cd_gp_event)
+), b AS(
+  SELECT a.cd_tax, t.name_tax, tsf.name_tax subfamily, tg.name_tax genus
+  FROM a
+  LEFT JOIN main.taxo t USING (cd_tax)
+  LEFT JOIN main.taxo tsf ON a.cd_sfam=tsf.cd_tax
+  LEFT JOIN main.taxo tg ON a.cd_gn=tg.cd_tax
+)
+SELECT 
+   platform zona,
+   cd_tempo temporada,
+   subfamily,
+   genus,
+   COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   dicc.categ life_stage,
+   ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   count(*) occurrence_number,
+   SUM(qt_int) total_abundance
+FROM main.registros r
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN b USING (cd_tax)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='esca'
+GROUP BY 
+   zona,
+   cd_tempo,
+   subfamily,
+   genus,
+   COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax),
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   dicc.categ
+ORDER BY zona, temporada, subfamily,genus,COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax)
+)
+```
+
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ 'esca'")$table_name)
+export_esca <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_esca) <- listTable
+export_esca[grep("matrix",listTable)] <- lapply(export_esca[grep("matrix",listTable)],dbTab2mat, col_samplingUnits = "anh_tempo", col_species = "taxon", empty = 0)
+export_esca <- lapply(export_esca, as.data.frame)
+save_in_excel(file = "esca_export.xlsx", lVar = export_esca)
+```
+
+
+
+# Phytoplancton
+
+## Niveles taxonomicos
+
+```{sql}
+SELECT dtr.cd_rank, pseudo_rank,  count(*)
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.def_tax_rank dtr USING (cd_rank)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE ge.cd_gp_biol='fipl'
+GROUP BY dtr.cd_rank,dtr.rank_level,pseudo_rank
+ORDER BY rank_level DESC
+```
+
+Viendo esos resultados, lo más lógico es trabajar al nivel de la especie o morfo especie
+
+## Matriz
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW fipl_matrix AS(
+SELECT 
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  --r.cd_tax,
+  COALESCE(verbatim_taxon,t.name_tax) taxon,
+  SUM(qt_double)/3 density
+FROM main.registros r
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE 
+  ge.cd_gp_biol='fipl' 
+  AND COALESCE(mt.pseudo_rank, t.cd_rank)='SP'
+GROUP BY 
+  ge.cd_gp_event,
+  name_pt_ref,
+  verbatim_taxon,
+  t.name_tax,
+  cd_tempo
+ORDER BY 
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_double)/3 DESC
+);
+```
+
+
+
+## Listas
+
+### Lista completa
+
+* occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de evento que contienen el taxon)
+* la zona está atribuida para cada ANH (se resolvierón los casos de eventos fuera de las zonas definidas y las ANH que estaban sobre 2 zonas distintas
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW fipl_list_tot AS(
+WITH a AS(
+SELECT count(DISTINCT cd_event) nb_event
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='fipl'
+)
+SELECT 
+   tor.name_tax "orden",
+   tfam.name_tax "family",
+   tgn.name_tax genus,
+   COALESCE(verbatim_taxon, t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   --ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT tipo_cuerp_agua) tipos_cuerp_agua,
+   count(*) "occurrence number",
+   SUM(qt_double)/nb_event "mean abundance (ind/L)"
+FROM main.registros r
+CROSS JOIN a
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tgn ON find_higher_id(r.cd_tax,'GN')=tgn.cd_tax
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='fipl'
+GROUP BY 
+   tgn.name_tax, 
+   tfam.name_tax, 
+   tor.name_tax,
+   COALESCE(verbatim_taxon, t.name_tax),
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   nb_event
+ORDER BY SUM(qt_double)/nb_event DESC
+)
+;
+```
+
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^fipl'")$table_name)
+export_fipl <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_fipl) <- listTable
+export_fipl[grep("matrix",listTable)] <- lapply(export_fipl[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  })
+export_fipl <- lapply(export_fipl, as.data.frame)
+save_in_excel(file = "fipl_export.xlsx", lVar = export_fipl)
+```
+
+
+# Perifiton
+
+## Niveles taxonomicos
+
+```{sql}
+SELECT dtr.cd_rank, pseudo_rank,  count(*)
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.def_tax_rank dtr USING (cd_rank)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE ge.cd_gp_biol='peri'
+GROUP BY dtr.cd_rank,dtr.rank_level,pseudo_rank
+ORDER BY rank_level DESC
+```
+
+Es mejor trabajar al nivel de genero porque algunos generos o pseudo-generos corresponden a una abundancia muy fuerte (ver suma de las abundancias más bajo)
+
+## Matriz
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW peri_matrix AS(
+SELECT 
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  --r.cd_tax,
+  CASE
+   WHEN mt.pseudo_rank='GN' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_double)/3 density/*,
+  find_higher_id(r.cd_tax,'SFAM') cd_sfam, 
+  protocol*/
+FROM main.registros r
+FULL OUTER JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'GN')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='peri' 
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='GN')--ensure we got the genus or pseudo_genus
+GROUP BY 
+  ge.cd_gp_event,
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_double)/3 DESC
+);
+```
+
+
+
+## Listas
+
+### Lista completa
+
+* occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de evento que contienen el taxon)
+* la zona está atribuida para cada ANH (se resolvierón los casos de eventos fuera de las zonas definidas y las ANH que estaban sobre 2 zonas distintas
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW peri_list_tot AS(
+WITH a AS(
+SELECT count(DISTINCT cd_event) nb_event
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='peri'
+)
+SELECT 
+   tor.name_tax "orden",
+   tfam.name_tax "family",
+   COALESCE(verbatim_taxon, t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   --ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT tipo_cuerp_agua) tipos_cuerp_agua,
+   count(*) "occurrence number",
+   SUM(qt_double)/nb_event "mean density (ind/cm2)"
+FROM main.registros r
+CROSS JOIN a
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='peri'
+GROUP BY 
+   tfam.name_tax, 
+   tor.name_tax,
+   verbatim_taxon,
+   t.name_tax,
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   nb_event
+ORDER BY SUM(qt_double)/nb_event DESC
+)
+;
+```
+
+### Promedio y suma de las abundancias en función de los rangos y pseudo-rangos
+
+```{sql}
+SELECT COALESCE(pseudo_rank,tax_rank) rank_pseudo_rank,SUM("mean density (ind/cm2)") sum_abund, AVG("mean density (ind/cm2)") mean_abund 
+FROM peri_list_tot 
+GROUP BY COALESCE(pseudo_rank,tax_rank);
+```
+<!--
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+-->
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^peri'")$table_name)
+export_peri <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_peri) <- listTable
+export_peri[grep("matrix",listTable)] <- lapply(export_peri[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  })
+export_peri <- lapply(export_peri, as.data.frame)
+save_in_excel(file = "peri_export.xlsx", lVar = export_peri)
+```
+
+# Macroinvertebrados
+
+## Niveles taxonomicos
+
+```{sql}
+SELECT dtr.cd_rank, pseudo_rank,  count(*)
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.def_tax_rank dtr USING (cd_rank)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE ge.cd_gp_biol='minv'
+GROUP BY dtr.cd_rank,dtr.rank_level,pseudo_rank
+ORDER BY rank_level DESC
+```
+
+Es mejor trabajar al nivel de genero porque algunos generos o pseudo-generos corresponden a una abundancia muy fuerte (ver suma de las abundancias más bajo)
+
+## Matriz
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW minv_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  --r.cd_tax,
+  CASE
+   WHEN mt.pseudo_rank='GN' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_double)/3 density/*,
+  find_higher_id(r.cd_tax,'SFAM') cd_sfam, 
+  protocol*/
+FROM main.registros r
+FULL OUTER JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'GN')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='minv' 
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='GN')--ensure we got the genus or pseudo_genus
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_double)/3 DESC
+);
+```
+
+
+
+## Listas
+
+### Lista completa
+
+* occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de evento que contienen el taxon)
+* la zona está atribuida para cada ANH (se resolvierón los casos de eventos fuera de las zonas definidas y las ANH que estaban sobre 2 zonas distintas
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW minv_list_tot AS(
+WITH a AS(
+SELECT count(DISTINCT cd_event) nb_event
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='minv'
+)
+SELECT 
+   tor.name_tax "orden",
+   tfam.name_tax "family",
+   COALESCE(verbatim_taxon, t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT tipo_cuerp_agua) tipos_cuerp_agua,
+   count(*) "occurrence number",
+   SUM(qt_double)/nb_event "mean density (ind/cm2)"
+FROM main.registros r
+CROSS JOIN a
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='minv'
+GROUP BY 
+   tfam.name_tax, 
+   tor.name_tax,
+   verbatim_taxon,
+   t.name_tax,
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   nb_event
+ORDER BY SUM(qt_double)/nb_event DESC
+)
+;
+```
+
+### Promedio y suma de las abundancias en función de los rangos y pseudo-rangos
+
+```{sql}
+SELECT COALESCE(pseudo_rank,tax_rank) rank_pseudo_rank,SUM("mean density (ind/cm2)") sum_abund, AVG("mean density (ind/cm2)") mean_abund 
+FROM minv_list_tot 
+GROUP BY COALESCE(pseudo_rank,tax_rank);
+```
+
+<!--
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+-->
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^minv'")$table_name)
+export_minv <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_minv) <- listTable
+export_minv[grep("matrix",listTable)] <- lapply(export_minv[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  })
+export_minv <- lapply(export_minv, as.data.frame)
+save_in_excel(file = "minv_export.xlsx", lVar = export_minv)
+```
+
+# Macrofitas
+
+## Niveles taxonomicos
+
+```{sql}
+SELECT dtr.cd_rank, pseudo_rank,  count(*)
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.def_tax_rank dtr USING (cd_rank)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE ge.cd_gp_biol='mafi'
+GROUP BY dtr.cd_rank,dtr.rank_level,pseudo_rank
+ORDER BY rank_level DESC
+```
+
+
+## Matriz
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW mafi_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_double) density
+FROM main.registros r
+FULL OUTER JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='mafi' 
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the species or morphospecies
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_double) DESC
+);
+```
+
+
+
+## Listas
+
+### Lista completa
+
+* occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de evento que contienen el taxon)
+* la zona está atribuida para cada ANH (se resolvierón los casos de eventos fuera de las zonas definidas y las ANH que estaban sobre 2 zonas distintas
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW mafi_list_tot AS(
+WITH a AS(
+SELECT count(DISTINCT cd_event) nb_event, sum(samp_effort_1) tot_area
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='mafi'
+)
+SELECT 
+   tor.name_tax "orden",
+   tfam.name_tax "family",
+   COALESCE(verbatim_taxon, t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   --ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT tipo_cuerp_agua) tipos_cuerp_agua,
+   count(*) "occurrence number",
+   SUM(qt_double)/nb_event "cover (%)",
+   (SUM(qt_double)/nb_event)*(tot_area/100) "area cover tot (m2)"
+FROM main.registros r
+CROSS JOIN a
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='mafi'
+GROUP BY 
+   tfam.name_tax, 
+   tot_area,
+   tor.name_tax,
+   verbatim_taxon,
+   t.name_tax,
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   nb_event
+ORDER BY SUM(qt_double)/nb_event DESC
+)
+;
+```
+
+### Promedio y suma de las abundancias en función de los rangos y pseudo-rangos
+
+```{sql}
+SELECT COALESCE(pseudo_rank,tax_rank) rank_pseudo_rank,SUM("cover (%)") sum_cover, AVG("cover (%)") mean_cover 
+FROM mafi_list_tot 
+GROUP BY COALESCE(pseudo_rank,tax_rank);
+```
+
+<!--
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+-->
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^mafi'")$table_name)
+export_mafi <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_mafi) <- listTable
+export_mafi[grep("matrix",listTable)] <- lapply(export_mafi[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  })
+export_mafi <- lapply(export_mafi, as.data.frame)
+save_in_excel(file = "mafi_export.xlsx", lVar = export_mafi)
+```
+
+# Mariposas
+
+## Matriz
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW mari_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='mari' 
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the species or morphospecies
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_double) DESC
+);
+```
+
+
+
+## Listas
+
+### Lista completa
+
+* occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de eventos que contienen el taxon)
+* la zona está atribuida para cada ANH (se resolvierón los casos de eventos fuera de las zonas definidas y las ANH que estaban sobre 2 zonas distintas
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW mari_list_tot AS(
+SELECT 
+   tor.name_tax "orden",
+   tfam.name_tax "family",
+   tgn.name_tax genus,
+   COALESCE(verbatim_taxon, t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   --ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT landcov_spa) landcovs,
+   count(*) "occurrence number",
+   SUM(qt_int) "total abundance"
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tgn ON find_higher_id(r.cd_tax,'GN')=tgn.cd_tax
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN landcov_gp_event_terrestrial USING (cd_gp_event)
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='mari'
+GROUP BY 
+   tfam.name_tax, 
+   tgn.name_tax,
+   tor.name_tax,
+   verbatim_taxon,
+   t.name_tax,
+   dtr.tax_rank,
+   dtrm.tax_rank
+ORDER BY SUM(qt_double) DESC
+)
+;
+```
+
+
+<!--
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+-->
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^mari'")$table_name)
+export_mari <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_mari) <- listTable
+export_mari[grep("matrix",listTable)] <- lapply(export_mari[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  })
+export_mari <- lapply(export_mari, as.data.frame)
+save_in_excel(file = "mari_export.xlsx", lVar = export_mari)
+```
+
+# Hormigas
+
+## Matriz
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW horm_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(CASE WHEN qt_int>0 THEN 1 ELSE 0 END) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='horm' 
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the species or morphospecies
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_double) DESC
+);
+```
+
+
+
+## Listas
+
+### Lista completa
+
+* occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de eventos que contienen el taxon)
+* la zona está atribuida para cada ANH (se resolvierón los casos de eventos fuera de las zonas definidas y las ANH que estaban sobre 2 zonas distintas
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW horm_list_tot AS(
+SELECT 
+   --tor.name_tax "orden",
+   --tfam.name_tax "family",
+   tgn.name_tax genus,
+   COALESCE(verbatim_taxon, t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   --ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT landcov_spa) landcovs,
+   count(*) "occurrence number"
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tgn ON find_higher_id(r.cd_tax,'GN')=tgn.cd_tax
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN landcov_gp_event_terrestrial USING (cd_gp_event)
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='horm'
+GROUP BY 
+   tfam.name_tax, 
+   tgn.name_tax,
+   tor.name_tax,
+   verbatim_taxon,
+   t.name_tax,
+   dtr.tax_rank,
+   dtrm.tax_rank
+ORDER BY count(*) DESC
+)
+;
+```
+
+<!--
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+-->
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^horm'")$table_name)
+export_horm <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_horm) <- listTable
+export_horm[grep("matrix",listTable)] <- lapply(export_horm[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  })
+export_horm <- lapply(export_horm, as.data.frame)
+save_in_excel(file = "horm_export.xlsx", lVar = export_horm)
+```
+
+# Colémbolos
+
+## Matrices
+
+No me acuerdo si había que separar las matrices de Berlese y pitfall, voy a hacer 3 matrices: Berlese, pitfall, asociación entre los 2
+
+### Berlese
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW cole_berlese_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='GN' THEN tm.name_tax||' ('||name_morfo||')'
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'GN')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+LEFT JOIN main.taxo tm ON mt.cd_tax=tm.cd_tax
+WHERE 
+  ge.cd_gp_biol='cole' 
+  AND protocol='Berlese trap (arthropods)'
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='GN')--ensure we got the genus or morphogenus
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+
+```{sql, results='hide'}
+SELECT
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+
+```
+
+### Pitfall
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW cole_pitfall_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='GN' THEN tm.name_tax||' ('||name_morfo||')'
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'GN')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+LEFT JOIN main.taxo tm ON mt.cd_tax=tm.cd_tax
+WHERE 
+  ge.cd_gp_biol='cole' 
+  AND protocol='Pitfall (arthropods)'
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='GN')--ensure we got the genus or morphogenus
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+### Ambos metodos
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW cole_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='GN' THEN tm.name_tax||' ('||name_morfo||')'
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'GN')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+LEFT JOIN main.taxo tm ON mt.cd_tax=tm.cd_tax
+WHERE 
+  ge.cd_gp_biol='cole' 
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='GN')--ensure we got the genus or morphogenus
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+
+## Listas
+
+### Lista completa
+
+1. occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de eventos que contienen el taxon)
+1. la zona está atribuida para cada ANH (se resolvierón los casos de eventos fuera de las zonas definidas y las ANH que estaban sobre 2 zonas distintas
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW cole_list_tot AS(
+SELECT 
+   tor.name_tax "orden",
+   tfam.name_tax "family",
+   --tgn.name_tax genus,
+   COALESCE(tm.name_tax||' ('||name_morfo||')', t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT landcov_spa) landcovs,
+   count(*) "occurrence number",
+   sum(qt_int) "total abundance"
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tgn ON find_higher_id(r.cd_tax,'GN')=tgn.cd_tax
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.taxo tm ON mt.cd_tax=tm.cd_tax
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN landcov_gp_event_terrestrial USING (cd_gp_event)
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='cole'
+GROUP BY 
+   tfam.name_tax, 
+   tgn.name_tax,
+   tor.name_tax,
+   verbatim_taxon,
+   t.name_tax,
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   name_morfo,
+   tm.name_tax
+ORDER BY  sum(qt_int) DESC
+)
+;
+```
+
+<!--
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+-->
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^cole'")$table_name)
+export_cole <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_cole) <- listTable
+export_cole[grep("matrix",listTable)] <- lapply(export_cole[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  })
+export_cole <- lapply(export_cole, as.data.frame)
+save_in_excel(file = "cole_export.xlsx", lVar = export_cole)
+```
+
+# Peces
+
+## Niveles taxonomicos
+
+```{sql}
+SELECT dtr.cd_rank, pseudo_rank,  count(*)
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.def_tax_rank dtr USING (cd_rank)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE ge.cd_gp_biol='pece'
+GROUP BY dtr.cd_rank,dtr.rank_level,pseudo_rank
+ORDER BY rank_level DESC
+```
+
+
+
+## Matrices
+
+En las matrices se utilizaran unicamente los datos correspondientes a jornadas diurnas.
+
+### Por arte de pesca (abundancias)
+
+#### Atarraya
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW pece_castnets_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.event_extra eep ON e.cd_event=eep.cd_event AND eep.cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='pece' 
+  AND protocol='Cast nets'
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the genus or morphogenus
+  AND eep.cd_categ_event_extra=(SELECT cd_categ_event_extra FROM main.def_categ_event_extra WHERE categ='Day')
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+#### Arrastre
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW pece_dragnet_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.event_extra eep ON e.cd_event=eep.cd_event AND eep.cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='pece' 
+  AND protocol='Drag net'
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the genus or morphogenus
+  AND eep.cd_categ_event_extra=(SELECT cd_categ_event_extra FROM main.def_categ_event_extra WHERE categ='Day')
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+#### Electropesca
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW pece_elec_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.event_extra eep ON e.cd_event=eep.cd_event AND eep.cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='pece' 
+  AND protocol='Electric fishing'
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the genus or morphogenus
+  AND eep.cd_categ_event_extra=(SELECT cd_categ_event_extra FROM main.def_categ_event_extra WHERE categ='Day')
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+#### Trasmallo
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW pece_gillnets_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon,
+  SUM(qt_int) abundance
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.event_extra eep ON e.cd_event=eep.cd_event AND eep.cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='pece' 
+  AND protocol='Gillnets'
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the genus or morphogenus
+  AND eep.cd_categ_event_extra=(SELECT cd_categ_event_extra FROM main.def_categ_event_extra WHERE categ='Day')
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+### Total (incidencia)
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW pece_occurrence_matrix AS(
+SELECT 
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  CASE
+   WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
+   ELSE t.name_tax
+  END taxon/*,
+  SUM(qt_int) abundance*/
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.event_extra eep ON e.cd_event=eep.cd_event AND eep.cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE 
+  ge.cd_gp_biol='pece' 
+  AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the genus or morphogenus
+  AND eep.cd_categ_event_extra=(SELECT cd_categ_event_extra FROM main.def_categ_event_extra WHERE categ='Day')
+GROUP BY 
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY 
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_int) DESC
+);
+```
+
+
+## Listas
+
+### Lista completa
+
+* occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de eventos que contienen el taxon)
+* la zona está atribuida para cada ANH (se resolvierón los casos de eventos fuera de las zonas definidas y las ANH que estaban sobre 2 zonas distintas
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW pece_list_tot AS(
+SELECT 
+   tor.name_tax "orden",
+   tfam.name_tax "family",
+   tgn.name_tax genus,
+   COALESCE(verbatim_taxon, t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT wat_body_type) landcovs,
+   ARRAY_AGG(DISTINCT dceep.categ) periods,
+   count(*) "occurrence number",
+   sum(qt_int) "total abundance"
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.event_extra ee ON e.cd_event=ee.cd_event AND cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin') 
+LEFT JOIN main.event_extra eep ON e.cd_event=eep.cd_event AND eep.cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period') 
+LEFT JOIN main.def_categ_event_extra dceep ON eep.cd_categ_event_extra=dceep.cd_categ_event_extra AND dceep.cd_var_event_extra=(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='period') 
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin, (ee.value_text||' 12:00:00')::timestamp) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tgn ON find_higher_id(r.cd_tax,'GN')=tgn.cd_tax
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.taxo tm ON mt.cd_tax=tm.cd_tax
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform USING (cd_pt_ref,name_pt_ref)
+WHERE
+  ge.cd_gp_biol='pece'
+GROUP BY 
+   tfam.name_tax, 
+   tgn.name_tax,
+   tor.name_tax,
+   verbatim_taxon,
+   t.name_tax,
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   name_morfo,
+   tm.name_tax
+ORDER BY  sum(qt_int) DESC
+)
+;
+```
+
+<!--
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+-->
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^pece'")$table_name)
+export_pece <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_pece) <- listTable
+export_pece[grep("matrix",listTable)] <- lapply(export_pece[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    o_checklist <- !as.logical(length(col_content))
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
+  })
+export_pece <- lapply(export_pece, as.data.frame)
+save_in_excel(file = "pece_export.xlsx", lVar = export_pece)
+```
 
 
 
 ```{r}
 dbDisconnect(fracking_db)
 ```
+
+
 
