@@ -48,7 +48,12 @@ VALUES
     ('zopl', 'Zooplankton' , 'Hydrobiology', 'Zooplancton', 'Hidrobiología',true),
     ('peri', 'Periphyton' , 'Hydrobiology', 'Perifiton', 'Hidrobiología',true),
     ('mafi', 'Macrophytes' , 'Hydrobiology', 'Macrofitas', 'Hidrobiología',true),
-    ('minv', 'Macroinvertebrates' , 'Hydrobiology', 'Macroinvertebrados', 'Hidrobiología',true)
+    ('minv', 'Macroinvertebrates' , 'Hydrobiology', 'Macroinvertebrados', 'Hidrobiología',true),
+    ('catr', 'Camera traps', NULL, 'Cameras trampa', NULL, false),
+    ('arch', 'Archaea', 'Microorganisms', 'Arqueas', 'Microorganismos', false),
+    ('bact', 'Bacteria', 'Microorganisms', 'Bacteria', 'Microorganismos', false),
+    ('paso', 'Soundscape',NULL, 'Paísajes sonores', NULL, false)
+
 ;
 
 CREATE TABLE main.def_measurement_type -- a measurement type is something like distance, area, time, density, number of individuals, density, concentration, volume. This allows us to define what is virtually possible to translate from one variable to another.
@@ -576,3 +581,4 @@ CREATE TABLE spat.landcov
 SELECT AddGeometryColumn('spat', 'landcov', 'the_geom', 3116, 'POLYGON', 2);
 CREATE INDEX spat_landcov_the_geom_idx ON spat.landcov USING GIST(the_geom);
 CREATE INDEX spat_landcov_cd_landcov_fkey ON spat.landcov(cd_landcov);
+

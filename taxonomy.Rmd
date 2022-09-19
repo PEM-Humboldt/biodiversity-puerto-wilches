@@ -94,13 +94,10 @@ taxonomicTotal[which(taxonomicTotal=="",arr.ind = T)]<-NA
 **Suprimir los "trailing whitespace"**
 
 ```{r}
-
 for(i in 1:ncol(taxonomicTotal))
 {
-  
   taxonomicTotal[,i]<-trimws(taxonomicTotal[,i])
 }
-
 ```
 
 
@@ -124,11 +121,6 @@ dim(taxonomicTotal_un)
 ```
 
 # Buscar los errores de taxonomía
-
-
-
-
-
 
 ## Inconsistencias en los nombres superiores de taxones
 
@@ -194,9 +186,6 @@ Creating a complete temporary table:
 \tiny
 
 ```{sql}
-/*todo: averiguar cuales son las pestañas de registros que tienen identificationRemarks, identificationQualifier, subfamilia (mariposas)
-Note: las macrofitas tienen en identification_remarks helofitas o hidrofitas, podemos guardarlo pero no tiene nada que ver con lo que esta en identificacion_remarks en los demás grupos
-*/
 DROP TABLE IF EXISTS raw_dwc.taxonomy_total;
 CREATE TABLE raw_dwc.taxonomy_total AS(
 --------------------------- ANFIBIOS -----------------------------------------------------------------
@@ -592,6 +581,27 @@ SELECT
   identification_qualifier,
   NULL AS identification_remarks
 FROM raw_dwc.peces_registros
+UNION ALL
+-------------------------------- CAMERAS TRAMPAS -------------------------------------------------------
+SELECT
+  'cameras_trampa_registros' AS table_orig, "row.names",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(kingdom,'^\s+',''),'\s+$',''),'\s+',' ')) AS kingdom,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(phylum,'^\s+',''),'\s+$',''),'\s+',' ')) AS phylum,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(class,'^\s+',''),'\s+$',''),'\s+',' ')) AS "class",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE("order",'^\s+',''),'\s+$',''),'\s+',' ')) AS "order",
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(family,'^\s+',''),'\s+$',''),'\s+',' ')) AS family,
+  NULL as subfamily,
+  INITCAP(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(genus,'^\s+',''),'\s+$',''),'\s+',' ')) AS genus,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(specific_epithet,'^\s+',''),'\s+$',''),'\s+',' ') AS specific_epithet,
+  NULL AS infraspecific_epithet,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name,
+  REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(scientific_name_authorship,'^\s+',''),'\s+$',''),'\s+',' ') AS scientific_name_authorship,
+  taxon_rank,
+  NULL AS vernacular_name,
+  identification_qualifier::text,
+  NULL AS identification_remarks
+FROM raw_dwc.cameras_trampa_registros
+
 )
 ;
 ```
@@ -3242,6 +3252,40 @@ WHERE m.cd_gp_biol='horm' AND tt.table_orig='hormigas_registros'
     END = m.name_morfo)
 RETURNING tt."row.names", tt.cd_morfo
 ```
+
+## Cameras trampa
+
+**No detecto ningun caso de morfoespecie**
+
+```{sql}
+SELECT cd_tax,scientific_name,
+  identification_qualifier, identification_remarks
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='cameras_trampa_registros'
+  AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL)
+```
+
+
+```{sql}
+SELECT cd_tax,scientific_name,
+  identification_qualifier, identification_remarks
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE rank_level>10 AND table_orig='cameras_trampa_registros'
+```
+```{sql}
+SELECT cd_rank,count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE table_orig='cameras_trampa_registros'
+GROUP BY cd_rank,rank_level
+ORDER BY rank_level DESC
+```
+
 
 
 # CREATING sql taxonomic function

@@ -7138,6 +7138,444 @@ LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
 WHERE super_gp='Hydrobiology'
 ```
 
+# Cameras trampa
+
+
+## Entender el plan de muestreo
+
+```{sql}
+SELECT 
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_num,
+  'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_name,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\2')::int tempo,
+  ARRAY_AGG(event_id)
+FROM raw_dwc.cameras_trampa_event
+GROUP BY anh_num, tempo
+ORDER BY anh_num, tempo
+```
+
+```{sql}
+WITH a AS(
+SELECT 
+  event_id,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_num,
+  'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_name,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\2')::int tempo
+FROM raw_dwc.cameras_trampa_event
+ORDER BY anh_num, tempo
+)
+SELECT anh_num, ARRAY_AGG(tempo),count(*)
+FROM a
+GROUP BY anh_num
+ORDER BY anh_num,count(*)
+
+```
+
+
+## ANH
+
+
+Insertar los datos de anh:
+
+```{sql}
+INSERT INTO main.punto_referencia(name_pt_ref, num_anh)
+WITH a AS(
+SELECT
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_num,
+  'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_name
+FROM raw_dwc.cameras_trampa_event
+)
+SELECT anh_name, anh_num
+FROM a
+GROUP BY anh_name,anh_num
+ORDER BY anh_num
+ON CONFLICT (name_pt_ref) DO NOTHING
+RETURNING cd_pt_ref, name_pt_ref
+;
+```
+
+dar las referencias en las tablas de cameras_trampa
+
+```{sql}
+ALTER TABLE raw_dwc.cameras_trampa_event ADD COLUMN cd_pt_ref int REFERENCES main.punto_referencia(cd_pt_ref) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE raw_dwc.cameras_trampa_registros ADD COLUMN cd_pt_ref int REFERENCES main.punto_referencia(cd_pt_ref) ON DELETE SET NULL ON UPDATE CASCADE;
+
+UPDATE raw_dwc.cameras_trampa_event
+SET cd_pt_ref=pr.cd_pt_ref
+FROM main.punto_referencia pr
+WHERE 'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int= name_pt_ref
+;
+
+UPDATE raw_dwc.cameras_trampa_registros
+SET cd_pt_ref=pr.cd_pt_ref
+FROM main.punto_referencia pr
+WHERE  'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int= name_pt_ref
+;
+
+SELECT true;
+```
+
+Averiguando que ninguna fila no tenga anh
+
+```{sql}
+SELECT event_id FROM raw_dwc.cameras_trampa_event WHERE cd_pt_ref IS NULL;
+```
+
+```{sql}
+SELECT occurrence_id FROM raw_dwc.cameras_trampa_registros WHERE cd_pt_ref IS NULL;
+```
+
+## Unit, sampling efforts definition, abundance definition, protocolo
+
+```{sql}
+INSERT INTO main.def_unit(cd_measurement_type, unit, unit_spa, abbv_unit,factor)
+VALUES(
+  (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='number of traps'),
+  'Number of camera traps',
+  'Número de cameras trampa',
+  'camera traps',
+  1
+  )
+RETURNING cd_unit,unit;
+```
+
+```{sql}
+INSERT INTO main.def_var_samp_eff(var_samp_eff, var_samp_eff_spa, cd_unit,type_variable)
+VALUES(
+  'Number of camera traps',
+  'Número de cameras trampa',
+  (SELECT cd_unit FROM main.def_unit WHERE cd_measurement_type=(SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='number of traps') AND unit='Number of camera traps'),
+  'int'
+  )
+RETURNING cd_var_samp_eff, var_samp_eff ;
+```
+
+```{sql}
+INSERT INTO main.def_protocol(protocol,protocol_spa,cd_var_samp_eff_1,cd_var_samp_eff_2,samp_eff_1_implicit,samp_eff_2_implicit,cd_var_ind_qt,description_spa)
+VALUES(
+  'Camera traps',
+  'Fototrampeo',
+  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of camera traps'),
+  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Time Elapsed (nigths)'),
+  false,
+  false,
+  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Number of individuals'),
+  NULL
+)
+RETURNING cd_protocol,protocol,protocol_spa;
+```
+
+## Personas
+
+```{sql}
+INSERT INTO main.people(verbatim_person)
+WITH a AS(
+SELECT DISTINCT INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))) AS name_person
+FROM raw_dwc.cameras_trampa_registros
+UNION
+SELECT DISTINCT INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | '))))
+FROM raw_dwc.cameras_trampa_registros
+)
+SELECT DISTINCT REGEXP_REPLACE(name_person, '- ','-')
+FROM a 
+ORDER BY REGEXP_REPLACE(name_person, '- ','-')
+ON CONFLICT(verbatim_person) DO NOTHING
+RETURNING cd_person, verbatim_person
+```
+
+Dar los codigos a las tables de origen:
+
+```{sql}
+ALTER TABLE raw_dwc.cameras_trampa_registros ADD COLUMN cds_recorded_by int[];
+
+WITH a AS(
+SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))),'- ','-') AS name_person
+FROM raw_dwc.cameras_trampa_registros
+),b AS(
+SELECT "row.names", ARRAY_AGG(cd_person) cds
+FROM a 
+LEFT JOIN main.people p ON a.name_person=p.verbatim_person
+GROUP BY "row.names"
+)
+UPDATE raw_dwc.cameras_trampa_registros AS r
+SET cds_recorded_by=b.cds
+FROM b
+WHERE r."row.names"=b."row.names"
+RETURNING r."row.names", cds_recorded_by
+;
+
+ALTER TABLE raw_dwc.cameras_trampa_registros ADD COLUMN cds_identified_by int[];
+
+WITH a AS(
+SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | ')))),'- ','-') AS name_person
+FROM raw_dwc.cameras_trampa_registros
+),b AS(
+SELECT "row.names", ARRAY_AGG(cd_person) cds
+FROM a 
+LEFT JOIN main.people p ON a.name_person=p.verbatim_person
+GROUP BY "row.names"
+)
+UPDATE raw_dwc.cameras_trampa_registros AS r
+SET cds_identified_by=b.cds
+FROM b
+WHERE r."row.names"=b."row.names"
+RETURNING r."row.names", cds_identified_by
+;
+
+SELECT 1;
+```
+
+## gp_event
+
+```{sql}
+WITH a AS(
+SELECT 
+  event_id,
+  EXTRACT(YEAR FROM TO_DATE(SPLIT_PART(event_date,'/',1), 'YYYY-MM-DD')) año,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_num,
+  'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_name,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\2')::int tempo
+FROM raw_dwc.cameras_trampa_event
+)
+SELECT año, anh_num, ARRAY_AGG(tempo), count(*)
+FROM a
+GROUP BY año, anh_num
+ORDER BY anh_num,año
+;
+```
+
+Because there is only one method, the number of the campaign should be determined this way:
+
+```{sql}
+WITH a AS(
+SELECT 
+  event_id,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_num,
+  'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_name,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\2')::int tempo
+FROM raw_dwc.cameras_trampa_event
+)
+SELECT anh_num, ROW_NUMBER() OVER (PARTITION BY anh_num ORDER BY tempo) campaign_nb
+FROM a
+GROUP BY anh_num,tempo
+ORDER BY anh_num,tempo
+;
+```
+
+
+```{sql}
+INSERT INTO main.gp_event(cd_gp_biol,cd_protocol,cd_pt_ref,campaign_nb)
+WITH a AS(
+SELECT 
+  event_id,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_num,
+  'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_name,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\2')::int tempo,
+  cd_pt_ref
+FROM raw_dwc.cameras_trampa_event
+), campaign AS(
+SELECT anh_num, tempo, ROW_NUMBER() OVER (PARTITION BY anh_num ORDER BY tempo) campaign_nb
+FROM a
+GROUP BY anh_num,tempo
+ORDER BY anh_num,tempo
+)
+SELECT 'catr',
+    (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Camera traps') cd_protocol,
+  cd_pt_ref,
+  c.campaign_nb
+FROM a
+LEFT JOIN campaign c USING (tempo, anh_num)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+GROUP BY cd_pt_ref, name_pt_ref, c.campaign_nb
+ORDER BY cd_pt_ref,cd_protocol
+RETURNING cd_gp_event,cd_gp_biol,cd_protocol,cd_pt_ref,campaign_nb
+;
+```
+
+Attributing the gp_event
+
+```{sql}
+ALTER TABLE raw_dwc.cameras_trampa_event ADD COLUMN cd_gp_event int REFERENCES main.gp_event(cd_gp_event) ON DELETE SET NULL;
+
+
+WITH a AS(
+SELECT 
+  event_id,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_num,
+  'ANH_'||REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\1')::int anh_name,
+  REGEXP_REPLACE(event_id, '^ANH([0-9]{3})_T([1-3])$','\2')::int tempo,
+  cd_pt_ref
+FROM raw_dwc.cameras_trampa_event
+), campaign AS(
+SELECT anh_num, tempo, ROW_NUMBER() OVER (PARTITION BY anh_num ORDER BY tempo) campaign_nb
+FROM a
+),b AS(
+SELECT event_id,
+    (SELECT cd_protocol FROM main.def_protocol WHERE protocol='Camera traps') cd_protocol,
+  cd_pt_ref,
+  c.campaign_nb
+FROM a
+LEFT JOIN campaign c USING (tempo, anh_num)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+),d AS(
+SELECT b.*, cd_gp_event
+FROM b
+LEFT JOIN main.gp_event ge ON cd_gp_biol='catr' AND b.cd_protocol=ge.cd_protocol AND b.cd_pt_ref=ge.cd_pt_ref AND b.campaign_nb=ge.campaign_nb
+)
+UPDATE raw_dwc.cameras_trampa_event e
+SET cd_gp_event=d.cd_gp_event
+FROM d
+WHERE d.event_id=e.event_id
+RETURNING e.event_id, e.cd_gp_event
+;
+```
+
+## event
+
+**Poner 18:00:00 y 06:00:00 en las horas es malo?**
+
+\footnotesize
+
+```{sql}
+INSERT INTO main.event(cd_gp_event,event_id,num_replicate, description_replicate, date_time_begin, date_time_end, locality_verb, event_remarks, samp_effort_1, samp_effort_2, pt_geom)
+SELECT cd_gp_event,
+  event_id, 
+  1 AS num_replicate,
+  NULL AS description_replicate,
+  (TO_DATE(SPLIT_PART(event_date,'/',1), 'YYYY-MM-DD')||' 18:00:00')::timestamp date_time_begin,
+  (TO_DATE(SPLIT_PART(event_date,'/',2), 'YYYY-MM-DD')||' 06:00:00')::timestamp date_time_end,
+  locality locality_verb,
+  NULL AS event_remarks,
+  sample_size_value samp_effort_1,
+  REGEXP_REPLACE(sampling_effort,'^([0-9]*) .*','\1')::int samp_effort_2,
+  --locality_remarks,
+  ST_SetSRID(ST_Transform(ST_SetSRID(ST_MakePoint(decimal_longitude,decimal_latitude),4326), (SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) pt_geom
+FROM raw_dwc.cameras_trampa_event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol p USING (cd_protocol)
+ORDER BY cd_gp_event, event_id, num_replicate
+
+RETURNING main.event.cd_event, main.event.cd_gp_event, main.event.event_id, main.event.num_replicate, main.event.description_replicate, main.event.date_time_begin, main.event.date_time_end, main.event.locality_verb, main.event.event_remarks, main.event.pt_geom
+```
+
+**Averiguar si los samp_effort_2 están bien**:
+
+```{sql}
+SELECT date_time_end-date_time_begin,samp_effort_2 FROM main.event LEFT JOIN main.gp_event USING (cd_gp_event) WHERE cd_gp_biol='catr';
+```
+
+Damos los cd_event a todos las filas:
+
+```{sql}
+ALTER TABLE raw_dwc.cameras_trampa_event ADD COLUMN cd_event int REFERENCES main.event(cd_event) ON DELETE SET NULL;
+ALTER TABLE raw_dwc.cameras_trampa_registros ADD COLUMN cd_event int REFERENCES main.event(cd_event);
+
+UPDATE raw_dwc.cameras_trampa_event AS t
+SET cd_event=e.cd_event
+FROM main.event e
+WHERE t.event_id=e.event_id;
+
+UPDATE raw_dwc.cameras_trampa_registros AS t
+SET cd_event=e.cd_event
+FROM main.event e
+WHERE t.event_id=e.event_id;
+
+SELECT true;
+```
+
+
+## registros
+
+**Should we use the organism_id to separate the 30 min of delay to consider 2 individuals?**
+
+
+```{sql}
+SELECT occurrence_id, count(*)
+FROM raw_dwc.cameras_trampa_registros 
+GROUP BY occurrence_id
+HAVING count(*)>1;
+```
+
+**Why are a lot of record numbers always repeated twice**?
+
+
+```{sql}
+SELECT record_number, count(*)
+FROM raw_dwc.cameras_trampa_registros 
+GROUP BY record_number
+HAVING count(*)>1;
+```
+
+**Why are a lot of associated numbers always repeated twice**?
+
+```{sql}
+SELECT associated_media, count(*)
+FROM raw_dwc.cameras_trampa_registros 
+GROUP BY associated_media
+HAVING count(*)>1;
+```
+
+**Parece que hay errores fuertes en las fechas de los registros**
+
+```{sql}
+SELECT e.event_id, e.event_date, r.event_date, r.event_time
+FROM raw_dwc.cameras_trampa_registros r
+LEFT JOIN raw_dwc.cameras_trampa_event e USING(cd_event)
+ORDER BY r.event_date::date, r.event_time::time
+
+```
+
+
+
+```{sql}
+
+INSERT INTO main.registros(cd_event, cds_recorded_by, date_time, cd_tax, cd_morfo, date_ident, cds_identified_by, qt_int,remarks, occurrence_id, organism_id)
+SELECT 
+ cd_event,
+ cds_recorded_by,
+ (event_date||' '||event_time)::timestamp date_time,
+ tt.cd_tax,
+ tt.cd_morfo,
+ TO_DATE(date_identified,'YYYY-MM-DD') date_ident,
+ cds_identified_by,
+ organism_quantity::double precision::int qt_int,
+ r."row.names" remarks, -- I use the empty remarks field to have a unique tag for later assignation
+ occurrence_id,
+ NULL AS organism_id
+ --ROW_NUMBER() OVER (ORDER BY (e.date_time_begin::date||' '||event_time)::timestamp)
+ --organism_id::text
+FROM raw_dwc.cameras_trampa_registros r
+LEFT JOIN raw_dwc.taxonomy_total tt ON tt."row.names"=r."row.names" AND tt.table_orig='cameras_trampa_registros'
+LEFT JOIN main.event e USING (cd_event)
+ORDER BY date_time
+RETURNING cd_event, cds_recorded_by, date_time, cd_tax, cd_morfo, cds_identified_by, qt_int,remarks, occurrence_id, organism_id
+```
+
+```{sql}
+ALTER TABLE raw_dwc.cameras_trampa_registros ADD COLUMN cd_reg int REFERENCES main.registros(cd_reg);
+UPDATE raw_dwc.cameras_trampa_registros AS ar
+SET cd_reg=r.cd_reg
+FROM main.registros r
+WHERE ar."row.names"=r.remarks;
+
+WITH a AS(
+SELECT cd_reg 
+FROM main.registros
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol = 'catr'
+)
+UPDATE main.registros r
+SET remarks=NULL
+FROM a
+WHERE a.cd_reg=r.cd_reg;
+
+
+-- Check cd_reg are unique in the source table
+SELECT cd_reg,count(*) FROM  raw_dwc.cameras_trampa_registros GROUP BY cd_reg HAVING count(*)>1;
+```
+
+
 
 # Attribución de los puntos de referencias a la plataformas
 
