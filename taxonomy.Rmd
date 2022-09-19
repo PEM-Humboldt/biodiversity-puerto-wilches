@@ -3089,10 +3089,13 @@ SELECT cd_tax,scientific_name,
   identification_qualifier,
   CASE 
     WHEN identification_qualifier ~ '^sp. [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_qualifier,'^(sp. [0-9]{1,2}) *$', '\1')
+    WHEN identification_qualifier='Gen. nov. et sp. nov.' THEN identification_qualifier
+    WHEN scientific_name IN ('Characidium','Hemibrycon','Hoplias','Hypostomus') THEN 'sp.'
     ELSE NULL
   END name_morfo,
   cd_rank,
   CASE
+    WHEN identification_qualifier='Gen. nov. et sp. nov.' THEN 'SP'
     WHEN cd_rank='GN' THEN 'SP'
     WHEN cd_rank='TR' THEN 'GN'
     WHEN cd_rank='SFAM' THEN 'GN'
@@ -3122,10 +3125,13 @@ SELECT cd_tax,scientific_name,
   identification_qualifier,
   CASE 
     WHEN identification_qualifier ~ '^sp. [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_qualifier,'^(sp. [0-9]{1,2}) *$', '\1')
+    WHEN identification_qualifier='Gen. nov. et sp. nov.' THEN identification_qualifier
+    WHEN scientific_name IN ('Characidium','Hemibrycon','Hoplias','Hypostomus') THEN 'sp.'
     ELSE NULL
   END name_morfo,
   cd_rank,
   CASE
+    WHEN identification_qualifier='Gen. nov. et sp. nov.' THEN 'SP'
     WHEN cd_rank='GN' THEN 'SP'
     WHEN cd_rank='TR' THEN 'GN'
     WHEN cd_rank='SFAM' THEN 'GN'
@@ -3160,8 +3166,10 @@ WHERE m.cd_gp_biol='pece' AND tt.table_orig='peces_registros'
   AND (
    CASE 
     WHEN identification_qualifier ~ '^sp. [0-9]{1,2} *$' THEN REGEXP_REPLACE(identification_qualifier,'^(sp. [0-9]{1,2}) *$', '\1')
-      ELSE NULL
-    END = m.name_morfo)
+    WHEN identification_qualifier='Gen. nov. et sp. nov.' THEN identification_qualifier
+    WHEN scientific_name IN ('Characidium','Hemibrycon','Hoplias','Hypostomus') THEN 'sp.'
+    ELSE NULL
+  END = m.name_morfo)
 RETURNING tt."row.names", tt.cd_morfo
 ```
 

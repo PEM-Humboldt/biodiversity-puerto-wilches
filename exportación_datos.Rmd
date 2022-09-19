@@ -1401,7 +1401,8 @@ ORDER BY
 ```
 
 
-```{sql, results='hide'}
+```
+--sql, results='hide'}
 SELECT
   name_pt_ref||'_'||cd_tempo anh_tempo,
 
