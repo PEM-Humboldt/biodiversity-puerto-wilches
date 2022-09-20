@@ -646,7 +646,9 @@ SELECT
     WHEN landcov_pt IS NOT NULL AND landcov_pt !='Other' THEN landcov_pt
     WHEN landcov_pt IS NULL OR landcov_pt = 'Other' THEN landcov_homol_mayoritario
   END habitat,
-  aqu_eco_type
+  CASE 
+    WHEN aqu_ter='aquatic' THEN aqu_eco_type
+  END aqu_eco_type
 FROM b
 WHERE priority=1 
 )

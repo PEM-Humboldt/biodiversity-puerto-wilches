@@ -1,8 +1,0 @@
-\contentsline {section}{\numberline {1}Reading rawFiles}{1}{section.1}%
-\contentsline {section}{\numberline {2}Getting information to create the tables}{4}{section.2}%
-\contentsline {section}{\numberline {3}create the schema with its raw tables}{4}{section.3}%
-\contentsline {section}{\numberline {4}Cambio ``manual'' de ANH}{5}{section.4}%
-\contentsline {subsection}{\numberline {4.1}Colembolos y hormigas de la ANH 128}{5}{subsection.4.1}%
-\contentsline {subsection}{\numberline {4.2}Colembolos y hormigas de la ANH 373}{5}{subsection.4.2}%
-\contentsline {subsection}{\numberline {4.3}Aves de la ANH 375}{5}{subsection.4.3}%
-\contentsline {subsection}{\numberline {4.4}Mamiferos ultrasonidos de la ANH 90}{5}{subsection.4.4}%

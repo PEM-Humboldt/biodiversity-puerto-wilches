@@ -563,6 +563,9 @@ VALUES
 ;
 
 
+/*Variables ambientales*/
+
+
 /* Schema spatial */
 CREATE SCHEMA spat;
 
