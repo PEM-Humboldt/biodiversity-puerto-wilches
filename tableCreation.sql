@@ -564,6 +564,105 @@ VALUES
 
 
 /*Variables ambientales*/
+/* vamos a crear tablas de variables ambientales para poder utilizarla de manera rapida: Anotar, la manera limpía de hacerlo sería
+
+* o sea añadir un "grupo biologico" de variables ambientales, con sus propios eventos, gp de eventos
+* o sea añadir unas variables ambientales en las tablas de habitat, con el problema que en el caso de peces, anh+temporada no es un nivel de organización que se pueda referenciar
+*/
+
+CREATE TABLE main.phy_chi_peces
+(
+  cd_pt_ref smallint REFERENCES main.punto_referencia(cd_pt_ref),
+  cd_tempo char(2) REFERENCES main.def_season(cd_tempo),
+  temp double precision,
+  ph double precision,
+  oxy_dis double precision,
+  cond double precision,
+  oil_film boolean,
+  float_mat boolean,
+  subst_compl_idx double precision,
+  struc_compl_idx double precision,
+  canopy_cover smallint,
+  PRIMARY KEY (cd_pt_ref,cd_tempo)
+);
+
+CREATE TABLE main.def_phy_chi_type
+(
+    cd_phy_chi_type smallserial PRIMARY KEY,
+    phy_chi_type varchar(10) UNIQUE NOT NULL,
+    phy_chi_type_spa varchar(10) UNIQUE NOT NULL
+);
+INSERT INTO main.def_phy_chi_type(phy_chi_type, phy_chi_type_spa)
+VALUES
+  ('water','agua'),
+  ('sediment','sedimento');
+
+CREATE TABLE main.phy_chi_hidro_event
+(
+   cd_event_phy_chi smallserial PRIMARY KEY,
+   cd_pt_ref smallint REFERENCES main.punto_referencia(cd_pt_ref),
+   event_id_phy_chi text UNIQUE NOT NULL,
+   cd_phy_chi_type smallint REFERENCES main.def_phy_chi_type(cd_phy_chi_type),
+   date_time timestamp
+);
+SELECT AddGeometryColumn('main', 'phy_chi_hidro_event', 'the_geom', 3116, 'POINT', 2);
+CREATE INDEX event_phy_chi_pt_geom_idx ON main.phy_chi_hidro_event USING GIST(the_geom);
+
+CREATE TABLE main.phy_chi_hidro_aguas
+(
+   cd_event_phy_chi smallint PRIMARY KEY REFERENCES main.phy_chi_hidro_event(cd_event_phy_chi),
+   basin text,
+   mean_depth double precision,
+   width_approx double precision,
+   photic_depth double precision,
+   river_clasif text,
+   temp double precision,
+   ph double precision,
+   oxy_dis double precision,
+   cond double precision,
+   oxy_sat double precision,
+   tot_sol_situ double precision,
+   tot_org_c double precision,
+   avail_p double precision,
+   mg double precision,
+   cal double precision,
+   na_s double precision,
+   tot_dis_sol double precision,
+   tot_sol double precision,
+   sus_sol double precision,
+   sol_sol double precision,
+   p04 double precision,
+   n03 double precision,
+   silicates double precision,
+   oil_fat double precision,
+   blue_met_act double precision,
+   carbonates double precision,
+   cal_hard double precision,
+   tot_hard double precision,
+   alk double precision,
+   bicarb double precision
+);
+
+
+CREATE TABLE main.phy_chi_hidro_sedi
+(
+   cd_event_phy_chi smallint PRIMARY KEY REFERENCES main.phy_chi_hidro_sedi,
+   sand_per double precision,
+   clay_per double precision,
+   silt_per double precision,
+   text_clas text,
+   org_c double precision,
+   avail_p double precision,
+   mg double precision,
+   cal double precision,
+   na_s double precision,
+   boron double precision,
+   fe double precision,
+   tot_n double precision
+);
+
+
+
 
 
 /* Schema spatial */

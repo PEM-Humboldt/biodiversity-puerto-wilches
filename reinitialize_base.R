@@ -10,5 +10,6 @@ render("./taxonomy.Rmd")
 render("./integración_estructura_muestreo.Rmd")
 render("./datos_registros_suplementarios.Rmd")
 render("./puntos_referencia_habitats.Rmd")
+render("./variables_ambientales.Rmd")
 render("./exportación_datos.Rmd")
 

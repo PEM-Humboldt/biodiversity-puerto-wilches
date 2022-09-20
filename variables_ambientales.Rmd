@@ -1,5 +1,5 @@
 ---
-title: "Variables ambientales aquaticas"
+title: "Variables ambientales acuáticas"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
@@ -25,6 +25,7 @@ knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
   paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
 })
+opts <- options(knitr.kable.NA = "---")
 ```
 
 # Reading files
@@ -120,9 +121,141 @@ GROUP BY c.event_id
 ```
 
 
+# Inserting in database
+
+```{sql}
+INSERT INTO main.phy_chi_peces
+SELECT 
+  cd_pt_ref,
+  s.cd_tempo,
+  temp_°c_,
+  p_h,
+  o_d_mg_l_::double precision,
+  cond_µs_cm_,
+  película_de_grasas_=1,
+  material_flotante=1,
+  inidice_de_complejidad_de_sustrato,
+  indice_de_complejidad_estructural,
+  cobertura_del_dosel_
+FROM raw_dwc.phy_chi_peces
+LEFT JOIN main.punto_referencia pr ON pr.num_anh=REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?$','\1')::int
+LEFT JOIN main.def_season s ON s.cd_tempo=CASE
+    WHEN REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?$','\2')='_II' THEN 'T2'
+    ELSE 'T1'
+  END
+RETURNING cd_pt_ref,cd_tempo;
+```
+
+
+```{sql}
+INSERT INTO main.phy_chi_hidro_event(cd_pt_ref,event_id_phy_chi,cd_phy_chi_type,date_time,the_geom)
+WITH coord AS(
+SELECT event_id, ST_SetSrid(ST_Transform(ST_SetSrid(ST_MakePoint(decimal_longitude,decimal_latitude),4326),(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.phy_chi_events_hidrobiologico
+),a AS(
+SELECT DISTINCT c.event_id event_id, cd_pt_ref
+FROM coord c
+LEFT JOIN main.event e ON c.geom=e.pt_geom--ST_DWithin(c.geom,e.pt_geom,1)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+ORDER BY c.event_id
+)
+SELECT  cd_pt_ref,
+  event_id,
+  CASE
+   WHEN event_id ~ 'ANH.*SE.*$' THEN (SELECT cd_phy_chi_type FROM main.def_phy_chi_type WHERE phy_chi_type='sediment') 
+   WHEN event_id ~ 'ANH.*A.*$' THEN (SELECT cd_phy_chi_type FROM main.def_phy_chi_type WHERE phy_chi_type='water') 
+  END cd_phy_chi_type,
+  (event_date||' '||event_time)::timestamp date_time,
+  geom
+FROM raw_dwc.phy_chi_events_hidrobiologico
+LEFT JOIN a USING (event_id)
+LEFT JOIN coord USING(event_id)
+RETURNING cd_event_phy_chi
+```
+
+**NOTE: limite de detección dividido por 2**
+
+```{sql}
+INSERT INTO main.phy_chi_hidro_aguas
+SELECT cd_event_phy_chi,
+measurement_value_sistema_hidrográfico_,
+measurement_value_profundidad_promedio_,
+measurement_value_ancho_aproximado_,
+measurement_value_profundidad_de_capa_fótica_,
+measurement_value_clasificación_del_río_,
+measurement_value_temperatura_,
+measurement_value_p_h_,
+measurement_value_oxígeno_disuelto_,
+measurement_value_conductividad_,
+"measurement_value_%_saturación_o2_",
+measurement_value_sólidos_disueltos_totales_in_situ_,
+measurement_value_carbono_organico_total_,
+measurement_value_fosforo_disponible_,
+measurement_value_magnesio_,
+measurement_value_calcio_,
+CASE
+ WHEN measurement_value_sodio_='<0.100' THEN 0.05
+ ELSE measurement_value_sodio_::double precision
+END,
+measurement_value_total_de_sólidos_disueltos_,
+measurement_value_sólidos_totales_,
+measurement_value_sólidos_en_suspensión_,
+measurement_value_sólidos_solubles_,
+measurement_value_fosfatos_,
+measurement_value_nitratos_,
+measurement_value_silicatos_,
+measurement_value_grasas_y_aceites_,
+measurement_value_sustancias_activas_al_azul_de_metileno_,
+measurement_value_carbonatos_,
+measurement_value_dureza_calcica_,
+measurement_value_dureza_total_,
+measurement_value_alcalinidad_,
+measurement_value_bicarbonatos_
+FROM main.phy_chi_hidro_event he
+LEFT JOIN main.def_phy_chi_type USING (cd_phy_chi_type)
+FULL OUTER JOIN raw_dwc.phy_chi_general_hidrobiologico pcgh ON he.event_id_phy_chi=pcgh.event_id
+FULL OUTER JOIN raw_dwc.phy_chi_aguas_hidrobiologico pcah ON he.event_id_phy_chi=pcah.event_id
+WHERE cd_phy_chi_type IS NULL OR phy_chi_type='water'
+RETURNING cd_event_phy_chi;
+```
+
+
+**Problemas de event_id en las tablas de variables ambientales de hidrobiología (aguas)**
+```{sql}
+SELECT e.event_id AS "event", g.event_id general, a.event_id aguas
+FROM raw_dwc.phy_chi_events_hidrobiologico e
+LEFT JOIN main.phy_chi_hidro_event ee ON ee.event_id_phy_chi=e.event_id
+LEFT JOIN main.def_phy_chi_type USING (cd_phy_chi_type)
+FULL OUTER JOIN raw_dwc.phy_chi_aguas_hidrobiologico a ON e.event_id=a.event_id
+FULL OUTER JOIN raw_dwc.phy_chi_general_hidrobiologico g ON e.event_id=g.event_id
+WHERE cd_phy_chi_type IS NULL OR phy_chi_type = 'water'
+```
+
+
+```{sql}
+INSERT INTO main.phy_chi_hidro_sedi
+SELECT he.cd_event_phy_chi,
+ measurement_value_textura1_,
+ measurement_value_textura2_,
+ measurement_value_textura3_,
+ measurement_value_textura4_,
+ measurement_value_carbono_orgánico_,
+ measurement_value_fósforo_disponible_,
+ measurement_value_magnesio_,
+ measurement_value_calcio_,
+ measurement_value_sodio_,
+ measurement_value_boro_,
+ measurement_value_hierro_,
+ measurement_value_nitrogeno_total_
+FROM main.phy_chi_hidro_event he
+LEFT JOIN main.def_phy_chi_type USING (cd_phy_chi_type)
+FULL OUTER JOIN raw_dwc.phy_chi_sedimento_hidrobiologico pcsh ON he.event_id_phy_chi=pcsh.event_id
+WHERE cd_phy_chi_type IS NULL OR phy_chi_type='sediment'
+;
+```
 
 
 ```{r}
 dbDisconnect(fracking_db)
-
 ```
