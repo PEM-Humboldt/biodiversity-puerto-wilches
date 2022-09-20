@@ -7515,15 +7515,6 @@ GROUP BY associated_media
 HAVING count(*)>1;
 ```
 
-**Parece que hay errores fuertes en las fechas de los registros**
-
-```{sql}
-SELECT e.event_id, e.event_date, r.event_date, r.event_time
-FROM raw_dwc.cameras_trampa_registros r
-LEFT JOIN raw_dwc.cameras_trampa_event e USING(cd_event)
-ORDER BY r.event_date::date, r.event_time::time
-
-```
 
 
 
@@ -7575,6 +7566,21 @@ WHERE a.cd_reg=r.cd_reg;
 SELECT cd_reg,count(*) FROM  raw_dwc.cameras_trampa_registros GROUP BY cd_reg HAVING count(*)>1;
 ```
 
+**Parece que hay errores fuertes en las fechas de los registros**
+
+```{sql}
+SELECT cd_reg,e.event_id, 
+  SPLIT_PART(e.event_date,'/',1)::date date1,
+  SPLIT_PART(e.event_date,'/',2)::date date2,
+  r.event_date, r.event_time,name_tax
+FROM raw_dwc.cameras_trampa_registros r
+LEFT JOIN raw_dwc.cameras_trampa_event e USING(cd_event)
+LEFT JOIN main.registros USING(cd_reg)
+LEFT JOIN main.taxo USING (cd_tax)
+WHERE r.event_date<SPLIT_PART(e.event_date,'/',1) OR r.event_date>SPLIT_PART(e.event_date,'/',2)
+ORDER BY r.event_date::date, r.event_time::time
+
+```
 
 
 # Attribución de los puntos de referencias a la plataformas
