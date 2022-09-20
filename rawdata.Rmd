@@ -213,6 +213,46 @@ WHERE event_id=a.event_id1
 RETURNING event_id,mu.decimal_latitude,mu.decimal_longitude;
 ```
 
+## Modificacions de los ANH de Cameras trampa
+
+1. ANH099 -> ANH185
+1. ANH229 -> ANH112
+1. ANH208 -> ANH065
+
+ 
+```{sql}
+UPDATE raw_dwc.cameras_trampa_event
+SET event_id=REGEXP_REPLACE(event_id,'099','185')
+WHERE event_id ~ '099';
+UPDATE raw_dwc.cameras_trampa_registros
+SET event_id=REGEXP_REPLACE(event_id,'099','185')
+WHERE event_id ~ '099';
+
+
+UPDATE raw_dwc.cameras_trampa_event
+SET event_id=REGEXP_REPLACE(event_id,'229','112')
+WHERE event_id ~ '229';
+UPDATE raw_dwc.cameras_trampa_registros
+SET event_id=REGEXP_REPLACE(event_id,'229','112')
+WHERE event_id ~ '229';
+
+
+UPDATE raw_dwc.cameras_trampa_event
+SET event_id=REGEXP_REPLACE(event_id,'208','065')
+WHERE event_id ~ '208';
+UPDATE raw_dwc.cameras_trampa_registros
+SET event_id=REGEXP_REPLACE(event_id,'208','065')
+WHERE event_id ~ '208';
+```
+
+### Modificación de un nombre de cuerpo de agua de peces
+
+```{sql}
+UPDATE raw_dwc.peces_event
+SET water_body='Caño Corredor'
+WHERE occurrence_id ~ '^ANH_39_' OR occurrence_id ~ '^ANH_42_' OR occurrence_id ~ '^ANH_43_'
+```
+
 
 
 ```{r}

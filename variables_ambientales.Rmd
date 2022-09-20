@@ -1,0 +1,128 @@
+---
+title: "Variables ambientales aquaticas"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+       latex_engine: xelatex
+---
+
+
+************************
+
+En este documento, se trata de añadir las variables ambientales, en particular en el caso de 
+
+```{r setup}
+require(openxlsx)
+require(RPostgreSQL)
+fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+```
+
+# Reading files
+
+## Peces
+
+
+```{r}
+fol_extra <- "../Data_Documents/ExtraData/"
+phy_chi_peces <- read.xlsx(file.path(fol_extra,"VariablesAmbientales_Peces_FaseI y II_V2.xlsx"), startRow = 4, colNames = F)
+col_phy_chi_peces <- read.xlsx(file.path(fol_extra,"VariablesAmbientales_Peces_FaseI y II_V2.xlsx"), rows=1:3, colNames = F)
+COLNAMES <- as.character(col_phy_chi_peces[3,])
+COLNAMES[is.na(COLNAMES)] <- as.character(col_phy_chi_peces[2,is.na(COLNAMES)])
+COLNAMES[is.na(COLNAMES)] <- as.character(col_phy_chi_peces[1,is.na(COLNAMES)])
+colnames(phy_chi_peces) <- gsub("[_ ().-/]+","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",COLNAMES,perl = T)))
+```
+
+
+## Hidrobiologicos
+
+```{r}
+fol_dwc <- "../Data_Documents/DwC Finales/"
+hidrobiologicos_phy_chi <-
+  list(
+    phy_chi_events_hidrobiologico = 
+      read.xlsx(file.path(fol_dwc, "Hidrobiologicos", 'I2D-BIO_2021_090_v2.xlsx'), sheet = "coordevento_fisicoquimico_santa"),
+    phy_chi_general_hidrobiologico =
+      read.xlsx(file.path(fol_dwc, "Hidrobiologicos", 'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquímico General "),
+    phy_chi_aguas_hidrobiologico =
+      read.xlsx(file.path(fol_dwc, "Hidrobiologicos", 'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquimico Aguas"),
+    phy_chi_sedimento_hidrobiologico =
+      read.xlsx(file.path(fol_dwc, "Hidrobiologicos", 'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquimico Sedimento")
+    )
+for(i in 1:length(hidrobiologicos_phy_chi))
+{
+  colnames(hidrobiologicos_phy_chi[[i]]) <- gsub("[_ ().-/]+","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(hidrobiologicos_phy_chi[[i]]),perl = T)))
+}
+```
+
+## Sending in the database (raw_dwc)
+
+```{r}
+dbWriteTable(fracking_db,c("raw_dwc","phy_chi_peces"),phy_chi_peces,overwrite=T)
+
+for (i in 1:length(hidrobiologicos_phy_chi))
+{
+  dbWriteTable(fracking_db,c("raw_dwc",names(hidrobiologicos_phy_chi)[i]),hidrobiologicos_phy_chi[[i]])
+}
+```
+
+## Checking data
+### Peces
+
+```{sql}
+SELECT anh,pr.name_pt_ref, s.cd_tempo,h.tipo_cuerp_agua,tipo_de_cuerpo_de_agua
+FROM main.gp_event ge
+LEFT JOIN main.punto_referencia pr USING (cd_pt_ref)
+LEFT JOIN habitat_gp_event_aquatic h USING (cd_gp_event)
+LEFT JOIN main.event e USING (cd_gp_event)
+LEFT JOIN main.def_season s ON e.date_time_begin <@ s.date_range
+FULL OUTER JOIN raw_dwc.phy_chi_peces 
+   ON 
+       REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?','\1')::int=pr.num_anh
+       AND(
+         (REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?','\2')='_II' AND s.cd_tempo='T2')
+         OR
+         (REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?','\2')='' AND s.cd_tempo='T1')
+        )
+WHERE ge.cd_gp_biol='pece' AND tipo_cuerp_agua!=tipo_de_cuerpo_de_agua
+GROUP BY h.cd_gp_event,h.tipo_cuerp_agua, pr.name_pt_ref, s.cd_tempo, pr.num_anh, anh,tipo_de_cuerpo_de_agua
+```
+
+**La ANH 39 está como Quebrada en nuestros datos y como caño en los datos phy_chi de peces** (el resto está en acuerdo)
+
+
+### Hidrobiologicos
+
+
+Los nombres de ANH en los archivos de datos physico-quimicos de Hidrobiologicos son bien raros, pero los datos tienen tambien unas coordenadas. Una primera estrategía para entender los que pasa sería ver a que corresponden esos puntos en los eventos de hidrobiologico:
+
+
+```{sql}
+WITH coord AS(
+SELECT event_id, ST_SetSrid(ST_Transform(ST_SetSrid(ST_MakePoint(decimal_longitude,decimal_latitude),4326),(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.phy_chi_events_hidrobiologico
+)
+SELECT c.event_id event_id_pc, ARRAY_AGG(DISTINCT num_anh), ARRAY_AGG(DISTINCT cd_gp_biol)
+FROM coord c
+LEFT JOIN main.event e ON c.geom=e.pt_geom--ST_DWithin(c.geom,e.pt_geom,1)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+GROUP BY c.event_id
+```
+
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+
+```
