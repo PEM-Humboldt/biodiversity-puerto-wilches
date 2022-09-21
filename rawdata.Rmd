@@ -52,6 +52,12 @@ types[colnames(dataGrupos$Escarabajos$event)=="eventTime"]<-"date"
 A<-read_xlsx(file.path(fol_data,"Escarabajos","I2D-BIO_2021_069_v4_ev.xlsx"),sheet="I2D-BIO_2021_069_event",col_types = types)
 dataGrupos$Escarabajos$event$eventTime[!is.na(A)]<-as.character(format(A[!is.na(A)],"%H:%M:%S"))
 dataGrupos$Escarabajos$event$eventID <- gsub("2012","2021",dataGrupos$Escarabajos$event$eventID)
+types<-rep("skip",ncol(dataGrupos$Escarabajos$event))
+types[colnames(dataGrupos$Escarabajos$event)=="eventDate"]<-"date"
+A<-read_xlsx(file.path(fol_data,"Escarabajos","I2D-BIO_2021_069_v4_ev.xlsx"),sheet="I2D-BIO_2021_069_event",col_types = types)
+dataGrupos$Escarabajos$event$eventDate[!is.na(A)]<-as.character(format(A[!is.na(A)],"%Y:%m:%d"))
+dataGrupos$Escarabajos$event$eventID <- gsub("2012","2021",dataGrupos$Escarabajos$event$eventID)
+
 
 
 

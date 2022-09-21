@@ -57,3 +57,4 @@ devDocs/*.tex
 *.png
 *.aux
 *.toc
+*.swp
