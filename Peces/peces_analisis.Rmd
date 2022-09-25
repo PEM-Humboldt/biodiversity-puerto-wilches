@@ -1,0 +1,1431 @@
+---
+title: "Analisis de los datos de peces"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+lang: "es"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+    html_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+---
+
+
+************************
+
+Se trata en este documento de presentar los análisis realizados sobre los datos de peces, organizados en la base de datos
+
+
+*************
+
+```{r setup, echo=F,message=F,warning=FALSE}
+require(openxlsx)
+require(RPostgreSQL)
+require(sp)
+require(sqldf)
+require(kableExtra)
+require(iNEXT)
+require(ggplot2)
+knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/",echo=T)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+options(knitr.kable.NA = "---")
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
+```
+
+# Function para formatear las matrices
+
+```{r code=readLines("../dbTab2mat.R")}
+eval(parse(text=readLines("../dbTab2mat.R")))
+```
+
+
+# Importación de los datos de la base de datos
+
+La base de datos contiene todos los datos de peces en VIEWS del schema "public", se pueden importar así:
+
+```{r cache=F}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^pece'")$table_name)
+import_pece <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(import_pece) <- listTable
+import_pece[grep("matrix",listTable)] <- lapply(import_pece[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density","incidence")[c("abundance","density","incidence") %in% colnames(x)]
+    o_checklist <- !as.logical(length(col_content))
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
+  })
+
+```
+
+
+# Colores
+
+
+```{r, cache=F, message=FALSE,warning=FALSE}
+fol_data <- "../../Data_Documents/ExtraData/"
+wb <- loadWorkbook(file.path(fol_data,'Colores.xlsx'))
+colList<-lapply(names(wb),read.xlsx,xlsxFile=file.path(fol_data,'Colores.xlsx'))
+names(colList) <- names(wb)
+colList$aquatic_habitats<-colList$aquatic_habitats[order(colList$aquatic_habitats$habitat_spa),]
+colList$zonas<-colList$zonas[order(colList$zonas$platform),]
+
+```
+
+# Información basica
+
+## Mapa de la zona
+
+```{r mapzona, cache=T, fig.width=10, fig.height=10}
+require(rpostgis)
+zonas<-pgGetGeom(fracking_db,query="SELECT platform,zona_geom AS geom FROM main.platform")
+landcov<-pgGetGeom(fracking_db,query="SELECT cd_landcov,landcov,landcov_spa,the_geom AS geom FROM spat.landcov LEFT JOIN spat.def_landcov USING (cd_landcov)")
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+infoTot<-import_pece$pece_info_sampling_total
+coordinates(infoTot) <- ~ x_coord_centroid + y_coord_centroid
+plot(infoTot, bg = colList$aquatic_habitats$color[match(infoTot$wat_body_type, table= colList$aquatic_habitats$habitat)],cex=2,pch=22,add=T)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA)
+legend("bottomright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title="Cuerpo de agua")
+```
+
+# Curvas de diversidad
+
+
+## Por arte de pesca
+### Atarraya
+#### Estimación por sampling unit
+
+```{r atarraya_iNEXT_SU, warning=F}
+dataFor_iNEXT_SU<-apply(import_pece$pece_castnets_matrix,1,function(x)sort(x[x>0],decreasing=T))
+atarraya_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
+```
+
+
+```{r warning=F,echo=F}
+## Formatting the table of estimation
+est_atarraya_su<-atarraya_iNEXT_SU$AsyEst
+cbind(
+sqldf(
+  "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_atarraya_su
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_atarraya_su
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_atarraya_su
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (atarraya)")%>%
+  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")
+```
+
+\clearpage
+
+#### Curvas y estimaciones por tipo de cuerpo de agua
+
+```{r atarraya_iNEXT}
+matrix_atarraya <- import_pece$pece_castnets_matrix
+info_atarraya <- import_pece$pece_info_sampling_castnet
+info_atarraya$tipo_cuerp_agua <- factor(info_atarraya$tipo_cuerp_agua,levels = colList$aquatic_habitats$habitat_spa)
+(nbSU<-table(info_atarraya$tipo_cuerp_agua))
+tip_cuerpo_agua<-info_atarraya$tipo_cuerp_agua[match(rownames(matrix_atarraya),table = info_atarraya$anh_tempo)]
+sum_abu <- by(matrix_atarraya,tip_cuerpo_agua,colSums)
+mat_atarraya_tipCuerAg <- Reduce(rbind,sum_abu)
+rownames(mat_atarraya_tipCuerAg) <- names(sum_abu)
+iNEXT_atarraya_tipCuerAg <- iNEXT(apply(mat_atarraya_tipCuerAg,1,function(x)x[x>0]),datatype = "abundance")
+```
+
+
+```{r atarrayaCurvaRiqueza, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con atarraya, calculos basados en la abundancia de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_atarraya_tipCuerAg,type=1,col=colList$aquatic_habitats$color,orderAssemblage = colList$aquatic_habitats$habitat_spa, labY='Riqueza', title="Atarraya")
+A
+```
+
+```{r echo=F}
+est_atarraya_tipCuerAg <-iNEXT_atarraya_tipCuerAg$AsyEst
+tabEst_atarraya_tipCuerAg <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_atarraya_tipCuerAg
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sha_observado, ROUND(Estimator,2) sha_estimado, ROUND(\"s.e.\",2) sha_estimado_se
+  FROM est_atarraya_tipCuerAg
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sim_observado, ROUND(Estimator,2) sim_estimado, ROUND(\"s.e.\",2) sim_estimado_se
+  FROM est_atarraya_tipCuerAg
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_atarraya_tipCuerAg$eventos<- tapply(info_atarraya$nb_event,factor(info_atarraya$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa),sum)
+tabEst_atarraya_tipCuerAg$completude<-(tabEst_atarraya_tipCuerAg$riq_observado/tabEst_atarraya_tipCuerAg$riq_estimado)*100
+data.frame(
+  tipCurAg=tabEst_atarraya_tipCuerAg$`Tipo cuerpo de agua`,
+  eventos=tabEst_atarraya_tipCuerAg$eventos,
+  comp=paste(round(tabEst_atarraya_tipCuerAg$completude,2),"%"),
+  riq_observado=tabEst_atarraya_tipCuerAg$riq_observado,
+  riq_estimado=paste(tabEst_atarraya_tipCuerAg$riq_estimado,tabEst_atarraya_tipCuerAg$riq_estimado_se,sep=" ± "),
+  sha_observado=tabEst_atarraya_tipCuerAg$sha_observado,
+  sha_estimado=paste(tabEst_atarraya_tipCuerAg$sha_estimado,tabEst_atarraya_tipCuerAg$sha_estimado_se,sep=" ± "),
+  sim_observado=tabEst_atarraya_tipCuerAg$sim_observado,
+  sim_estimado=paste(tabEst_atarraya_tipCuerAg$sim_estimado,tabEst_atarraya_tipCuerAg$sim_estimado_se,sep=" ± ")
+)%>%
+  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (atarraya)")%>%
+  add_header_above(c(" "=3, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")%>%
+   ##column_spec(2:9,width="cm")%>%
+  column_spec(1:9,width="1.6cm")
+```
+
+\clearpage
+
+### Arrastre
+#### Estimación por sampling unit
+
+```{r arrastre_iNEXT_SU, warning=F}
+dataFor_iNEXT_SU<-apply(import_pece$pece_dragnet_matrix,1,function(x)sort(x[x>0],decreasing=T))
+arrastre_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
+```
+
+
+```{r warning=F,echp=F}
+## Formatting the table of estimation
+est_arrastre_su<-arrastre_iNEXT_SU$AsyEst
+cbind(
+sqldf(
+  "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_arrastre_su
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_arrastre_su
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_arrastre_su
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (arrastre)")%>%
+  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")
+```
+
+\clearpage
+
+#### Curvas y estimaciones por tipo de cuerpo de agua
+
+```{r arrastre_iNEXT}
+matrix_arrastre <- import_pece$pece_dragnet_matrix
+info_arrastre <- import_pece$pece_info_sampling_dragnet
+info_arrastre$tipo_cuerp_agua <- factor(info_arrastre$tipo_cuerp_agua,levels = colList$aquatic_habitats$habitat_spa)
+(nbSU<-table(info_arrastre$tipo_cuerp_agua))
+tip_cuerpo_agua<-info_arrastre$tipo_cuerp_agua[match(rownames(matrix_arrastre),table = info_arrastre$anh_tempo)]
+sum_abu <- by(matrix_arrastre,tip_cuerpo_agua,colSums)
+mat_arrastre_tipCuerAg <- Reduce(rbind,sum_abu)
+rownames(mat_arrastre_tipCuerAg) <- names(sum_abu)
+iNEXT_arrastre_tipCuerAg <- iNEXT(apply(mat_arrastre_tipCuerAg,1,function(x)x[x>0]),datatype = "abundance")
+```
+
+
+```{r arrastreCurvaRiqueza, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con arrastre, calculos basados en la abundancia de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_arrastre_tipCuerAg,type=1,col=colList$aquatic_habitats$color,orderAssemblage = colList$aquatic_habitats$habitat_spa, labY='Riqueza', title="Arrastre")
+A
+```
+
+```{r echo=F}
+est_arrastre_tipCuerAg <-iNEXT_arrastre_tipCuerAg$AsyEst
+tabEst_arrastre_tipCuerAg <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_arrastre_tipCuerAg
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sha_observado, ROUND(Estimator,2) sha_estimado, ROUND(\"s.e.\",2) sha_estimado_se
+  FROM est_arrastre_tipCuerAg
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sim_observado, ROUND(Estimator,2) sim_estimado, ROUND(\"s.e.\",2) sim_estimado_se
+  FROM est_arrastre_tipCuerAg
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_arrastre_tipCuerAg$eventos<- tapply(info_arrastre$nb_event,factor(info_arrastre$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa),sum)
+tabEst_arrastre_tipCuerAg$completude<-(tabEst_arrastre_tipCuerAg$riq_observado/tabEst_arrastre_tipCuerAg$riq_estimado)*100
+data.frame(
+  tipCurAg=tabEst_arrastre_tipCuerAg$`Tipo cuerpo de agua`,
+  eventos=tabEst_arrastre_tipCuerAg$eventos,
+  comp=paste(round(tabEst_arrastre_tipCuerAg$completude,2),"%"),
+  riq_observado=tabEst_arrastre_tipCuerAg$riq_observado,
+  riq_estimado=paste(tabEst_arrastre_tipCuerAg$riq_estimado,tabEst_arrastre_tipCuerAg$riq_estimado_se,sep=" ± "),
+  sha_observado=tabEst_arrastre_tipCuerAg$sha_observado,
+  sha_estimado=paste(tabEst_arrastre_tipCuerAg$sha_estimado,tabEst_arrastre_tipCuerAg$sha_estimado_se,sep=" ± "),
+  sim_observado=tabEst_arrastre_tipCuerAg$sim_observado,
+  sim_estimado=paste(tabEst_arrastre_tipCuerAg$sim_estimado,tabEst_arrastre_tipCuerAg$sim_estimado_se,sep=" ± ")
+)%>%
+  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (arrastre)")%>%
+  add_header_above(c(" "=3, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")%>%
+   ##column_spec(2:9,width="cm")%>%
+  column_spec(1:9,width="1.6cm")
+```
+
+\clearpage
+
+
+
+
+
+### Electropesca
+#### Estimación por sampling unit
+
+```{r electropesca_iNEXT_SU, warning=F}
+dataFor_iNEXT_SU<-apply(import_pece$pece_elec_matrix,1,function(x)sort(x[x>0],decreasing=T))
+electropesca_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
+```
+
+
+```{r echo=F}
+## Formatting the table of estimation
+est_electropesca_su<-electropesca_iNEXT_SU$AsyEst
+cbind(
+sqldf(
+  "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_electropesca_su
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_electropesca_su
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_electropesca_su
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (electropesca)")%>%
+  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")
+```
+
+
+\clearpage
+
+#### Curvas y estimaciones por tipo de cuerpo de agua
+
+```{r electropesca_iNEXT}
+matrix_electropesca <- import_pece$pece_elec_matrix
+info_electropesca <- import_pece$pece_info_sampling_electric
+info_electropesca$tipo_cuerp_agua <- factor(info_electropesca$tipo_cuerp_agua,levels = colList$aquatic_habitats$habitat_spa)
+(nbSU<-table(info_electropesca$tipo_cuerp_agua))
+tip_cuerpo_agua<-info_electropesca$tipo_cuerp_agua[match(rownames(matrix_electropesca),table = info_electropesca$anh_tempo)]
+sum_abu <- by(matrix_electropesca,tip_cuerpo_agua,colSums)
+mat_electropesca_tipCuerAg <- Reduce(rbind,sum_abu)
+rownames(mat_electropesca_tipCuerAg) <- names(sum_abu)[sapply(sum_abu,length)>0]
+iNEXT_electropesca_tipCuerAg <- iNEXT(apply(mat_electropesca_tipCuerAg,1,function(x)x[x>0]),datatype = "abundance")
+```
+
+
+```{r electropescaCurvaRiqueza, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con electropesca, calculos basados en la abundancia de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_electropesca_tipCuerAg,type=1,col=colList$aquatic_habitats$color,orderAssemblage = colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_electropesca$tipo_cuerp_agua], labY='Riqueza', title="Electropesca")
+A
+```
+
+```{r echo=F}
+est_electropesca_tipCuerAg <-iNEXT_electropesca_tipCuerAg$AsyEst
+tabEst_electropesca_tipCuerAg <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_electropesca_tipCuerAg
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sha_observado, ROUND(Estimator,2) sha_estimado, ROUND(\"s.e.\",2) sha_estimado_se
+  FROM est_electropesca_tipCuerAg
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sim_observado, ROUND(Estimator,2) sim_estimado, ROUND(\"s.e.\",2) sim_estimado_se
+  FROM est_electropesca_tipCuerAg
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_electropesca_tipCuerAg$eventos<- tapply(info_electropesca$nb_event,factor(info_electropesca$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_electropesca$tipo_cuerp_agua]),sum)
+tabEst_electropesca_tipCuerAg$completude<-(tabEst_electropesca_tipCuerAg$riq_observado/tabEst_electropesca_tipCuerAg$riq_estimado)*100
+data.frame(
+  tipCurAg=tabEst_electropesca_tipCuerAg$`Tipo cuerpo de agua`,
+  eventos=tabEst_electropesca_tipCuerAg$eventos,
+  comp=paste(round(tabEst_electropesca_tipCuerAg$completude,2),"%"),
+  riq_observado=tabEst_electropesca_tipCuerAg$riq_observado,
+  riq_estimado=paste(tabEst_electropesca_tipCuerAg$riq_estimado,tabEst_electropesca_tipCuerAg$riq_estimado_se,sep=" ± "),
+  sha_observado=tabEst_electropesca_tipCuerAg$sha_observado,
+  sha_estimado=paste(tabEst_electropesca_tipCuerAg$sha_estimado,tabEst_electropesca_tipCuerAg$sha_estimado_se,sep=" ± "),
+  sim_observado=tabEst_electropesca_tipCuerAg$sim_observado,
+  sim_estimado=paste(tabEst_electropesca_tipCuerAg$sim_estimado,tabEst_electropesca_tipCuerAg$sim_estimado_se,sep=" ± ")
+)%>%
+  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (electropesca)")%>%
+  add_header_above(c(" "=3, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")%>%
+   ##column_spec(2:9,width="cm")%>%
+  column_spec(1:9,width="1.6cm")
+```
+
+
+\clearpage
+
+
+### Trasmallo
+#### Estimación por sampling unit
+
+```{r trasmallo_iNEXT_SU, warning=F}
+dataFor_iNEXT_SU<-apply(import_pece$pece_gillnets_matrix,1,function(x)sort(x[x>0],decreasing=T))
+trasmallo_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
+```
+
+
+```{r echo=F}
+## Formatting the table of estimation
+est_trasmallo_su<-trasmallo_iNEXT_SU$AsyEst
+cbind(
+sqldf(
+  "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_trasmallo_su
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_trasmallo_su
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_trasmallo_su
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (trasmallo)")%>%
+  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")
+```
+
+\clearpage
+
+#### Curvas y estimaciones por tipo de cuerpo de agua
+
+```{r trasmallo_iNEXT}
+matrix_trasmallo <- import_pece$pece_gillnets_matrix
+info_trasmallo <- import_pece$pece_info_sampling_gillnet
+info_trasmallo$tipo_cuerp_agua <- factor(info_trasmallo$tipo_cuerp_agua,levels = colList$aquatic_habitats$habitat_spa)
+(nbSU<-table(info_trasmallo$tipo_cuerp_agua))
+tip_cuerpo_agua<-info_trasmallo$tipo_cuerp_agua[match(rownames(matrix_trasmallo),table = info_trasmallo$anh_tempo)]
+sum_abu <- by(matrix_trasmallo,tip_cuerpo_agua,colSums)
+mat_trasmallo_tipCuerAg <- Reduce(rbind,sum_abu)
+rownames(mat_trasmallo_tipCuerAg) <- names(sum_abu)[sapply(sum_abu,length)>0]
+iNEXT_trasmallo_tipCuerAg <- iNEXT(apply(mat_trasmallo_tipCuerAg,1,function(x)x[x>0]),datatype = "abundance")
+```
+
+
+```{r trasmalloCurvaRiqueza, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con trasmallo, calculos basados en la abundancia de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_trasmallo_tipCuerAg,type=1,col=colList$aquatic_habitats$color,orderAssemblage = colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_trasmallo$tipo_cuerp_agua], labY='Riqueza', title="Trasmallo")
+A
+```
+
+```{r echo=F}
+est_trasmallo_tipCuerAg <-iNEXT_trasmallo_tipCuerAg$AsyEst
+tabEst_trasmallo_tipCuerAg <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_trasmallo_tipCuerAg
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sha_observado, ROUND(Estimator,2) sha_estimado, ROUND(\"s.e.\",2) sha_estimado_se
+  FROM est_trasmallo_tipCuerAg
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sim_observado, ROUND(Estimator,2) sim_estimado, ROUND(\"s.e.\",2) sim_estimado_se
+  FROM est_trasmallo_tipCuerAg
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_trasmallo_tipCuerAg$eventos<- tapply(info_trasmallo$nb_event,factor(info_trasmallo$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_trasmallo$tipo_cuerp_agua]),sum)
+tabEst_trasmallo_tipCuerAg$completude<-(tabEst_trasmallo_tipCuerAg$riq_observado/tabEst_trasmallo_tipCuerAg$riq_estimado)*100
+data.frame(
+  tipCurAg=tabEst_trasmallo_tipCuerAg$`Tipo cuerpo de agua`,
+  eventos=tabEst_trasmallo_tipCuerAg$eventos,
+  comp=paste(round(tabEst_trasmallo_tipCuerAg$completude,2),"%"),
+  riq_observado=tabEst_trasmallo_tipCuerAg$riq_observado,
+  riq_estimado=paste(tabEst_trasmallo_tipCuerAg$riq_estimado,tabEst_trasmallo_tipCuerAg$riq_estimado_se,sep=" ± "),
+  sha_observado=tabEst_trasmallo_tipCuerAg$sha_observado,
+  sha_estimado=paste(tabEst_trasmallo_tipCuerAg$sha_estimado,tabEst_trasmallo_tipCuerAg$sha_estimado_se,sep=" ± "),
+  sim_observado=tabEst_trasmallo_tipCuerAg$sim_observado,
+  sim_estimado=paste(tabEst_trasmallo_tipCuerAg$sim_estimado,tabEst_trasmallo_tipCuerAg$sim_estimado_se,sep=" ± ")
+)%>%
+  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (trasmallo)")%>%
+  add_header_above(c(" "=3, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")%>%
+   ##column_spec(2:9,width="cm")%>%
+  column_spec(1:9,width="1.6cm")
+```
+
+\clearpage
+
+
+
+## Todos artes de pesca
+
+
+
+
+### Estimación por sampling unit
+
+Para poder hacer las estimaciones de iNEXT con una matrice de incidencia, necesitamos la matriz de incidencia, es decir, en lugar de una matriz de presencia/ausencia, una matriz que da el numero de eventos que resultaron en la presencia de la especie.
+
+A escala de la ANH/Temporada, la estimación estaría basada en números de muestreo de 1 a 4.
+Desafortunadamente, la función iNEXT resulta en un error, probablemente debido a configuraciones aleatorias ilógicas en el proceso de bootstap de la función (con los sitios teniendo pocos muestreos, 2 o 3 la probabilidad de esos problemas es alta).
+Por esta razón, no se puede aplicar la función iNEXT para estimar la riqueza de los ANH/temporadas utilizando la matriz de incidencias.
+
+
+
+```r
+info_todo <- import_pece$pece_info_sampling_total
+dataFor_iNEXT_SU <- lapply(rownames(import_pece$pece_incidence_matrix),function(x,it,im){
+  return(c(it[it$anh_tempo==x,"nb_event"],im[x,im[x,]>0][order(im[x,im[x,]>0])]))
+},it=info_todo,im=import_pece$pece_incidence_matrix)
+names(dataFor_iNEXT_SU)<-rownames(import_pece$pece_incidence_matrix)
+dataFor_iNEXT_SU<-dataFor_iNEXT_SU[sapply(dataFor_iNEXT_SU,length)>2&sapply(dataFor_iNEXT_SU,function(x)x[1])>1]
+todo_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "incidence_freq",q=0,endpoint=4,nboot=20,size=1:10)
+```
+
+<!--
+```r
+echo=F}
+## Formatting the table of estimation
+est_todo_su<-todo_iNEXT_SU$AsyEst
+cbind(
+sqldf(
+  "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_todo_su
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_todo_su
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
+  FROM est_todo_su
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (todo)")%>%
+  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable_styling(latex_options = "striped")
+```
+
+\clearpage
+-->
+
+
+### Curvas y estimaciones por tipo de cuerpo de agua
+
+```{r todo_iNEXT}
+# las 2 temporadas juntos
+info_todo <- import_pece$pece_info_sampling_total
+matrix_todo <- import_pece$pece_incidence_matrix
+info_todo$tipo_cuerp_agua <- factor(info_todo$tipo_cuerp_agua,levels = colList$aquatic_habitats$habitat_spa)
+(nbSU<-tapply(info_todo$nb_event,info_todo$tipo_cuerp_agua,sum))
+tip_cuerpo_agua<-info_todo$tipo_cuerp_agua[match(rownames(matrix_todo),table = info_todo$anh_tempo)]
+sum_abu <- by(matrix_todo,tip_cuerpo_agua,colSums)
+mat_todo_tipCuerAg <- Reduce(rbind,sum_abu)
+rownames(mat_todo_tipCuerAg) <- names(sum_abu)[sapply(sum_abu,length)>0]
+iNEXT_todo_tipCuerAg <- iNEXT(apply(cbind(nbSU,mat_todo_tipCuerAg),1,function(x)x[x>0]),datatype = "incidence_freq",endpoint = 100,q=0)
+
+# T1
+matrix_todo_t1 <- matrix_todo[grep("T1",rownames(matrix_todo)),]
+(nbSU_t1<-tapply(info_todo$nb_event[grep("T1",info_todo$anh_tempo)],info_todo$tipo_cuerp_agua[grep("T1",info_todo$anh_tempo)],sum))
+tip_cuerpo_agua_t1<-info_todo$tipo_cuerp_agua[match(rownames(matrix_todo_t1),table = info_todo$anh_tempo)]
+sum_abu_t1 <- by(matrix_todo_t1,tip_cuerpo_agua_t1,colSums)
+mat_todo_tipCuerAg_t1 <- Reduce(rbind,sum_abu_t1)
+rownames(mat_todo_tipCuerAg_t1) <- names(sum_abu_t1)[sapply(sum_abu_t1,length)>0]
+iNEXT_todo_tipCuerAg_t1 <- iNEXT(apply(cbind(nbSU_t1,mat_todo_tipCuerAg_t1),1,function(x)x[x>0]),datatype = "incidence_freq",endpoint = 100,q=0)
+
+# T2
+matrix_todo_t2 <- matrix_todo[grep("T2",rownames(matrix_todo)),]
+(nbSU_t2<-tapply(info_todo$nb_event[grep("T2",info_todo$anh_tempo)],info_todo$tipo_cuerp_agua[grep("T2",info_todo$anh_tempo)],sum))
+tip_cuerpo_agua_t2<-info_todo$tipo_cuerp_agua[match(rownames(matrix_todo_t2),table = info_todo$anh_tempo)]
+sum_abu_t2 <- by(matrix_todo_t2,tip_cuerpo_agua_t2,colSums)
+mat_todo_tipCuerAg_t2 <- Reduce(rbind,sum_abu_t2)
+rownames(mat_todo_tipCuerAg_t2) <- names(sum_abu_t2)[sapply(sum_abu_t2,length)>0]
+iNEXT_todo_tipCuerAg_t2 <- iNEXT(apply(cbind(nbSU_t2,mat_todo_tipCuerAg_t2),1,function(x)x[x>0]),datatype = "incidence_freq",endpoint = 100,q=0)
+
+```
+
+
+```{r todoCurvaRiqueza_t1_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con todo los artes de pesca, calculos basados en la incidencia/frecuencia de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_todo_tipCuerAg,type=1,col=colList$aquatic_habitats$color,orderAssemblage = colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua], labY='Riqueza', labX='Número de muestreos')
+A
+```
+
+
+```{r todoCurvaRiqueza_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con todos los artes de pesca, calculos basados en la incidencia/frecuencia de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_todo_tipCuerAg_t1,type=1,col=colList$aquatic_habitats$color,orderAssemblage = colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua], labY='Riqueza', labX='Número de muestreos',title="Temporada de aguas altas")
+A
+```
+
+```{r todoCurvaRiqueza_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con todos los artes de pesca, calculos basados en la incidencia/frecuencia de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_todo_tipCuerAg_t2,type=1,col=colList$aquatic_habitats$color,orderAssemblage = colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua], labY='Riqueza', labX='Número de muestreos', title="Temporada de aguas bajas")
+A
+```
+
+```{r echo=F}
+est_todo_tipCuerAg <-iNEXT_todo_tipCuerAg$AsyEst
+tabEst_todo_tipCuerAg <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_todo_tipCuerAg
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_todo_tipCuerAg$eventos<- tapply(info_todo$nb_event,factor(info_todo$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua]),sum)
+tabEst_todo_tipCuerAg$completude<-(tabEst_todo_tipCuerAg$riq_observado/tabEst_todo_tipCuerAg$riq_estimado)*100
+
+est_todo_tipCuerAg_t1 <-iNEXT_todo_tipCuerAg_t1$AsyEst
+tabEst_todo_tipCuerAg_t1 <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_todo_tipCuerAg_t1
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_todo_tipCuerAg_t1$eventos<- tapply(info_todo$nb_event[grep("T1",info_todo$anh_tempo)],factor(info_todo$tipo_cuerp_agua[grep("T1",info_todo$anh_tempo)],colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua]),sum)
+tabEst_todo_tipCuerAg_t1$completude<-(tabEst_todo_tipCuerAg_t1$riq_observado/tabEst_todo_tipCuerAg_t1$riq_estimado)*100
+
+est_todo_tipCuerAg_t2 <-iNEXT_todo_tipCuerAg_t2$AsyEst
+tabEst_todo_tipCuerAg_t2 <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_todo_tipCuerAg_t2
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_todo_tipCuerAg_t2$eventos<- tapply(info_todo$nb_event[grep("T2",info_todo$anh_tempo)],factor(info_todo$tipo_cuerp_agua[grep("T2",info_todo$anh_tempo)],colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua]),sum)
+tabEst_todo_tipCuerAg_t2$completude<-(tabEst_todo_tipCuerAg_t2$riq_observado/tabEst_todo_tipCuerAg_t2$riq_estimado)*100
+
+rbind(
+data.frame(
+  temporada='Ambas',
+  tipCurAg=tabEst_todo_tipCuerAg$`Tipo cuerpo de agua`,
+  eventos=tabEst_todo_tipCuerAg$eventos,
+  comp=paste(round(tabEst_todo_tipCuerAg$completude,2),"%"),
+  riq_observado=tabEst_todo_tipCuerAg$riq_observado,
+  riq_estimado=paste(tabEst_todo_tipCuerAg$riq_estimado,tabEst_todo_tipCuerAg$riq_estimado_se,sep=" ± ")
+ ),
+data.frame(
+  temporada='Aguas altas',
+  tipCurAg=tabEst_todo_tipCuerAg_t1$`Tipo cuerpo de agua`,
+  eventos=tabEst_todo_tipCuerAg_t1$eventos,
+  comp=paste(round(tabEst_todo_tipCuerAg_t1$completude,2),"%"),
+  riq_observado=tabEst_todo_tipCuerAg_t1$riq_observado,
+  riq_estimado=paste(tabEst_todo_tipCuerAg_t1$riq_estimado,tabEst_todo_tipCuerAg_t1$riq_estimado_se,sep=" ± ")
+ ),
+data.frame(
+  temporada='Aguas bajas',
+  tipCurAg=tabEst_todo_tipCuerAg_t2$`Tipo cuerpo de agua`,
+  eventos=tabEst_todo_tipCuerAg_t2$eventos,
+  comp=paste(round(tabEst_todo_tipCuerAg_t2$completude,2),"%"),
+  riq_observado=tabEst_todo_tipCuerAg_t2$riq_observado,
+  riq_estimado=paste(tabEst_todo_tipCuerAg_t2$riq_estimado,tabEst_todo_tipCuerAg_t2$riq_estimado_se,sep=" ± ")
+ )
+)%>%
+  kable(booktabs=T, longtable=T,col.names = c("Temporada","Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (todos artes de pesca) desde la matriz de incidencia")%>%
+  collapse_rows(columns = 1, valign = "middle", latex_hline = "major")%>%
+  add_header_above(c(" "=4, "q0 (riqueza)" = 2))
+```
+
+\clearpage
+
+
+### Zonas
+```{r todo_iNEXT_zona}
+matrix_todo <- import_pece$pece_incidence_matrix
+info_todo$zone <- factor(info_todo$zone,levels = colList$zonas$platform)
+(nbSU<-tapply(info_todo$nb_event,info_todo$zone,sum))
+zona<-info_todo$zone[match(rownames(matrix_todo),table = info_todo$anh_tempo)]
+sum_abu <- by(matrix_todo,zona,colSums)
+mat_todo_zona <- Reduce(rbind,sum_abu)
+rownames(mat_todo_zona) <- names(sum_abu)[sapply(sum_abu,length)>0]
+iNEXT_todo_zona <- iNEXT(apply(cbind(nbSU,mat_todo_zona),1,function(x)x[x>0]),datatype = "incidence_freq",endpoint = 250,q=0)
+```
+
+```{r todoCurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con todos los artes de pesca, calculos basados en la incidencia/frecuencia de las especies colectadas. Representación de las zonas"}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_todo_zona,type=1,col=colList$zonas$color,orderAssemblage = colList$zonas$platform[colList$zonas$platform %in% info_todo$zone], labY='Riqueza', labX='Número de muestreos')
+A
+```
+
+```{r echo=F}
+est_todo_zona <-iNEXT_todo_zona$AsyEst
+tabEst_todo_zona <-
+sqldf(
+  "SELECT Assemblage \"Zona\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_todo_zona
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+tabEst_todo_zona$eventos<- tapply(info_todo$nb_event,factor(info_todo$zone,colList$zonas$platform[colList$zonas$platform %in% info_todo$zone]),sum)
+tabEst_todo_zona$completude<-(tabEst_todo_zona$riq_observado/tabEst_todo_zona$riq_estimado)*100
+
+data.frame(
+  tipCurAg=tabEst_todo_zona$Zona,
+  eventos=tabEst_todo_zona$eventos,
+  comp=paste(round(tabEst_todo_zona$completude,2),"%"),
+  riq_observado=tabEst_todo_zona$riq_observado,
+  riq_estimado=paste(tabEst_todo_zona$riq_estimado,tabEst_todo_zona$riq_estimado_se,sep=" ± ")
+ )%>%
+  kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por zonas (todos artes de pesca) desde la matriz de incidencia")%>%
+  collapse_rows(columns = 1, valign = "middle", latex_hline = "major")%>%
+  add_header_above(c(" "=3, "q0 (riqueza)" = 2))
+```
+
+# Curvas de rango Abundancia/Incidencia
+
+## Todos Artes de pesca (incidencia)
+
+Se utiliza la matriz de incidencia (número de artes de pesca que encontrarón la especie, por ANH/temporada)
+
+Nota: con la incidencia, no se utiliza la escala log.
+
+
+```{r rangoIncidenciaTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia con todos las artes de pesca"}
+nb_sp<-15
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(matrix_todo),decreasing = T)[1:nb_sp]
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+points(colSums(matrix_todo[grep("T1",rownames(matrix_todo)),names(sum_incidencia)]),type="b",pch=24,bg=colList$tempo$color[colList$tempo$temporada=="Aguas altas"],lty=2)
+points(colSums(matrix_todo[grep("T2",rownames(matrix_todo)),names(sum_incidencia)]),type="b",pch=25,bg=colList$tempo$color[colList$tempo$temporada=="Aguas bajas"],lty=2)
+legend("topright",pch=c(15,24,25),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas",colList$tempo$temporada),title="Temporada",bty="n")
+```
+
+## Mostrando los artes de pesca
+
+
+```{r rangoIncidenciaTotal_artesP, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia con todas las artes de pesca, y separadas por arte de pesca"}
+nb_sp<-15
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(matrix_todo),decreasing = T)[1:nb_sp]
+
+p_sum_atarraya<-apply(matrix_atarraya,2,function(x)length(x[x>0]))
+sum_atarraya <- rep(0,nb_sp); names(sum_atarraya) <- names(sum_incidencia)
+sum_atarraya[names(sum_incidencia)%in%names(sum_atarraya)] <- p_sum_atarraya[names(sum_atarraya)[names(sum_incidencia)%in%names(sum_atarraya)]]
+sum_atarraya[is.na(sum_atarraya)]<-0
+
+p_sum_arrastre<-apply(matrix_arrastre,2,function(x)length(x[x>0]))
+sum_arrastre <- rep(0,nb_sp); names(sum_arrastre) <- names(sum_incidencia)
+sum_arrastre[names(sum_incidencia)%in%names(sum_arrastre)] <- p_sum_arrastre[names(sum_arrastre)[names(sum_incidencia)%in%names(sum_arrastre)]]
+sum_arrastre[is.na(sum_arrastre)]<-0
+
+p_sum_electropesca<-apply(matrix_electropesca,2,function(x)length(x[x>0]))
+sum_electropesca <- rep(0,nb_sp); names(sum_electropesca) <- names(sum_incidencia)
+sum_electropesca[names(sum_incidencia)%in%names(sum_electropesca)] <- p_sum_electropesca[names(sum_electropesca)[names(sum_incidencia)%in%names(sum_electropesca)]]
+sum_electropesca[is.na(sum_electropesca)]<-0
+
+p_sum_trasmallo<-apply(matrix_trasmallo,2,function(x)length(x[x>0]))
+sum_trasmallo <- rep(0,nb_sp); names(sum_trasmallo) <- names(sum_incidencia)
+sum_trasmallo[names(sum_incidencia)%in%names(sum_trasmallo)] <- p_sum_trasmallo[names(sum_trasmallo)[names(sum_incidencia)%in%names(sum_trasmallo)]]
+sum_trasmallo[is.na(sum_trasmallo)]<-0
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+COL<-rainbow(4)
+points(sum_atarraya,type="b",bg=COL[1],pch=21,lty=2)
+points(sum_arrastre,type="b",bg=COL[2],pch=22,lty=2)
+points(sum_electropesca,type="b",bg=COL[3],pch=23,lty=2)
+points(sum_trasmallo,type="b",bg=COL[4],pch=24,lty=2)
+legend("topright",pch=c(15,21:24),col="black",pt.bg=c(NA,COL),legend=c("total", "Atarraya","Arrastre","Electropesca","Trasmallo"),title="Arte de pesca",bty="n")
+```
+
+
+## Mostrando los tipos de cuerpo de agua
+
+
+```{r rangoIncidenciaTotal_tipCuerAg, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia con todas las artes de pesca, y separadas por tipos de cuerpo de agua"}
+nb_sp<-15
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(matrix_todo),decreasing = T)[1:nb_sp]
+tipCuerpAg<-factor(info_todo$tipo_cuerp_agua[match(rownames(matrix_todo),table= info_todo$anh_tempo)],levels=colList$aquatic_habitats$habitat_spa)
+sum_incidencias_tipCuerpAg <- Reduce(rbind,by(matrix_todo[,names(sum_incidencia)],tipCuerpAg,colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_tipCuerpAg))
+{
+  points(sum_incidencias_tipCuerpAg[i,],type="b",col=colList$aquatic_habitats$color[i],bg=colList$aquatic_habitats$color[i],pch=21,lty=2)
+}
+
+legend("topright",pch=c(15,rep(21,4)),pt.bg=c(NA,colList$aquatic_habitats$color),col=c("black",colList$aquatic_habitats$color),legend=c("total", colList$aquatic_habitats$habitat_spa),title="Tipo de cuerpo de agua",bty="n")
+```
+
+## Mostrando las zonas
+
+
+```{r rangoIncidenciaTotal_zonas, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia con todas las artes de pesca, y separadas por zonas"}
+nb_sp<-15
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(matrix_todo),decreasing = T)[1:nb_sp]
+zonas<-factor(info_todo$zone[match(rownames(matrix_todo),table= info_todo$anh_tempo)],levels=colList$zonas$platform)
+sum_incidencias_zonas <- Reduce(rbind,by(matrix_todo[,names(sum_incidencia)],zonas,colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_zonas))
+{
+  points(sum_incidencias_zonas[i,],type="b",col=colList$zonas$color[i],bg=colList$zonas$color[i],pch=colList$zonas$pch[i],lty=2)
+}
+
+legend("topright",pch=c(15,colList$zonas$pch),pt.bg=c(NA,colList$zonas$color),col=c("black",colList$zonas$color),legend=c("total", colList$zonas$platform),title="Zonas",bty="n")
+```
+
+## Por arte de pesca
+### Atarraya
+
+```{r rangoabundancia_atarraya, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por atarraya"}
+nb_sp<-15
+par(mar = c(10.1,6.5,1,4.1))
+sum_abundancia <- sort(colSums(matrix_atarraya),decreasing = T)[1:nb_sp]
+plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
+ATX <- seq(0,1000,by=10)
+ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
+#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
+show <- ATX%%100==0
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
+points(log10(colSums(matrix_atarraya[grep("T1",rownames(matrix_atarraya)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
+points(log10(colSums(matrix_atarraya[grep("T2",rownames(matrix_atarraya)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
+legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```
+
+### Arrastre
+
+```{r rangoabundancia_arrastre, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por arrastre"}
+nb_sp<-15
+par(mar = c(10.1,6.9,1,4.1))
+sum_abundancia <- sort(colSums(matrix_arrastre),decreasing = T)[1:nb_sp]
+plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
+ATX <- seq(0,2000,by=10)
+ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
+#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
+show <- ATX%%100==0
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
+points(log10(colSums(matrix_arrastre[grep("T1",rownames(matrix_arrastre)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
+points(log10(colSums(matrix_arrastre[grep("T2",rownames(matrix_arrastre)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
+legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```
+
+### Electropesca
+
+```{r rangoabundancia_electropesca, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por electropesca"}
+nb_sp<-15
+par(mar = c(10.1,6.5,1,4.1))
+sum_abundancia <- sort(colSums(matrix_electropesca),decreasing = T)[1:nb_sp]
+plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
+ATX <- seq(0,1000,by=10)
+ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
+#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
+show <- ATX%%100==0
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
+points(log10(colSums(matrix_electropesca[grep("T1",rownames(matrix_electropesca)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
+points(log10(colSums(matrix_electropesca[grep("T2",rownames(matrix_electropesca)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
+legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```
+
+### Trasmallo
+
+No se pueden mostrar las temporadas, porque las abundancias son demasiado bajas
+
+```{r rangoabundancia_trasmallo, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por trasmallo"}
+nb_sp<-15
+par(mar = c(10.1,6.5,1,4.1))
+sum_abundancia <- sort(colSums(matrix_trasmallo),decreasing = T)[1:nb_sp]
+plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
+ATX <- seq(0,1000,by=5)
+ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
+#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
+show <- ATX%%10==0
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
+#points(log10(colSums(matrix_trasmallo[grep("T1",rownames(matrix_trasmallo)),names(sum_abundancia)])),type="b",pch=24,bg="grey",lty=2)
+#points(log10(colSums(matrix_trasmallo[grep("T2",rownames(matrix_trasmallo)),names(sum_abundancia)])),type="b",pch=25,bg="grey",lty=2)
+#legend("topright",pch=c(15,24,25),col="black",pt.bg="grey",legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```
+
+# Diversidad beta (NMDS)
+## Matriz de occurrencia total (todas las artes de pesca)
+
+```{r nmds_tot_}
+set.seed(198)# in order to be able to obtain the same results in two different runs
+require(vegan)
+matrix_todo_ocurrencia <- import_pece$pece_occurrence_matrix
+(nmds_tot <- metaMDS(matrix_todo_ocurrencia,distance='jaccard',trymax = 1000,trace=F,k=2))
+nmds_tot_scores<-scores(nmds_tot)
+```
+
+
+```{r nmds_tot_stressplot, fig.cap="\\label{ndms_tot_stressplot} Grafica de estrés de la NMDS utilizando la distancia de Jaccard sobre la matriz de incidencia"}
+A <- stressplot(nmds_tot)
+```
+
+*******************
+
+**Nota sobre la calidad de representación de la NMDS**
+
+En la figura \ref{ndms_tot_stressplot}, se muestra el "estrés" del metodo aplicado sobre la matriz de occurrencia de peces.
+Las NMDS no tienen una homogeneización de las normas del espacio, es decir, una distancia de 2 cm en un lado del espacio no tiene obligatoriamente  el mismo sentido que una distancia de 2cm en otro lado del espacio.
+Lo que intenta optimizar la NMDS es el orden de las distancias entre los puntos en la matriz de distancia entre composiciones (acá matriz de distancia de jaccard) y las distancias en el espacio del análisis.
+El grafico de la figura \ref{ndms_tot_stressplot} muestra el resultado de este esfuerzo de optimización.
+
+<!--En el caso de la matriz de occurrencia de peces, el metodo no encuentra una solución convergente, es decir: el algoritmo no obtiene resultados parecidos después de haber intentado varias configuraciones aleatorias.-->
+Acá el estrés es muy limitado, con un valor de **`r round(nmds_tot$stress,2)`** (es decir, un $`r round(nmds_tot$stress*100)`%$ de las distancias no están el mismo orden de las distancias de jaccard), y una correlación lineal mostrando un $R^2$ de 
+`r round(cor(A$y,A$yf,method="pearson")^2,2)`. <!--Así se puede utilizar esta NMDS con 2 dimensiones de espacio, con las precauciones necesarías de tomar en cuenta la no-estabilidad de los resultados...-->
+
+Anotar que el resultado del $R^2$ anterior tiene que analizarse con cuidado, hay mucho más distancia entre composiciones que de datos reales, y no se puede comparar a un $R^2$ clasico, las distancias no cumplen la condiciones de independencia que permiten utilizar los parametros clasicos en estadística.
+
+******************
+
+### Representación basica
+
+```{r nmds_tot_plot_basico,fig.height=10,fig.width=10}
+par(mar=rep(1,4))
+anh<-factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(nmds_tot_scores$sites)))
+info_todo$tipo_cuerp_agua <- factor(info_todo$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+m_site<-match(rownames(nmds_tot_scores$sites),table=info_todo$anh_tempo)
+tipCuerAg<-info_todo$tipo_cuerp_agua[m_site]
+info_todo$zone <- factor(info_todo$zone,colList$zonas$platform)
+zonas<-info_todo$zone[m_site]
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(nmds_tot_scores$sites)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+PCH <- colList$tempo$pch[tempo]
+COL <- colList$aquatic_habitats$color[info_todo$tipo_cuerp_agua[m_site]]
+plot(nmds_tot,display=c("species","sites"),yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+points(nmds_tot,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
+legend("bottomright",pch=colList$tempo$pch,legend=colList$tempo$temporada,title="temporada",bty="n")
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title="Cuerpo agua",bty="n")
+
+```
+
+\clearpage
+
+
+### Representación de las especies
+
+```{r nmds_tot_species,fig.height=15,fig.width=15}
+plot(nmds_tot,display=c("site"),yaxt="n",xaxt="n",xlab=NA,ylab=NA, ylim=range(nmds_tot_scores$species[,2]),xlim=range(nmds_tot_scores$species[,1]))
+text(nmds_tot,display= "species")
+```
+\clearpage
+
+### Representación de las unidades de muestreo
+
+```{r nmds_tot_anh_tempo,fig.height=15,fig.width=15}
+plot(nmds_tot,display=c("species"),yaxt="n",xaxt="n",xlab=NA,ylab=NA,
+     ylim=range(nmds_tot_scores$sites[,2]),xlim=range(nmds_tot_scores$sites[,1]))
+text(nmds_tot,display="site")
+```
+
+\clearpage
+
+### Representación de las temporadas
+
+```{r nmds_tot_spider_temporada,fig.height=15,fig.width=15, fig.cap="Representación de las temporadas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_tot,groups = anh,col="grey")
+ordispider(nmds_tot,groups = tempo,col=colList$tempo$color,lwd=4)
+legend("topright",fill=colList$tempo$color,legend=colList$tempo$temporada, title="Temporada",cex=2)
+```
+
+```{r nmds_tot_hull_temporada,fig.height=15,fig.width=15, fig.cap="Representación de las temporadas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,display="site",type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+
+ordispider(nmds_tot,groups = anh,col="grey")
+ordihull(nmds_tot,groups = tempo,col=colList$tempo$color,lwd=4,draw="polygon",border=colList$tempo$color,alpha=50)
+points(nmds_tot,display="site",bg=colList$tempo$color[tempo],col=colList$tempo$color[tempo],pch=22,cex=1.5)
+legend("topright",fill=colList$tempo$color,legend=colList$tempo$temporada, title="Temporada",cex=2)
+```
+
+
+\clearpage
+
+
+### Representación de los tipos de cuerpos de agua
+
+```{r nmds_tot_spider_tipCuerAg,fig.height=15,fig.width=15, fig.cap="Representación de los tipos de cuerpo de agua en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_tot,groups = anh,col="grey")
+ordispider(nmds_tot,groups = tipCuerAg,col=colList$aquatic_habitats$color,lwd=4)
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa, title="Tipo de cuerpo de agua",cex=2)
+```
+
+```{r nmds_tot_hull_tipCuerAg,fig.height=15,fig.width=15, fig.cap="Representación de los tipos de cuerpo de agua en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,display="site",type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_tot,groups = anh,col="grey")
+ordihull(nmds_tot,groups = tipCuerAg,col=colList$aquatic_habitats$color,lwd=4,draw="polygon",border=colList$aquatic_habitats$color,alpha=50)
+points(nmds_tot,display="site",bg=colList$aquatic_habitats$color[tipCuerAg],col=colList$aquatic_habitats$color[tipCuerAg],pch=22,cex=1.5)
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa, title="Temporada",cex=2)
+```
+
+
+\clearpage
+
+### Representación de las zonas
+
+```{r nmds_tot_spider_zonas,fig.height=15,fig.width=15, fig.cap="Representación de las zonas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_tot,groups = anh,col="grey")
+ordispider(nmds_tot,groups = zonas,col=colList$zonas$color,lwd=4)
+legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title="Zona",cex=2)
+```
+
+```{r nmds_tot_hull_zonas,fig.height=15,fig.width=15, fig.cap="Representación de las temporadas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,display="site",type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_tot,groups = anh,col="grey")
+ordihull(nmds_tot,groups = zonas, col=colList$zonas$color,lwd=4,draw="polygon",border=colList$zonas$color,alpha=50)
+points(nmds_tot,display="site",bg=colList$zonas$color[zonas],col=colList$zona$color[zonas],pch=22,cex=1.5)
+legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title="Zona",cex=2)
+```
+
+
+\clearpage
+
+
+
+## Por artes de pesca (abundancias)
+### Atarraya
+
+```{r nmds_atarraya_}
+set.seed(19)# in order to be able to obtain the same results in two different runs
+require(vegan)
+matrix_atarraya <- import_pece$pece_castnets_matrix
+(nmds_atarraya <- metaMDS(matrix_atarraya,distance='bray',trymax = 1000,trace=F,k=2))
+nmds_atarraya_scores<-scores(nmds_atarraya)
+```
+
+
+```{r nmds_atarraya_stressplot, fig.cap="\\label{ndms_atarraya_stressplot} Grafica de estrés de la NMDS utilizando la distancia de Bray-Curtis sobre la matriz de abundancia (atarraya)"}
+A <- stressplot(nmds_atarraya)
+```
+
+Estrés: **`r round(nmds_atarraya$stress,2)`** 
+
+### Representación basica
+
+```{r nmds_atarraya_plot_basico,fig.height=10,fig.width=10}
+par(mar=rep(1,4))
+anh<-factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(nmds_atarraya_scores$sites)))
+info_atarraya$tipo_cuerp_agua <- factor(info_atarraya$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+m_site<-match(rownames(nmds_atarraya_scores$sites),table=info_atarraya$anh_tempo)
+tipCuerAg<-info_atarraya$tipo_cuerp_agua[m_site]
+info_atarraya$zone <- factor(info_atarraya$zone,colList$zonas$platform)
+zonas<-info_atarraya$zone[m_site]
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(nmds_atarraya_scores$sites)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+PCH <- colList$tempo$pch[tempo]
+COL <- colList$aquatic_habitats$color[info_atarraya$tipo_cuerp_agua[m_site]]
+plot(nmds_atarraya,display=c("species","sites"),yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+points(nmds_atarraya,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
+legend("bottomright",pch=colList$tempo$pch,legend=colList$tempo$temporada,title="temporada",bty="n")
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title="Cuerpo agua",bty="n")
+
+```
+
+\clearpage
+
+
+### Representación de las especies
+
+```{r nmds_atarraya_species,fig.height=15,fig.width=15}
+plot(nmds_atarraya,display=c("site"),yaxt="n",xaxt="n",xlab=NA,ylab=NA, ylim=range(nmds_atarraya_scores$species[,2]),xlim=range(nmds_atarraya_scores$species[,1]))
+text(nmds_atarraya,display= "species")
+```
+\clearpage
+
+### Representación de las unidades de muestreo
+
+```{r nmds_atarraya_anh_tempo,fig.height=15,fig.width=15}
+plot(nmds_atarraya,display=c("species"),yaxt="n",xaxt="n",xlab=NA,ylab=NA,
+     ylim=range(nmds_atarraya_scores$sites[,2]),xlim=range(nmds_atarraya_scores$sites[,1]))
+text(nmds_atarraya,display="site")
+```
+
+\clearpage
+
+### Representación de las temporadas
+
+```{r nmds_atarraya_spider_temporada,fig.height=15,fig.width=15, fig.cap="Representación de las temporadas en el espacio de la NMDS (atarraya). Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_atarraya,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_atarraya,groups = anh,col="grey")
+ordispider(nmds_atarraya,groups = tempo,col=colList$tempo$color,lwd=4)
+legend("topright",fill=colList$tempo$color,legend=colList$tempo$temporada, title="Temporada",cex=2)
+```
+
+\clearpage
+
+
+### Representación de los tipos de cuerpos de agua
+
+```{r nmds_atarraya_spider_tipCuerAg,fig.height=15,fig.width=15, fig.cap="Representación de los tipos de cuerpo de agua en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_atarraya,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_atarraya,groups = anh,col="grey")
+ordispider(nmds_atarraya,groups = tipCuerAg,col=colList$aquatic_habitats$color,lwd=4)
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa, title="Tipo de cuerpo de agua",cex=2)
+```
+
+
+\clearpage
+
+### Representación de las zonas
+```{r nmds_atarraya_spider_zonas,fig.height=15,fig.width=15, fig.cap="Representación de las zonas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_atarraya,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_atarraya,groups = anh,col="grey")
+ordispider(nmds_atarraya,groups = zonas,col=colList$zonas$color,lwd=4)
+legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title="Zona",cex=2)
+```
+
+
+\clearpage
+
+
+### Arrastre
+
+```{r nmds_arrastre_}
+set.seed(19)# in order to be able to obtain the same results in two different runs
+require(vegan)
+matrix_arrastre <- import_pece$pece_dragnet_matrix
+(nmds_arrastre <- metaMDS(matrix_arrastre,distance='bray',trymax = 1000,trace=F,k=2))
+nmds_arrastre_scores<-scores(nmds_arrastre)
+```
+
+
+```{r nmds_arrastre_stressplot, fig.cap="\\label{ndms_arrastre_stressplot} Grafica de estrés de la NMDS utilizando la distancia de Bray-Curtis sobre la matriz de abundancia (arrastre)"}
+A <- stressplot(nmds_arrastre)
+```
+
+Estrés: **`r round(nmds_arrastre$stress,2)`** 
+
+### Representación basica
+
+```{r nmds_arrastre_plot_basico,fig.height=10,fig.width=10}
+par(mar=rep(1,4))
+anh<-factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(nmds_arrastre_scores$sites)))
+info_arrastre$tipo_cuerp_agua <- factor(info_arrastre$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+m_site<-match(rownames(nmds_arrastre_scores$sites),table=info_arrastre$anh_tempo)
+tipCuerAg<-info_arrastre$tipo_cuerp_agua[m_site]
+info_arrastre$zone <- factor(info_arrastre$zone,colList$zonas$platform)
+zonas<-info_arrastre$zone[m_site]
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(nmds_arrastre_scores$sites)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+PCH <- colList$tempo$pch[tempo]
+COL <- colList$aquatic_habitats$color[info_arrastre$tipo_cuerp_agua[m_site]]
+plot(nmds_arrastre,display=c("species","sites"),yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+points(nmds_arrastre,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
+legend("bottomright",pch=colList$tempo$pch,legend=colList$tempo$temporada,title="temporada",bty="n")
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title="Cuerpo agua",bty="n")
+
+```
+
+\clearpage
+
+
+### Representación de las especies
+
+```{r nmds_arrastre_species,fig.height=15,fig.width=15}
+plot(nmds_arrastre,display=c("site"),yaxt="n",xaxt="n",xlab=NA,ylab=NA, ylim=range(nmds_arrastre_scores$species[,2]),xlim=range(nmds_arrastre_scores$species[,1]))
+text(nmds_arrastre,display= "species")
+```
+\clearpage
+
+### Representación de las unidades de muestreo
+
+```{r nmds_arrastre_anh_tempo,fig.height=15,fig.width=15}
+plot(nmds_arrastre,display=c("species"),yaxt="n",xaxt="n",xlab=NA,ylab=NA,
+     ylim=range(nmds_arrastre_scores$sites[,2]),xlim=range(nmds_arrastre_scores$sites[,1]))
+text(nmds_arrastre,display="site")
+```
+
+\clearpage
+
+### Representación de las temporadas
+
+```{r nmds_arrastre_spider_temporada,fig.height=15,fig.width=15, fig.cap="Representación de las temporadas en el espacio de la NMDS (arrastre). Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_arrastre,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_arrastre,groups = anh,col="grey")
+ordispider(nmds_arrastre,groups = tempo,col=colList$tempo$color,lwd=4)
+legend("topright",fill=colList$tempo$color,legend=colList$tempo$temporada, title="Temporada",cex=2)
+```
+
+\clearpage
+
+
+### Representación de los tipos de cuerpos de agua
+
+```{r nmds_arrastre_spider_tipCuerAg,fig.height=15,fig.width=15, fig.cap="Representación de los tipos de cuerpo de agua en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_arrastre,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_arrastre,groups = anh,col="grey")
+ordispider(nmds_arrastre,groups = tipCuerAg,col=colList$aquatic_habitats$color,lwd=4)
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa, title="Tipo de cuerpo de agua",cex=2)
+```
+
+
+\clearpage
+
+### Representación de las zonas
+```{r nmds_arrastre_spider_zonas,fig.height=15,fig.width=15, fig.cap="Representación de las zonas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_arrastre,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_arrastre,groups = anh,col="grey")
+ordispider(nmds_arrastre,groups = zonas,col=colList$zonas$color,lwd=4)
+legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title="Zona",cex=2)
+```
+
+
+\clearpage
+
+### Trasmallo
+
+```{r nmds_trasmallo_}
+set.seed(19)# in order to be able to obtain the same results in two different runs
+require(vegan)
+matrix_trasmallo <- import_pece$pece_gillnets_matrix
+(nmds_trasmallo <- metaMDS(matrix_trasmallo,distance='bray',trymax = 1000,trace=F,k=2))
+nmds_trasmallo_scores<-scores(nmds_trasmallo)
+```
+
+**Nota: un mensaje nos dice que el estrés es 0, y que es muy probable que los datos estén insuficientes**
+
+Por esta razón no aplicaremos el metodo a las abundancias de de los datos de trasmallo, pero simplemente para entender el proceso:
+
+
+```{r nmds_trasmallo_stressplot, fig.cap="\\label{ndms_trasmallo_stressplot} Grafica de estrés de la NMDS utilizando la distancia de Bray-Curtis sobre la matriz de abundancia (trasmallo)"}
+A <- stressplot(nmds_trasmallo)
+```
+
+Estrés: **`r round(nmds_trasmallo$stress,2)`** 
+
+
+```{r plot_nmds_trasmallo_fail}
+plot(nmds_trasmallo)
+```
+
+
+
+
+
+### Electropesca
+
+```{r nmds_electropesca_}
+set.seed(19)# in order to be able to obtain the same results in two different runs
+require(vegan)
+matrix_electropesca <- import_pece$pece_elec_matrix
+(nmds_electropesca <- metaMDS(matrix_electropesca,distance='bray',trymax = 1000,trace=F,k=2))
+nmds_electropesca_scores<-scores(nmds_electropesca)
+```
+
+
+```{r nmds_electropesca_stressplot, fig.cap="\\label{ndms_electropesca_stressplot} Grafica de estrés de la NMDS utilizando la distancia de Bray-Curtis sobre la matriz de abundancia (electropesca)"}
+A <- stressplot(nmds_electropesca)
+```
+
+Estrés: **`r round(nmds_electropesca$stress,2)`** 
+
+### Representación basica
+
+```{r nmds_electropesca_plot_basico,fig.height=10,fig.width=10}
+par(mar=rep(1,4))
+anh<-factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(nmds_electropesca_scores$sites)))
+info_electropesca$tipo_cuerp_agua <- factor(info_electropesca$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+m_site<-match(rownames(nmds_electropesca_scores$sites),table=info_electropesca$anh_tempo)
+tipCuerAg<-info_electropesca$tipo_cuerp_agua[m_site]
+info_electropesca$zone <- factor(info_electropesca$zone,colList$zonas$platform)
+zonas<-info_electropesca$zone[m_site]
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(nmds_electropesca_scores$sites)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+PCH <- colList$tempo$pch[tempo]
+COL <- colList$aquatic_habitats$color[info_electropesca$tipo_cuerp_agua[m_site]]
+plot(nmds_electropesca,display=c("species","sites"),yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+points(nmds_electropesca,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
+legend("bottomright",pch=colList$tempo$pch,legend=colList$tempo$temporada,title="temporada",bty="n")
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title="Cuerpo agua",bty="n")
+
+```
+
+\clearpage
+
+
+### Representación de las especies
+
+```{r nmds_electropesca_species,fig.height=15,fig.width=15}
+plot(nmds_electropesca,display=c("site"),yaxt="n",xaxt="n",xlab=NA,ylab=NA, ylim=range(nmds_electropesca_scores$species[,2]),xlim=range(nmds_electropesca_scores$species[,1]))
+text(nmds_electropesca,display= "species")
+```
+\clearpage
+
+### Representación de las unidades de muestreo
+
+```{r nmds_electropesca_anh_tempo,fig.height=15,fig.width=15}
+plot(nmds_electropesca,display=c("species"),yaxt="n",xaxt="n",xlab=NA,ylab=NA,
+     ylim=range(nmds_electropesca_scores$sites[,2]),xlim=range(nmds_electropesca_scores$sites[,1]))
+text(nmds_electropesca,display="site")
+```
+
+\clearpage
+
+### Representación de las temporadas
+
+```{r nmds_electropesca_spider_temporada,fig.height=15,fig.width=15, fig.cap="Representación de las temporadas en el espacio de la NMDS (electropesca). Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_electropesca,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_electropesca,groups = anh,col="grey")
+ordispider(nmds_electropesca,groups = tempo,col=colList$tempo$color,lwd=4)
+legend("topright",fill=colList$tempo$color,legend=colList$tempo$temporada, title="Temporada",cex=2)
+```
+
+\clearpage
+
+
+### Representación de los tipos de cuerpos de agua
+
+```{r nmds_electropesca_spider_tipCuerAg,fig.height=15,fig.width=15, fig.cap="Representación de los tipos de cuerpo de agua en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_electropesca,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_electropesca,groups = anh,col="grey")
+ordispider(nmds_electropesca,groups = tipCuerAg,col=colList$aquatic_habitats$color,lwd=4)
+legend("topright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa, title="Tipo de cuerpo de agua",cex=2)
+```
+
+
+\clearpage
+
+### Representación de las zonas
+```{r nmds_electropesca_spider_zonas,fig.height=15,fig.width=15, fig.cap="Representación de las zonas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_electropesca,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_electropesca,groups = anh,col="grey")
+ordispider(nmds_electropesca,groups = zonas,col=colList$zonas$color,lwd=4)
+legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title="Zona",cex=2)
+```
+
+
+\clearpage
+
