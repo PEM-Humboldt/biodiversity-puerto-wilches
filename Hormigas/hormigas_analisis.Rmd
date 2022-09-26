@@ -119,11 +119,20 @@ infoTot$anh_tempo[!infoTot$anh_tempo %in% infoTot$anh_tempo[m]]
 
 # Curvas de diversidad
 
+Los números de Hill q1 y q2 están basados respectivamente en cálculos que toman en cuenta la repartición de las abundancias y la equidad de la repartición entre la abundancias.
+Formalmente, los datos que tenemos para las hormigas son matrices de incidencias que no representan exactamente las abundancias de las hormigas, sin embargo, en la mayoría de los casos las incidencias están muy correlacionadas con las abundancias.
+Por esta razón, y por petición de Luisa Arcila, voy a incluir acá los cálculos de q1 y q2.
+Ahora bien, no estoy seguro del calculo que iNEXT hace para calcular esos indices desde las matrices de incidencia (anotar: los datos que utiliza el paquete son el numéro de unidad de muestreo, acá siempre 25 y las incidencias es decir el numero de presencias de la especie en los 25 muestreos).
+**Utilizar con cuidado, y si necesario, obtener las especificaciones de los cálculos de esos índices en iNEXT**
+
+**Anotar: el número de unidades de muestreo en las gráficas es el número total (es decir consideramos 25 unidades de muestreo en una sola ANH/temporada).**
+
+
 ## Estimación por sampling unit
 
 ```{r iNEXT_SU, warning=F}
-dataFor_iNEXT_SU<-apply(horm_matrix,1,function(x)sort(x[x>0],decreasing=T))
-iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
+dataFor_iNEXT_SU<-apply(horm_matrix,1,function(x)c(25,sort(x[x>0],decreasing=T)))
+iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "incidence_freq")
 ```
 
 
@@ -167,13 +176,15 @@ sqldf(
 sum_abu <- by(horm_matrix,landcov,colSums)
 mat_landcov <- Reduce(rbind,sum_abu)
 rownames(mat_landcov) <- names(sum_abu)[sapply(sum_abu,length)>0]
-iNEXT_landcov <- iNEXT(apply(mat_landcov,1,function(x)x[x>0]),datatype = "abundance")
+nbEvents_landcov<-tapply(infoTot$nb_event[m],landcov,sum)
+nbEvents_landcov<-nbEvents_landcov[!is.na(nbEvents_landcov)]
+iNEXT_landcov <- iNEXT(apply(cbind(nbEvents_landcov,mat_landcov),1,function(x)x[x>0]),datatype = "incidence_freq")
 ```
 
 
-```{r CurvaRiqueza_landcov_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectados con trasmallo, calculos basados en la abundancia de las especies colectadas."}
+```{r CurvaRiqueza_landcov_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas , calculos basados en la incidencia de las especies colectadas."}
  ## especificaciones de ggplot
-A<-iNEXT_ggplot_optimizado(iNEXT_landcov,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov], labY='Riqueza', title="Coberturas")
+A<-iNEXT_ggplot_optimizado(iNEXT_landcov,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov], labY='Riqueza',labX='Número de unidades de muestreo', title="Coberturas")
 A 
 ```
 
@@ -188,7 +199,9 @@ landcov_t1<-landcov[tempo=="Aguas altas"]
 sum_abu <- by(horm_matrix_t1,landcov_t1,colSums)
 mat_landcov_t1 <- Reduce(rbind,sum_abu)
 rownames(mat_landcov_t1) <- names(sum_abu)[sapply(sum_abu,length)>0]
-iNEXT_landcov_t1 <- iNEXT(apply(mat_landcov_t1,1,function(x)x[x>0]),datatype = "abundance")
+nbEvents_landcov_t1<-tapply(infoTot$nb_event[m][tempo=="Aguas altas"],landcov_t1,sum)
+nbEvents_landcov_t1<-nbEvents_landcov_t1[!is.na(nbEvents_landcov_t1)]
+iNEXT_landcov_t1 <- iNEXT(apply(cbind(nbEvents_landcov_t1,mat_landcov_t1),1,function(x)x[x>0]),datatype = "incidence_freq")
 
 #T2
 horm_matrix_t2 <- horm_matrix[tempo=="Aguas bajas",]
@@ -197,20 +210,22 @@ landcov_t2<-landcov[tempo=="Aguas bajas"]
 sum_abu <- by(horm_matrix_t2,landcov_t2,colSums)
 mat_landcov_t2 <- Reduce(rbind,sum_abu)
 rownames(mat_landcov_t2) <- names(sum_abu)[sapply(sum_abu,length)>0]
-iNEXT_landcov_t2 <- iNEXT(apply(mat_landcov_t2,1,function(x)x[x>0]),datatype = "abundance")
+nbEvents_landcov_t2<-tapply(infoTot$nb_event[m][tempo=="Aguas bajas"],landcov_t2,sum)
+nbEvents_landcov_t2<-nbEvents_landcov_t2[!is.na(nbEvents_landcov_t2)]
+iNEXT_landcov_t2 <- iNEXT(apply(cbind(nbEvents_landcov_t2,mat_landcov_t2),1,function(x)x[x>0]),datatype = "incidence_freq")
 
 ```
 
 
 ```{r curvaRiqueza_landcov_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada en la temporada de aguas altas, calculos basados en la abundancia total de las especies colectadas."}
  ## especificaciones de ggplot
-A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t1,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t1],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t1], labY='Riqueza', title="Coberturas, temporada de aguas altas")
+A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t1,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t1],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t1], labY='Riqueza', labX='Número de unidades de muestreo', title="Coberturas, temporada de aguas altas")
 A
 ```
 
 ```{r curvaRiqueza_landcov_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada en la temporada de aguas bajas, calculos basados en la abundancia total de las especies colectadas."}
  ## especificaciones de ggplot
-A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t2,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t2],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t2], labY='Riqueza', title="Coberturas, temporada de aguas bajas")
+A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t2,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t2],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t2], labY='Riqueza', labX='Número de unidades de muestreo', title="Coberturas, temporada de aguas bajas")
 A
 ```
 
@@ -357,12 +372,14 @@ data.frame(
 sum_abu <- by(horm_matrix,zona,colSums)
 matrix_zona <- Reduce(rbind,sum_abu)
 rownames(matrix_zona) <- names(sum_abu)[sapply(sum_abu,length)>0]
-iNEXT_zona <- iNEXT(apply(matrix_zona,1,function(x)x[x>0]),datatype = "abundance")
+nbEvents_zona<-tapply(infoTot$nb_event[m],zona,sum)
+nbEvents_zona<-nbEvents_zona[!is.na(nbEvents_zona)]
+iNEXT_zona <- iNEXT(apply(cbind(nbEvents_zona,matrix_zona),1,function(x)x[x>0]),datatype = "incidence_freq")
 ```
 
 ```{r CurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada, calculos basados en la abundancia de las especies colectadas. Representación de las zonas"}
  ## especificaciones de ggplot
-A<-iNEXT_ggplot_optimizado(iNEXT_zona,type=1,col=colList$zonas$color[colList$zonas$platform %in% zona],orderAssemblage = colList$zonas$platform[colList$zonas$platform %in% zona], labY='Riqueza', labX='Número de individuos')
+A<-iNEXT_ggplot_optimizado(iNEXT_zona,type=1,col=colList$zonas$color[colList$zonas$platform %in% zona],orderAssemblage = colList$zonas$platform[colList$zonas$platform %in% zona], labY='Riqueza', labX='Número de unidades de muestreo')
 A
 ```
 
@@ -410,212 +427,198 @@ data.frame(
   add_header_above(c(" "=3, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))
 ```
 
-# Curvas de rango Abundancia
+# Curvas de Rango-Incidencia
+
+Las curvas de Rango-Incidencia utilizan una escala log en el eje y porque las diferencias entre las abundancias de las especies más abundantes y las especies menos abundantes pueden ser demasiado fuertes en una escala clasica.
+Acá el hecho de utilizar las incidencias de las especies permite limitar esa diferencias.
+Por esta razón utilizaré una escala clasica, lineal en el eje y.
+
 
 ## Matrix total
 
-```{r rangoAbundanciaTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las temporadas"}
+```{r rangoIncidenciaTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia, orden según las incidencias totales, mostrando las temporadas"}
 nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(horm_matrix),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(horm_matrix[grep("T1",rownames(horm_matrix)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
-points(log10(colSums(horm_matrix[grep("T2",rownames(horm_matrix)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(horm_matrix),decreasing = T)[1:nb_sp]
+sum_incidencias_tempo <- Reduce(rbind,by(horm_matrix[,names(sum_incidencia)],tempo,colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_tempo))
+{
+  points(sum_incidencias_tempo[i,],type="b",col=colList$tempo$color[i],bg=colList$tempo$color[i],pch=colList$tempo$pch[i],lty=2)
+}
+
+legend("topright",pch=c(15,colList$tempo$pch),col=c("black",colList$tempo$color),pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
 
 
 ## Mostrando las zonas
 
 
-```{r rangoAbundanciaTotal_zona, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las 3 zonas de muestreo"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(horm_matrix),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(1:nb_sp,log10(colSums(horm_matrix[zona=="Caracterización",names(sum_abundancia)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Caracterización"],bg=colList$zonas$color[colList$zonas$platform=="Caracterización"],lty=2,col=colList$zonas$color[colList$zonas$platform=="Caracterización"])
-points(1:nb_sp,log10(colSums(horm_matrix[zona=="Kalé",names(sum_abundancia)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Kalé"], bg=colList$zonas$color[colList$zonas$platform=="Kalé"], lty=2, col=colList$zonas$color[colList$zonas$platform=="Kalé"])
-points(1:nb_sp,log10(colSums(horm_matrix[zona=="Platero",names(sum_abundancia)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Platero"],bg=colList$zonas$color[colList$zonas$platform=="Platero"],lty=2,col=colList$zonas$color[colList$zonas$platform=="Platero"])
-legend("topright",pch=c(15,colList$zonas$pch),col=c("black",colList$zonas$color),pt.bg=c(NA,colList$zonas$color),legend=c("Todas",colList$zonas$platform),title="Zonas",bty="n")
+```{r rangoIncidenciaTotal_zona, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia, orden según las incidencias totales, mostrando las 3 zonas de muestreo"}
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(horm_matrix),decreasing = T)[1:nb_sp]
+sum_incidencias_zona <- Reduce(rbind,by(horm_matrix[,names(sum_incidencia)],zona,colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_zona))
+{
+  points(sum_incidencias_zona[i,],type="b",col=colList$zona$color[i],bg=colList$zona$color[i],pch=colList$zona$pch[i],lty=2)
+}
+
+legend("topright",pch=c(15,colList$zona$pch),col="black",pt.bg=c(NA,colList$zona$color),legend=c("Ambas",colList$zonas$platform),title="Zona",bty="n")
 ```
 
 ## Mostrando las coberturas
 
 
-```{r rangoAbundanciaTotal_cobertura, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las coberturas"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,10.1))
-sum_abundancia <- sort(colSums(horm_matrix),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-sum_abundancias_cobertura <- by(data=horm_matrix,INDICES = landcov, FUN = function(x,c)colSums(x[,c]),c=names(sum_abundancia))
-sum_abundancias_cobertura[!sapply(sum_abundancias_cobertura,is.null)] <- lapply(sum_abundancias_cobertura[!sapply(sum_abundancias_cobertura,is.null)],function(x)ifelse(x<1,1,x))
-for(i in 1:length(sum_abundancias_cobertura))
+```{r rangoIncidenciaTotal_cobertura, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Incidencia, orden según las incidencias totales, mostrando las coberturas"}
+par(mar = c(10.1,6.1,1,1))
+sum_incidencia <- sort(colSums(horm_matrix),decreasing = T)[1:nb_sp]
+A<-by(horm_matrix[,names(sum_incidencia)],landcov,colSums)
+sum_incidencias_landcov <- Reduce(rbind,A)
+rownames(sum_incidencias_landcov)<-names(A[sapply(A,length)>0])
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_landcov))
 {
-  if(!is.null(sum_abundancias_cobertura[[i]]))
-  {
-    points(1:nb_sp,log10(sum_abundancias_cobertura[[i]]),type="b",pch=21,bg=colList$landcover$color[colList$landcover$landcov_spa==names(sum_abundancias_cobertura)[i]],lty=2,col=colList$landcover$color[colList$landcover$landcov_spa==names(sum_abundancias_cobertura)[i]])
-  }
+  points(sum_incidencias_landcov[i,],type="b",col=colList$landcover$color[colList$landcover$landcov_spa==rownames(sum_incidencias_landcov)[i]],bg=colList$landcov$color[colList$landcover$landcov_spa==rownames(sum_incidencias_landcov)[i]],pch=21,lty=2)
 }
-par(xpd=T)
-legend("topright",pch=c(15,rep(21,sum(!sapply(sum_abundancias_cobertura,is.null)))),col=c("black",colList$landcover$color[!sapply(sum_abundancias_cobertura,is.null)]),pt.bg=c(NA,colList$landcover$color[!sapply(sum_abundancias_cobertura,is.null)]),legend=c("Todas",colList$landcover$landcov_spa[!sapply(sum_abundancias_cobertura,is.null)]),title="Coberturas",bty="n",inset=c(-.3,0))
+legend("topright",pch=c(15,rep(21,nrow(sum_incidencias_landcov))),col=c("black",colList$landcover$color[colList$landcover$landcov_spa  %in% landcov]),pt.bg=c(NA,colList$landcover$color[colList$landcover$landcov_spa  %in% landcov]),legend=c("Todas",colList$landcover$landcov_spa[colList$landcover$landcov_spa  %in% landcov]),title="Cobertura",bty="n")
 ```
 
 
 ## Por coberturas
 ### Bosque Abierto
 
-```{r rangoAbundancia_bosque_abierto, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques abiertos, mostrando las temporadas"}
+```{r rangoIncidencia_bosque_abierto, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia , orden según las incidencias totales, en los bosques abiertos, mostrando las temporadas"}
 nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(horm_matrix[landcov=="Bosque Abierto",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(as.matrix(t(horm_matrix[landcov=="Bosque Abierto" & grepl("T1",rownames(horm_matrix)), names(sum_abundancia)])))), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(horm_matrix[landcov=="Bosque Abierto" & grepl("T2",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(horm_matrix[landcov=="Bosque Abierto",]),decreasing = T)[1:nb_sp]
+sum_incidencias_tempo <- Reduce(rbind,by(horm_matrix[landcov=="Bosque Abierto",names(sum_incidencia)],tempo[landcov=="Bosque Abierto"],colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_tempo))
+{
+  points(sum_incidencias_tempo[i,],type="b",col=colList$tempo$color[i],bg=colList$tempo$color[i],pch=colList$tempo$pch[i],lty=2)
+}
 legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
 
-### Bosque Abierto
+### Bosque Denso
 
-```{r rangoAbundancia_bosque_denso, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques densos, mostrando las temporadas"}
+```{r rangoIncidencia_bosque_denso, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia , orden según las incidencias totales, en los bosques densos, mostrando las temporadas"}
 nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(horm_matrix[landcov=="Bosque Denso",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=5)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%5==0),length(ATX))])
-show <- ATX%%5==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(horm_matrix[landcov=="Bosque Denso" & grepl("T1",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(horm_matrix[landcov=="Bosque Denso" & grepl("T2",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(horm_matrix[landcov=="Bosque Denso",]),decreasing = T)[1:nb_sp]
+sum_incidencias_tempo <- Reduce(rbind,by(horm_matrix[landcov=="Bosque Denso",names(sum_incidencia)],tempo[landcov=="Bosque Denso"],colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_tempo))
+{
+  points(sum_incidencias_tempo[i,],type="b",col=colList$tempo$color[i],bg=colList$tempo$color[i],pch=colList$tempo$pch[i],lty=2)
+}
 legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
 
 ### Bosque ripario
 
-```{r rangoAbundancia_bosque_ripario, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques riparios, mostrando las temporadas"}
+```{r rangoIncidencia_bosque_ripario, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia , orden según las incidencias totales, en los bosques riparios, mostrando las temporadas"}
 nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(horm_matrix[landcov=="Bosque Ripario",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(horm_matrix[landcov=="Bosque Ripario" & grepl("T1",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(horm_matrix[landcov=="Bosque Ripario" & grepl("T2",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
+par(mar = c(10.1,6.1,1,4.1))
+sum_incidencia <- sort(colSums(horm_matrix[landcov=="Bosque Ripario",]),decreasing = T)[1:nb_sp]
+sum_incidencias_tempo <- Reduce(rbind,by(horm_matrix[landcov=="Bosque Ripario",names(sum_incidencia)],tempo[landcov=="Bosque Ripario"],colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_tempo))
+{
+  points(sum_incidencias_tempo[i,],type="b",col=colList$tempo$color[i],bg=colList$tempo$color[i],pch=colList$tempo$pch[i],lty=2)
+}
 legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
 
 ### Herbazales
 
-```{r rangoAbundancia_herbazales, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los herbazales, mostrando las temporadas"}
+```{r rangoIncidencia_herbazales, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia , orden según las incidencias totales, en los herbazales, mostrando las temporadas"}
 nb_sp<-15
 par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(horm_matrix[landcov=="Herbazales",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(horm_matrix[landcov=="Herbazales" & grepl("T1",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(horm_matrix[landcov=="Herbazales" & grepl("T2",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
+sum_incidencia <- sort(colSums(horm_matrix[landcov=="Herbazales",]),decreasing = T)[1:nb_sp]
+sum_incidencias_tempo <- Reduce(rbind,by(horm_matrix[landcov=="Herbazales",names(sum_incidencia)],tempo[landcov=="Herbazales"],colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_tempo))
+{
+  points(sum_incidencias_tempo[i,],type="b",col=colList$tempo$color[i],bg=colList$tempo$color[i],pch=colList$tempo$pch[i],lty=2)
+}
 legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
 
 ### Palma
 
-```{r rangoAbundancia_palma, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en las palma, mostrando las temporadas"}
+```{r rangoIncidencia_palma, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia , orden según las incidencias totales, en los cultivos de palma, mostrando las temporadas"}
 nb_sp<-15
 par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(horm_matrix[landcov=="Palma",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(horm_matrix[landcov=="Palma" & grepl("T1",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(horm_matrix[landcov=="Palma" & grepl("T2",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
+sum_incidencia <- sort(colSums(horm_matrix[landcov=="Palma",]),decreasing = T)[1:nb_sp]
+sum_incidencias_tempo <- Reduce(rbind,by(horm_matrix[landcov=="Palma",names(sum_incidencia)],tempo[landcov=="Palma"],colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_tempo))
+{
+  points(sum_incidencias_tempo[i,],type="b",col=colList$tempo$color[i],bg=colList$tempo$color[i],pch=colList$tempo$pch[i],lty=2)
+}
 legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
 
 ### Pastos
 
-```{r rangoAbundancia_pastos, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los pastos, mostrando las temporadas"}
+```{r rangoIncidencia_pastos, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia , orden según las incidencias totales, en los pastos, mostrando las temporadas"}
 nb_sp<-15
 par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(horm_matrix[landcov=="Pastos",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=1)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%5==0),length(ATX))])
-show <- ATX%%5==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(horm_matrix[landcov=="Pastos" & grepl("T1",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(horm_matrix[landcov=="Pastos" & grepl("T2",rownames(horm_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
+sum_incidencia <- sort(colSums(horm_matrix[landcov=="Pastos",]),decreasing = T)[1:nb_sp]
+sum_incidencias_tempo <- Reduce(rbind,by(horm_matrix[landcov=="Pastos",names(sum_incidencia)],tempo[landcov=="Pastos"],colSums))
+
+plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
+text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
+for(i in 1:nrow(sum_incidencias_tempo))
+{
+  points(sum_incidencias_tempo[i,],type="b",col=colList$tempo$color[i],bg=colList$tempo$color[i],pch=colList$tempo$pch[i],lty=2)
+}
 legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
 
 # Diversidad beta (NMDS)
+
+
+****************
+
+**Anotar**:
+
+La distancia de Bray-Curtis calcula la suma de las diferencias entre las abundancias relativas de las especies.
+En el caso de las incidencias utilizadas acá, corresponde a la suma de las diferencias entre las incidencias relativas...
+Si esta noción de incidencia relativa no tiene sentido, podríamos cambiar la distancia utilizada en las NMDS por la distancia de Manhattan.
+En este caso calcularíamos la suma de diferencia entre las incidencias.
+No debería cambiar mucho los análisis, sabiendo que todos las incidencias corresponden a un maximo de 25 eventos de muestreo, sin embargo es posible que el sentido de las distancias sea más fácil entender
+
+
+***************
+
 
 ```{r nmds_tot_}
 set.seed(198)# in order to be able to obtain the same results in two different runs
@@ -654,7 +657,7 @@ COL <- colList$landcover$color[landcov]
 plot(nmds_tot,display=c("species","sites"),yaxt="n",xaxt="n",xlab=NA,ylab=NA)
 points(nmds_tot,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
 legend("topright",pch=colList$tempo$pch,legend=colList$tempo$temporada,title="temporada",bty="n")
-legend("bottomright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title="Cobertura",bty="n")
+legend("bottomright",fill=colList$landcover$color[colList$landcover$landcov_spa %in% landcov],legend=colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov],title="Cobertura",bty="n")
 
 ```
 
