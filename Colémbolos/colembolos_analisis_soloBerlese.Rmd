@@ -8,10 +8,18 @@ output:
        number_sections: true
        toc: true
        toc_depth: 4
-    html_document:
-       number_sections: true
-       toc: true
-       toc_depth: 4
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage[normalem]{ulem}
 ---
 
 
@@ -243,7 +251,7 @@ sqldf(
   ",drv="SQLite"
 )
 )
-tabEst_landcov$eventos<- tapply(infoTot$nb_event[m],landcov,sum)[!is.na(tapply(infoTot$nb_event,landcov,sum))]
+tabEst_landcov$eventos<- tapply(infoTot$nb_event[m],landcov,sum)[!is.na(tapply(infoTot$nb_event[m],landcov,sum))]
 tabEst_landcov$completude<-(tabEst_landcov$riq_observado/tabEst_landcov$riq_estimado)*100
 tabEst_landcov$coverage <- iNEXT_landcov$DataInfo$SC[order(iNEXT_landcov$DataInfo$Assemblage)]
 
@@ -713,4 +721,12 @@ legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title=
 
 
 \clearpage
+
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
+
 

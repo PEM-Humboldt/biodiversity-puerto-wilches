@@ -8,10 +8,18 @@ output:
        number_sections: true
        toc: true
        toc_depth: 4
-    html_document:
-       number_sections: true
-       toc: true
-       toc_depth: 4
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage[normalem]{ulem}
 ---
 
 
@@ -1450,3 +1458,9 @@ legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title=
 
 \clearpage
 
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
