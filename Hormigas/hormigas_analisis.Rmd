@@ -39,6 +39,7 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 options(knitr.kable.NA = "---")
 fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
 source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
+set.seed(389054)
 ```
 
 # Function para formatear las matrices
@@ -139,6 +140,7 @@ iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "incidence_freq")
 ```{r echo=F}
 ## Formatting the table of estimation
 est_su<-iNEXT_SU$AsyEst
+coverage <- list(coverage=iNEXT_SU$DataInfo$SC[order(iNEXT_SU$DataInfo$Assemblage)])
 cbind(
 sqldf(
   "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
@@ -161,15 +163,15 @@ sqldf(
   ORDER BY Assemblage
   ",drv="SQLite"
 )
-)%>%
-  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo")%>%
-  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+)%>%append(values=coverage,after=1)%>%data.frame()%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo",col.names = c("anh_tempo","coverage",rep(c("observado","estimado"),3)))%>%
+  add_header_above(c(" "=2, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")
 ```
 
 \clearpage
 
-#### Curvas y estimaciones por cobertura
+## Curvas y estimaciones por cobertura
 
 ```{r iNEXT}
 (nbSU<-table(landcov))
@@ -257,6 +259,7 @@ sqldf(
 )
 tabEst_landcov$eventos<- tapply(infoTot$nb_event[m],landcov,sum)[!is.na(tapply(infoTot$nb_event,landcov,sum))]
 tabEst_landcov$completude<-(tabEst_landcov$riq_observado/tabEst_landcov$riq_estimado)*100
+tabEst_landcov$coverage <- iNEXT_landcov$DataInfo$SC[order(iNEXT_landcov$DataInfo$Assemblage)]
 
 est_landcov_t1 <-iNEXT_landcov_t1$AsyEst
 tabEst_landcov_t1 <-
@@ -285,6 +288,7 @@ sqldf(
 )
 tabEst_landcov_t1$eventos<- tapply(infoTot$nb_event[m[tempo=="Aguas altas"]],landcov_t1,sum)[!is.na(tapply(infoTot$nb_event[m[tempo=="Aguas altas"]],landcov_t1,sum))]
 tabEst_landcov_t1$completude<-(tabEst_landcov_t1$riq_observado/tabEst_landcov_t1$riq_estimado)*100
+tabEst_landcov_t1$coverage <- iNEXT_landcov_t1$DataInfo$SC[order(iNEXT_landcov_t1$DataInfo$Assemblage)]
 
 est_landcov_t2 <-iNEXT_landcov_t2$AsyEst
 tabEst_landcov_t2 <-
@@ -313,12 +317,14 @@ sqldf(
 )
 tabEst_landcov_t2$eventos<- tapply(infoTot$nb_event[m[tempo=="Aguas bajas"]],landcov_t2,sum)[!is.na(tapply(infoTot$nb_event[m[tempo=="Aguas bajas"]],landcov_t2,sum))]
 tabEst_landcov_t2$completude<-(tabEst_landcov_t2$riq_observado/tabEst_landcov_t2$riq_estimado)*100
+tabEst_landcov_t2$coverage <- iNEXT_landcov_t2$DataInfo$SC[order(iNEXT_landcov_t2$DataInfo$Assemblage)]
 
 rbind(
 data.frame(
   temporada='Ambas',
   tipCurAg=tabEst_landcov$`Cobertura`,
   eventos=tabEst_landcov$eventos,
+  coverage=tabEst_landcov$coverage,
   comp=paste(round(tabEst_landcov$completude,2),"%"),
   riq_observado=tabEst_landcov$riq_observado,
   riq_estimado=paste(tabEst_landcov$riq_estimado,tabEst_landcov$riq_estimado_se,sep=" ± "),
@@ -331,6 +337,7 @@ data.frame(
   temporada='Aguas altas',
   tipCurAg=tabEst_landcov_t1$`Cobertura`,
   eventos=tabEst_landcov_t1$eventos,
+  coverage=tabEst_landcov_t1$coverage,
   comp=paste(round(tabEst_landcov_t1$completude,2),"%"),
   riq_observado=tabEst_landcov_t1$riq_observado,
   riq_estimado=paste(tabEst_landcov_t1$riq_estimado,tabEst_landcov_t1$riq_estimado_se,sep=" ± "),
@@ -343,6 +350,7 @@ data.frame(
   temporada='Aguas bajas',
   tipCurAg=tabEst_landcov_t2$`Cobertura`,
   eventos=tabEst_landcov_t2$eventos,
+  coverage=tabEst_landcov_t2$coverage,
   comp=paste(round(tabEst_landcov_t2$completude,2),"%"),
   riq_observado=tabEst_landcov_t2$riq_observado,
   riq_estimado=paste(tabEst_landcov_t2$riq_estimado,tabEst_landcov_t2$riq_estimado_se,sep=" ± "),
@@ -352,9 +360,9 @@ data.frame(
   sim_estimado=paste(tabEst_landcov_t2$sim_estimado,tabEst_landcov_t2$sim_estimado_se,sep=" ± ")
  )
 )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Temporada","Cobertura","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por Cobertura desde la matriz de abundancia")%>%
+  kable(booktabs=T, longtable=T,col.names = c("Temporada","Cobertura","eventos","coverage","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por Cobertura desde la matriz de incidencia")%>%
   collapse_rows(columns = 1, valign = "middle", latex_hline = "major")%>%
-  add_header_above(c(" "=4, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))%>%
+  add_header_above(c(" "=5, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))%>%
   landscape()
 ```
 
@@ -411,10 +419,12 @@ sqldf(
 )
 tabEst_zona$eventos<- tapply(infoTot$nb_event[m], zona, sum)
 tabEst_zona$completude<-(tabEst_zona$riq_observado/tabEst_zona$riq_estimado)*100
+tabEst_zona$coverage<-iNEXT_zona$DataInfo$SC[order(iNEXT_zona$DataInfo$Assemblage)]
 
 data.frame(
   tipCurAg=tabEst_zona$Zona,
   eventos=tabEst_zona$eventos,
+  coverage=tabEst_zona$coverage,
   comp=paste(round(tabEst_zona$completude,2),"%"),
   riq_observado=tabEst_zona$riq_observado,
   riq_estimado=paste(tabEst_zona$riq_estimado,tabEst_zona$riq_estimado_se,sep=" ± "),
@@ -423,8 +433,8 @@ data.frame(
   sim_observado=tabEst_zona$sim_observado,
   sim_estimado=paste(tabEst_zona$sim_estimado,tabEst_zona$sim_estimado_se,sep=" ± ")
  )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por zonas desde la matriz de abundancia")%>%
-  add_header_above(c(" "=3, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))
+  kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","coverage","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por zonas desde la matriz de incidencia")%>%
+  add_header_above(c(" "=4, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))
 ```
 
 # Curvas de Rango-Incidencia
