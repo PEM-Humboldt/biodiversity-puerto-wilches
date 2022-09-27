@@ -39,6 +39,7 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 options(knitr.kable.NA = "---")
 fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
 source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
+set.seed(19841218)
 ```
 
 # Function para formatear las matrices
@@ -112,6 +113,7 @@ atarraya_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
 
 ```{r warning=F,echo=F}
 ## Formatting the table of estimation
+cobertura<-list(cobertura=atarraya_iNEXT_SU$DataInfo$SC[order(atarraya_iNEXT_SU$DataInfo$Assemblage)])
 est_atarraya_su<-atarraya_iNEXT_SU$AsyEst
 cbind(
 sqldf(
@@ -135,9 +137,9 @@ sqldf(
   ORDER BY Assemblage
   ",drv="SQLite"
 )
-)%>%
+)%>% append(values=cobertura,after=1)%>%data.frame()%>%
   kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (atarraya)")%>%
-  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  add_header_above(c(" "=2, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")
 ```
 
@@ -165,6 +167,7 @@ A
 ```
 
 ```{r echo=F}
+cobertura <- iNEXT_atarraya_tipCuerAg$DataInfo$SC[order(iNEXT_atarraya_tipCuerAg$DataInfo$Assemblage)]
 est_atarraya_tipCuerAg <-iNEXT_atarraya_tipCuerAg$AsyEst
 tabEst_atarraya_tipCuerAg <-
 cbind(
@@ -195,6 +198,7 @@ tabEst_atarraya_tipCuerAg$completude<-(tabEst_atarraya_tipCuerAg$riq_observado/t
 data.frame(
   tipCurAg=tabEst_atarraya_tipCuerAg$`Tipo cuerpo de agua`,
   eventos=tabEst_atarraya_tipCuerAg$eventos,
+  cobertura=cobertura,
   comp=paste(round(tabEst_atarraya_tipCuerAg$completude,2),"%"),
   riq_observado=tabEst_atarraya_tipCuerAg$riq_observado,
   riq_estimado=paste(tabEst_atarraya_tipCuerAg$riq_estimado,tabEst_atarraya_tipCuerAg$riq_estimado_se,sep=" ± "),
@@ -203,8 +207,8 @@ data.frame(
   sim_observado=tabEst_atarraya_tipCuerAg$sim_observado,
   sim_estimado=paste(tabEst_atarraya_tipCuerAg$sim_estimado,tabEst_atarraya_tipCuerAg$sim_estimado_se,sep=" ± ")
 )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (atarraya)")%>%
-  add_header_above(c(" "=3, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","cobertura", "Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (atarraya)")%>%
+  add_header_above(c(" "=4, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")%>%
    ##column_spec(2:9,width="cm")%>%
   column_spec(1:9,width="1.6cm")
@@ -224,6 +228,7 @@ arrastre_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
 ```{r warning=F,echp=F}
 ## Formatting the table of estimation
 est_arrastre_su<-arrastre_iNEXT_SU$AsyEst
+cobertura<-list(cobertura=arrastre_iNEXT_SU$DataInfo$SC[order(arrastre_iNEXT_SU$DataInfo$Assemblage)])
 cbind(
 sqldf(
   "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
@@ -246,9 +251,9 @@ sqldf(
   ORDER BY Assemblage
   ",drv="SQLite"
 )
-)%>%
-  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (arrastre)")%>%
-  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+)%>%append(values=cobertura,after=1)%>%data.frame()%>%
+  kable(booktabs=T,col.names=c("anh_tempo","cobertura",rep(c("observado","estimado"),3)), longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (arrastre)")%>%
+  add_header_above(c(" "=2, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")
 ```
 
@@ -277,6 +282,7 @@ A
 
 ```{r echo=F}
 est_arrastre_tipCuerAg <-iNEXT_arrastre_tipCuerAg$AsyEst
+cobertura <- iNEXT_arrastre_tipCuerAg$DataInfo$SC[order(iNEXT_arrastre_tipCuerAg$DataInfo$Assemblage)]
 tabEst_arrastre_tipCuerAg <-
 cbind(
 sqldf(
@@ -306,6 +312,7 @@ tabEst_arrastre_tipCuerAg$completude<-(tabEst_arrastre_tipCuerAg$riq_observado/t
 data.frame(
   tipCurAg=tabEst_arrastre_tipCuerAg$`Tipo cuerpo de agua`,
   eventos=tabEst_arrastre_tipCuerAg$eventos,
+  cobertura=cobertura,
   comp=paste(round(tabEst_arrastre_tipCuerAg$completude,2),"%"),
   riq_observado=tabEst_arrastre_tipCuerAg$riq_observado,
   riq_estimado=paste(tabEst_arrastre_tipCuerAg$riq_estimado,tabEst_arrastre_tipCuerAg$riq_estimado_se,sep=" ± "),
@@ -314,8 +321,8 @@ data.frame(
   sim_observado=tabEst_arrastre_tipCuerAg$sim_observado,
   sim_estimado=paste(tabEst_arrastre_tipCuerAg$sim_estimado,tabEst_arrastre_tipCuerAg$sim_estimado_se,sep=" ± ")
 )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (arrastre)")%>%
-  add_header_above(c(" "=3, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","cobertura","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (arrastre)")%>%
+  add_header_above(c(" "=4, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")%>%
    ##column_spec(2:9,width="cm")%>%
   column_spec(1:9,width="1.6cm")
@@ -339,6 +346,7 @@ electropesca_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
 ```{r echo=F}
 ## Formatting the table of estimation
 est_electropesca_su<-electropesca_iNEXT_SU$AsyEst
+cobertura<-list(cobertura=electropesca_iNEXT_SU$DataInfo$SC[order(electropesca_iNEXT_SU$DataInfo$Assemblage)])
 cbind(
 sqldf(
   "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
@@ -361,9 +369,9 @@ sqldf(
   ORDER BY Assemblage
   ",drv="SQLite"
 )
-)%>%
-  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (electropesca)")%>%
-  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+)%>%append(values=cobertura,after=1)%>%data.frame()%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (electropesca)",col.names = c("anh_tempo","cobertura",rep(c("observado","estimado"),3)))%>%
+  add_header_above(c(" "=2, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")
 ```
 
@@ -393,6 +401,7 @@ A
 
 ```{r echo=F}
 est_electropesca_tipCuerAg <-iNEXT_electropesca_tipCuerAg$AsyEst
+cobertura <- iNEXT_electropesca_tipCuerAg$DataInfo$SC[order(iNEXT_electropesca_tipCuerAg$DataInfo$Assemblage)]
 tabEst_electropesca_tipCuerAg <-
 cbind(
 sqldf(
@@ -422,6 +431,7 @@ tabEst_electropesca_tipCuerAg$completude<-(tabEst_electropesca_tipCuerAg$riq_obs
 data.frame(
   tipCurAg=tabEst_electropesca_tipCuerAg$`Tipo cuerpo de agua`,
   eventos=tabEst_electropesca_tipCuerAg$eventos,
+  cobertura=cobertura,
   comp=paste(round(tabEst_electropesca_tipCuerAg$completude,2),"%"),
   riq_observado=tabEst_electropesca_tipCuerAg$riq_observado,
   riq_estimado=paste(tabEst_electropesca_tipCuerAg$riq_estimado,tabEst_electropesca_tipCuerAg$riq_estimado_se,sep=" ± "),
@@ -430,8 +440,8 @@ data.frame(
   sim_observado=tabEst_electropesca_tipCuerAg$sim_observado,
   sim_estimado=paste(tabEst_electropesca_tipCuerAg$sim_estimado,tabEst_electropesca_tipCuerAg$sim_estimado_se,sep=" ± ")
 )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (electropesca)")%>%
-  add_header_above(c(" "=3, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","cobertura","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (electropesca)")%>%
+  add_header_above(c(" "=4, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")%>%
    ##column_spec(2:9,width="cm")%>%
   column_spec(1:9,width="1.6cm")
@@ -453,6 +463,7 @@ trasmallo_iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
 ```{r echo=F}
 ## Formatting the table of estimation
 est_trasmallo_su<-trasmallo_iNEXT_SU$AsyEst
+cobertura<-list(cobertura=trasmallo_iNEXT_SU$DataInfo$SC[order(trasmallo_iNEXT_SU$DataInfo$Assemblage)])
 cbind(
 sqldf(
   "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
@@ -475,9 +486,9 @@ sqldf(
   ORDER BY Assemblage
   ",drv="SQLite"
 )
-)%>%
-  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (trasmallo)")%>%
-  add_header_above(c(" ", "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+)%>%append(values=cobertura,after=1)%>%data.frame()%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo (trasmallo)",col.names = c("anh_tempo","cobertura",rep(c("observado","estimado"),3)))%>%
+  add_header_above(c(" "=2, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")
 ```
 
@@ -506,6 +517,7 @@ A
 
 ```{r echo=F}
 est_trasmallo_tipCuerAg <-iNEXT_trasmallo_tipCuerAg$AsyEst
+cobertura=iNEXT_trasmallo_tipCuerAg$DataInfo$SC[order(iNEXT_trasmallo_tipCuerAg$DataInfo$Assemblage)]
 tabEst_trasmallo_tipCuerAg <-
 cbind(
 sqldf(
@@ -535,6 +547,7 @@ tabEst_trasmallo_tipCuerAg$completude<-(tabEst_trasmallo_tipCuerAg$riq_observado
 data.frame(
   tipCurAg=tabEst_trasmallo_tipCuerAg$`Tipo cuerpo de agua`,
   eventos=tabEst_trasmallo_tipCuerAg$eventos,
+  cobertura=cobertura,
   comp=paste(round(tabEst_trasmallo_tipCuerAg$completude,2),"%"),
   riq_observado=tabEst_trasmallo_tipCuerAg$riq_observado,
   riq_estimado=paste(tabEst_trasmallo_tipCuerAg$riq_estimado,tabEst_trasmallo_tipCuerAg$riq_estimado_se,sep=" ± "),
@@ -543,8 +556,8 @@ data.frame(
   sim_observado=tabEst_trasmallo_tipCuerAg$sim_observado,
   sim_estimado=paste(tabEst_trasmallo_tipCuerAg$sim_estimado,tabEst_trasmallo_tipCuerAg$sim_estimado_se,sep=" ± ")
 )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (trasmallo)")%>%
-  add_header_above(c(" "=3, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
+  kable(booktabs=T, longtable=T,col.names = c("Tipo de cuerpo de agua","eventos","cobertura","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (trasmallo)")%>%
+  add_header_above(c(" "=4, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")%>%
    ##column_spec(2:9,width="cm")%>%
   column_spec(1:9,width="1.6cm")
@@ -683,6 +696,7 @@ sqldf(
 )
 )
 tabEst_todo_tipCuerAg$eventos<- tapply(info_todo$nb_event,factor(info_todo$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua]),sum)
+tabEst_todo_tipCuerAg$cobertura<-iNEXT_todo_tipCuerAg$DataInfo$SC[order(iNEXT_todo_tipCuerAg$DataInfo$Assemblage)]
 tabEst_todo_tipCuerAg$completude<-(tabEst_todo_tipCuerAg$riq_observado/tabEst_todo_tipCuerAg$riq_estimado)*100
 
 est_todo_tipCuerAg_t1 <-iNEXT_todo_tipCuerAg_t1$AsyEst
@@ -697,6 +711,7 @@ sqldf(
 )
 )
 tabEst_todo_tipCuerAg_t1$eventos<- tapply(info_todo$nb_event[grep("T1",info_todo$anh_tempo)],factor(info_todo$tipo_cuerp_agua[grep("T1",info_todo$anh_tempo)],colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua]),sum)
+tabEst_todo_tipCuerAg_t1$cobertura<-iNEXT_todo_tipCuerAg_t1$DataInfo$SC[order(iNEXT_todo_tipCuerAg_t1$DataInfo$Assemblage)]
 tabEst_todo_tipCuerAg_t1$completude<-(tabEst_todo_tipCuerAg_t1$riq_observado/tabEst_todo_tipCuerAg_t1$riq_estimado)*100
 
 est_todo_tipCuerAg_t2 <-iNEXT_todo_tipCuerAg_t2$AsyEst
@@ -711,6 +726,7 @@ sqldf(
 )
 )
 tabEst_todo_tipCuerAg_t2$eventos<- tapply(info_todo$nb_event[grep("T2",info_todo$anh_tempo)],factor(info_todo$tipo_cuerp_agua[grep("T2",info_todo$anh_tempo)],colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% info_todo$tipo_cuerp_agua]),sum)
+tabEst_todo_tipCuerAg_t2$cobertura<-iNEXT_todo_tipCuerAg_t2$DataInfo$SC[order(iNEXT_todo_tipCuerAg_t2$DataInfo$Assemblage)]
 tabEst_todo_tipCuerAg_t2$completude<-(tabEst_todo_tipCuerAg_t2$riq_observado/tabEst_todo_tipCuerAg_t2$riq_estimado)*100
 
 rbind(
@@ -718,6 +734,7 @@ data.frame(
   temporada='Ambas',
   tipCurAg=tabEst_todo_tipCuerAg$`Tipo cuerpo de agua`,
   eventos=tabEst_todo_tipCuerAg$eventos,
+  cobertura=tabEst_todo_tipCuerAg$cobertura,
   comp=paste(round(tabEst_todo_tipCuerAg$completude,2),"%"),
   riq_observado=tabEst_todo_tipCuerAg$riq_observado,
   riq_estimado=paste(tabEst_todo_tipCuerAg$riq_estimado,tabEst_todo_tipCuerAg$riq_estimado_se,sep=" ± ")
@@ -726,6 +743,7 @@ data.frame(
   temporada='Aguas altas',
   tipCurAg=tabEst_todo_tipCuerAg_t1$`Tipo cuerpo de agua`,
   eventos=tabEst_todo_tipCuerAg_t1$eventos,
+  cobertura=tabEst_todo_tipCuerAg_t1$cobertura,
   comp=paste(round(tabEst_todo_tipCuerAg_t1$completude,2),"%"),
   riq_observado=tabEst_todo_tipCuerAg_t1$riq_observado,
   riq_estimado=paste(tabEst_todo_tipCuerAg_t1$riq_estimado,tabEst_todo_tipCuerAg_t1$riq_estimado_se,sep=" ± ")
@@ -734,14 +752,15 @@ data.frame(
   temporada='Aguas bajas',
   tipCurAg=tabEst_todo_tipCuerAg_t2$`Tipo cuerpo de agua`,
   eventos=tabEst_todo_tipCuerAg_t2$eventos,
+  cobertura=tabEst_todo_tipCuerAg_t2$cobertura,
   comp=paste(round(tabEst_todo_tipCuerAg_t2$completude,2),"%"),
   riq_observado=tabEst_todo_tipCuerAg_t2$riq_observado,
   riq_estimado=paste(tabEst_todo_tipCuerAg_t2$riq_estimado,tabEst_todo_tipCuerAg_t2$riq_estimado_se,sep=" ± ")
  )
 )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Temporada","Tipo de cuerpo de agua","eventos","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (todos artes de pesca) desde la matriz de incidencia")%>%
+  kable(booktabs=T, longtable=T,col.names = c("Temporada","Tipo de cuerpo de agua","eventos","cobertura","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por tipo de cuerpo de agua (todos artes de pesca) desde la matriz de incidencia")%>%
   collapse_rows(columns = 1, valign = "middle", latex_hline = "major")%>%
-  add_header_above(c(" "=4, "q0 (riqueza)" = 2))
+  add_header_above(c(" "=5, "q0 (riqueza)" = 2))
 ```
 
 \clearpage
@@ -756,7 +775,7 @@ zona<-info_todo$zone[match(rownames(matrix_todo),table = info_todo$anh_tempo)]
 sum_abu <- by(matrix_todo,zona,colSums)
 mat_todo_zona <- Reduce(rbind,sum_abu)
 rownames(mat_todo_zona) <- names(sum_abu)[sapply(sum_abu,length)>0]
-iNEXT_todo_zona <- iNEXT(apply(cbind(nbSU,mat_todo_zona),1,function(x)x[x>0]),datatype = "incidence_freq",endpoint = 250,q=0)
+iNEXT_todo_zona <- iNEXT(apply(cbind(nbSU,mat_todo_zona),1,function(x)x[x>0]),datatype = "incidence_freq",q=0)
 ```
 
 ```{r todoCurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de peces colectados con todos los artes de pesca, calculos basados en la incidencia/frecuencia de las especies colectadas. Representación de las zonas"}
@@ -777,17 +796,19 @@ sqldf(
 )
 tabEst_todo_zona$eventos<- tapply(info_todo$nb_event,factor(info_todo$zone,colList$zonas$platform[colList$zonas$platform %in% info_todo$zone]),sum)
 tabEst_todo_zona$completude<-(tabEst_todo_zona$riq_observado/tabEst_todo_zona$riq_estimado)*100
+tabEst_todo_zona$cobertura <- iNEXT_todo_zona$DataInfo$SC
 
 data.frame(
   tipCurAg=tabEst_todo_zona$Zona,
   eventos=tabEst_todo_zona$eventos,
+  cobertura=tabEst_todo_zona$cobertura,
   comp=paste(round(tabEst_todo_zona$completude,2),"%"),
   riq_observado=tabEst_todo_zona$riq_observado,
   riq_estimado=paste(tabEst_todo_zona$riq_estimado,tabEst_todo_zona$riq_estimado_se,sep=" ± ")
  )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por zonas (todos artes de pesca) desde la matriz de incidencia")%>%
+  kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","cobertura","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por zonas (todos artes de pesca) desde la matriz de incidencia")%>%
   collapse_rows(columns = 1, valign = "middle", latex_hline = "major")%>%
-  add_header_above(c(" "=3, "q0 (riqueza)" = 2))
+  add_header_above(c(" "=4, "q0 (riqueza)" = 2))
 ```
 
 # Curvas de rango Abundancia/Incidencia
