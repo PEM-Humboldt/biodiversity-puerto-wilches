@@ -1,6 +1,6 @@
 ---
 title: "Análisis de los datos de colémbolos"
-author: "coleus Bottin"
+author: "Marius Bottin"
 date: "`r Sys.Date()`"
 lang: "es"
 output: 
@@ -173,7 +173,7 @@ iNEXT_landcov <- iNEXT(apply(mat_landcov,1,function(x)x[x>0]),datatype = "abunda
 ```
 
 
-```{r CurvaRiqueza_landcov_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de colémbolos colectados con trasmallo, calculos basados en la abundancia de las especies colectadas."}
+```{r CurvaRiqueza_landcov_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de colémbolos colectados , calculos basados en la abundancia de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov], labY='Riqueza', title="Coberturas")
 A 

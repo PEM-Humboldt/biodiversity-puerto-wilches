@@ -1,6 +1,6 @@
 ---
 title: "Análisis de los datos de aves"
-author: "avesus Bottin"
+author: "Marius Bottin"
 date: "`r Sys.Date()`"
 lang: "es"
 output: 
