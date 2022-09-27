@@ -1,5 +1,5 @@
 ---
-title: "Análisis de los datos de escarabajos coprofagos"
+title: "Análisis de los datos de larvas de escarabajos"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 lang: "es"
@@ -17,7 +17,7 @@ output:
 
 ************************
 
-Se trata en este documento de presentar los análisis realizados sobre los datos de escarabajos coprofagos, organizados en la base de datos
+Se trata en este documento de presentar los análisis realizados sobre los datos de larvas de escarabajos, organizados en la base de datos
 
 
 *************
@@ -30,7 +30,7 @@ require(sqldf)
 require(kableExtra)
 require(iNEXT)
 require(ggplot2)
-knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/copro_",echo=T)
+knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/larva_",echo=T)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
@@ -50,7 +50,7 @@ eval(parse(text=readLines("../dbTab2mat.R")))
 
 # Importación de los datos de la base de datos
 
-La base de datos contiene todos los datos de escarabajos coprofagos en VIEWS del schema "public", se pueden importar así:
+La base de datos contiene todos los datos de larvas de escarabajos en VIEWS del schema "public", se pueden importar así:
 
 ```{r cache=F}
 (listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^esca'")$table_name)
@@ -90,7 +90,7 @@ landcov<-pgGetGeom(fracking_db,query="SELECT cd_landcov,landcov,landcov_spa,the_
 plot(zonas,col=NA)
 plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
 plot(zonas,col=NA,border="black",add=T)
-infoTot<-import_esca$esca_info_sampling_coprophage
+infoTot<-import_esca$esca_info_sampling_larva
 coordinates(infoTot) <- ~ x_coord_centroid + y_coord_centroid
 plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
 legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
@@ -99,8 +99,8 @@ legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_
 # Definición de las categorias
 
 ```{r cache=F}
-esca_matrix <- import_esca$esca_coprophage_matrix
-infoTot <- import_esca$esca_info_sampling_coprophage
+esca_matrix <- import_esca$esca_larva_matrix
+infoTot <- import_esca$esca_info_sampling_larva
 m <- match(rownames(esca_matrix), table = infoTot$anh_tempo)
 anh <- as.numeric(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(esca_matrix)))
 tempo <- factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\2",rownames(esca_matrix)),levels = colList$tempo$cd_tempo, labels = colList$tempo$temporada)
@@ -115,9 +115,15 @@ table(landcov,zona)
 infoTot$anh_tempo[!infoTot$anh_tempo %in% infoTot$anh_tempo[m]]
 ```
 
-
+Nota: muchos de las unidades de muestreo no muestran ningunos individuos en los registros
 
 # Curvas de diversidad
+
+*****************
+
+**Anotar: El número de unidades de muestreo no corresponde a la realidad de los numero de unidades de muestreo en las tablas. En particular, no se muestran todos los eventos que no tuvieron registros, volveré a hacer esas tablas para que muestran las unidades de muestreo sin registros!
+
+*********************
 
 ## Estimación por sampling unit
 
@@ -171,7 +177,7 @@ iNEXT_landcov <- iNEXT(apply(mat_landcov,1,function(x)x[x>0]),datatype = "abunda
 ```
 
 
-```{r CurvaRiqueza_landcov_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de escarabajos coprofagos colectados , calculos basados en la abundancia de las especies colectadas."}
+```{r CurvaRiqueza_landcov_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de larvas de escarabajos colectados , calculos basados en la abundancia de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov], labY='Riqueza', title="Coberturas")
 A 
@@ -201,13 +207,13 @@ iNEXT_landcov_t2 <- iNEXT(apply(mat_landcov_t2,1,function(x)x[x>0]),datatype = "
 ```
 
 
-```{r curvaRiqueza_landcov_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de escarabajos coprofagos colectada en la temporada de aguas altas, calculos basados en la abundancia total de las especies colectadas."}
+```{r curvaRiqueza_landcov_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de larvas de escarabajos colectada en la temporada de aguas altas, calculos basados en la abundancia total de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t1,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t1],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t1], labY='Riqueza', title="Coberturas, temporada de aguas altas")
 A
 ```
 
-```{r curvaRiqueza_landcov_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de escarabajos coprofagos colectada en la temporada de aguas bajas, calculos basados en la abundancia total de las especies colectadas."}
+```{r curvaRiqueza_landcov_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de larvas de escarabajos colectada en la temporada de aguas bajas, calculos basados en la abundancia total de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t2,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t2],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t2], labY='Riqueza', title="Coberturas, temporada de aguas bajas")
 A
@@ -239,7 +245,7 @@ sqldf(
   ",drv="SQLite"
 )
 )
-tabEst_landcov$eventos<- tapply(infoTot$nb_event[m],landcov,sum)[!is.na(tapply(infoTot$nb_event,landcov,sum))]
+tabEst_landcov$eventos<- tapply(infoTot$nb_event[m],landcov,sum)[!is.na(tapply(infoTot$nb_event[m],landcov,sum))]
 tabEst_landcov$completude<-(tabEst_landcov$riq_observado/tabEst_landcov$riq_estimado)*100
 
 est_landcov_t1 <-iNEXT_landcov_t1$AsyEst
@@ -359,7 +365,7 @@ rownames(matrix_zona) <- names(sum_abu)[sapply(sum_abu,length)>0]
 iNEXT_zona <- iNEXT(apply(matrix_zona,1,function(x)x[x>0]),datatype = "abundance")
 ```
 
-```{r CurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de escarabajos coprofagos colectada, calculos basados en la abundancia de las especies colectadas. Representación de las zonas"}
+```{r CurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de larvas de escarabajos colectada, calculos basados en la abundancia de las especies colectadas. Representación de las zonas"}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_zona,type=1,col=colList$zonas$color[colList$zonas$platform %in% zona],orderAssemblage = colList$zonas$platform[colList$zonas$platform %in% zona], labY='Riqueza', labX='Número de individuos')
 A
@@ -414,7 +420,7 @@ data.frame(
 ## Matrix total
 
 ```{r rangoAbundanciaTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las temporadas"}
-nb_sp<-15
+nb_sp<-8
 par(mar = c(10.1,6.5,1,4.1))
 sum_abundancia <- sort(colSums(esca_matrix),decreasing = T)[1:nb_sp]
 plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
@@ -437,7 +443,7 @@ legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tem
 
 
 ```{r rangoAbundanciaTotal_zona, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las 3 zonas de muestreo"}
-nb_sp<-15
+nb_sp<-8
 par(mar = c(8.1,6.5,1,4.1))
 sum_abundancia <- sort(colSums(esca_matrix),decreasing = T)[1:nb_sp]
 plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
@@ -460,7 +466,7 @@ legend("topright",pch=c(15,colList$zonas$pch),col=c("black",colList$zonas$color)
 
 
 ```{r rangoAbundanciaTotal_cobertura, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las coberturas"}
-nb_sp<-15
+nb_sp<-8
 par(mar = c(8.1,6.5,1,10.1))
 sum_abundancia <- sort(colSums(esca_matrix),decreasing = T)[1:nb_sp]
 plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
@@ -487,133 +493,6 @@ legend("topright",pch=c(15,rep(21,sum(!sapply(sum_abundancias_cobertura,is.null)
 ```
 
 
-## Por coberturas
-### Bosque Abierto
-
-```{r rangoAbundancia_bosque_abierto, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques abiertos, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(esca_matrix[landcov=="Bosque Abierto",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,20000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(as.matrix(t(esca_matrix[landcov=="Bosque Abierto" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])))), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(esca_matrix[landcov=="Bosque Abierto" & grepl("T2",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
-
-### Bosque Abierto
-
-```{r rangoAbundancia_bosque_denso, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques densos, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(esca_matrix[landcov=="Bosque Denso",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,20000,by=5)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%5==0),length(ATX))])
-show <- ATX%%5==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(esca_matrix[landcov=="Bosque Denso" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(esca_matrix[landcov=="Bosque Denso" & grepl("T2",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
-
-### Bosque ripario
-
-```{r rangoAbundancia_bosque_ripario, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques riparios, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(esca_matrix[landcov=="Bosque Ripario",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,20000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(esca_matrix[landcov=="Bosque Ripario" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(esca_matrix[landcov=="Bosque Ripario" & grepl("T2",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
-
-### Herbazales
-
-```{r rangoAbundancia_herbazales, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los herbazales, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(esca_matrix[landcov=="Herbazales",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,20000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(esca_matrix[landcov=="Herbazales" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(esca_matrix[landcov=="Herbazales" & grepl("T2",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
-
-### Palma
-
-```{r rangoAbundancia_palma, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en las palma, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(esca_matrix[landcov=="Palma",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,20000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(esca_matrix[landcov=="Palma" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(esca_matrix[landcov=="Palma" & grepl("T2",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
-
-### Pastos
-
-```{r rangoAbundancia_pastos, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los pastos, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(esca_matrix[landcov=="Pastos",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,20000,by=1)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%5==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(esca_matrix[landcov=="Pastos" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(esca_matrix[landcov=="Pastos" & grepl("T2",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
-
 # Diversidad beta (NMDS)
 
 ```{r nmds_tot_}
@@ -632,12 +511,12 @@ A <- stressplot(nmds_tot)
 
 **Nota sobre la calidad de representación de la NMDS**
 
-En la figura \ref{ndms_tot_stressplot}, se muestra el "estrés" del método aplicado sobre la matriz de abundancia de escarabajos coprofagos.
+En la figura \ref{ndms_tot_stressplot}, se muestra el "estrés" del método aplicado sobre la matriz de abundancia de larvas de escarabajos.
 Las NMDS no tienen una homogeneización de las normas del espacio, es decir, una distancia de 2 cm en un lado del espacio no tiene obligatoriamente  el mismo sentido que una distancia de 2cm en otro lado del espacio.
 Lo que intenta optimizar la NMDS es el orden de las distancias entre los puntos en la matriz de distancia entre composiciones (acá matriz de distancia de Bray-Curtis) y las distancias en el espacio del análisis.
 El gráfico de la figura \ref{ndms_tot_stressplot} muestra el resultado de este esfuerzo de optimización.
 
-Acá el estrés es acceptable, con un valor de **`r round(nmds_tot$stress,2)`** (es decir, un $`r round(nmds_tot$stress*100)`$\% de las distancias no están el mismo orden de las distancias de Bray-Curtis), y una correlación lineal mostrando un $R^2$ de 
+Acá el estrés es muy ligero (probablemente debido al tamaño reducido de la matriz), con un valor de **`r round(nmds_tot$stress,2)`** (es decir, un $`r round(nmds_tot$stress*100)`$\% de las distancias no están el mismo orden de las distancias de Bray-Curtis), y una correlación lineal mostrando un $R^2$ de 
 `r round(cor(A$y,A$yf,method="pearson")^2,2)`. <!--Así se puede utilizar esta NMDS con 2 dimensiones de espacio, con las precauciones necesarías de tomar en cuenta la no-estabilidad de los resultados...-->
 
 Anotar que el resultado del $R^2$ anterior tiene que analizarse con cuidado, hay mucho más distancia entre composiciones que de datos reales, y no se puede comparar a un $R^2$ clasico, las distancias no cumplen la condiciones de independencia que permiten utilizar los parametros clasicos en estadística.
