@@ -522,7 +522,7 @@ show <- ATX%%100==0
 show[c(1,length(ATX))] <- T
 axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
 text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(as.matrix(t(esca_matrix[landcov=="Bosque Abierto" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])))), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
+points(log10(colSums(as.matrix((esca_matrix[landcov=="Bosque Abierto" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])))), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
 points(log10(colSums(esca_matrix[landcov=="Bosque Abierto" & grepl("T2",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
 legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
@@ -590,26 +590,6 @@ points(log10(colSums(esca_matrix[landcov=="Herbazales" & grepl("T2",rownames(esc
 legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
 ```
 
-### Palma
-
-```{r rangoAbundancia_palma, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en las palma, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(esca_matrix[landcov=="Palma",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,20000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(esca_matrix[landcov=="Palma" & grepl("T1",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(esca_matrix[landcov=="Palma" & grepl("T2",rownames(esca_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
 
 ### Pastos
 

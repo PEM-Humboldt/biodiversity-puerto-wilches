@@ -33,7 +33,6 @@ Se trata en este documento de presentar los análisis realizados sobre los datos
 ```{r setup, echo=F,message=F,warning=FALSE}
 require(openxlsx)
 require(RPostgreSQL)
-require(sp)
 require(sqldf)
 require(kableExtra)
 require(iNEXT)
@@ -94,6 +93,7 @@ colList$landcover<-colList$landcover[order(colList$landcover$landcov_spa),]
 
 ```{r mapzona, cache=T, fig.width=10, fig.height=10}
 require(rpostgis)
+require(sp)
 zonas<-pgGetGeom(fracking_db,query="SELECT platform,zona_geom AS geom FROM main.platform")
 landcov<-pgGetGeom(fracking_db,query="SELECT cd_landcov,landcov,landcov_spa,the_geom AS geom FROM spat.landcov LEFT JOIN spat.def_landcov USING (cd_landcov)")
 plot(zonas,col=NA)
