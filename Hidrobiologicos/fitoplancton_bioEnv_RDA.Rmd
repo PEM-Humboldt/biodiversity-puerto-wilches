@@ -1,0 +1,151 @@
+---
+title: "Análisis Bio-Env y RDA sobre fitoplancton"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+lang: "es"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage[normalem]{ulem}
+---
+
+
+************************
+
+Se trata en este documento de presentar los análisis realizados sobre las variables ambientales (BioEnv y RDA) y las comunidades 
+
+
+*************
+
+```{r setup, echo=F,message=F,warning=FALSE}
+require(openxlsx)
+require(RPostgreSQL)
+require(sp)
+require(sqldf)
+require(kableExtra)
+knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/fipl_",echo=T)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+options(knitr.kable.NA = "---")
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+```
+
+# Function para formatear las matrices
+
+```{r code=readLines("../dbTab2mat.R")}
+eval(parse(text=readLines("../dbTab2mat.R")))
+```
+
+
+# Importación de los datos de la base de datos
+
+La base de datos contiene todos los datos de fitoplancton en VIEWS del schema "public", se pueden importar así:
+
+```{r cache=F}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^fipl'")$table_name)
+import_fipl <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(import_fipl) <- listTable
+import_fipl <- c(import_fipl,lapply(import_fipl[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  }))
+names(import_fipl)[grepl("matrix",names(import_fipl)) & !sapply(lapply(import_fipl,class),function(x) "matrix"%in% x)]<- 
+	paste(names(import_fipl)[grepl("matrix",names(import_fipl)) & !sapply(lapply(import_fipl,class),function(x) "matrix"%in% x)],"_raw",sep="" )
+import_fipl$fipl_ab_abs_matrix<-dbTab2mat(import_fipl$fipl_matrix_raw, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = "abs_abundance")
+```
+
+
+
+# Colores
+
+
+```{r, cache=F, message=FALSE,warning=FALSE}
+fol_data <- "../../Data_Documents/ExtraData/"
+wb <- loadWorkbook(file.path(fol_data,'Colores.xlsx'))
+colList<-lapply(names(wb),read.xlsx,xlsxFile=file.path(fol_data,'Colores.xlsx'))
+names(colList) <- names(wb)
+colList$zonas<-colList$zonas[order(colList$zonas$platform),]
+colList$aquatic_habitats <- colList$aquatic_habitats[order(colList$aquatic_habitats$habitat_spa),]
+```
+
+# Definición de las categorias
+
+```{r cache=F}
+require(vegan)
+fipl_matrix <- import_fipl$fipl_matrix
+stopifnot(all(rownames(import_fipl$fipl_ab_abs_matrix)==rownames(import_fipl$fipl_matrix)))
+infoTot <- import_fipl$fipl_info_sampling
+m <- match(rownames(fipl_matrix), table = infoTot$anh_tempo)
+anh <- as.numeric(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(fipl_matrix)))
+tempo <- factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\2",rownames(fipl_matrix)),levels = colList$tempo$cd_tempo, labels = colList$tempo$temporada)
+table(tempo)
+zona <- factor(infoTot$zone[m],levels=colList$zonas$platform)
+table(zona,tempo)
+tipCuerAg <- factor(infoTot$tipo_cuerp_agua[m],levels = colList$aquatic_habitats$habitat_spa)
+table(tipCuerAg,tempo)
+table(tipCuerAg,zona)
+
+# Cuales son las unidades de muestreo sin registros:
+infoTot$anh_tempo[!infoTot$anh_tempo %in% infoTot$anh_tempo[m]]
+```
+
+
+# Análisis de redundancia
+
+## Preparar los datos ambientales
+
+```{r prepEnvir}
+fipl_matrix<-import_fipl$fipl_matrix
+fipl_matrix <- fipl_matrix[tipCuerAg != "Río", ]
+fipl_matrix <- fipl_matrix[, as.logical(colSums(fipl_matrix))]
+
+stopifnot(import_fipl$fipl_envir_water$anh_tempo==import_fipl$fipl_envir_sedim$anh_tempo)
+sedim <- import_fipl$fipl_envir_sedim
+colnames(sedim) <- paste("sed",colnames(sedim),sep=".")
+water <- import_fipl$fipl_envir_water
+colnames(water) <- paste("wat",colnames(water),sep=".")
+envir<-cbind(sedim[sapply(sedim,mode)=="numeric"],water[sapply(water,mode)=="numeric"])
+rownames(envir)<-sedim$sed.anh_tempo
+# Manejar los valores faltantes
+## Primero suprimamos las variables que contienen más de 6 valores faltantes
+(nbNa<-sapply(envir,function(x)sum(is.na(x))))
+envir <- envir[sapply(envir,function(x)sum(is.na(x)))<6]
+## Segundo suprimamos las filas que contienen todavía valores faltantes
+envir <- na.omit(envir)
+dim(envir)
+# guardemos solo los datos completos en las 2 matrices
+(toKeep<-intersect(rownames(envir),rownames(fipl_matrix)))
+fipl_matrix <- fipl_matrix[toKeep,]
+envir <- envir[toKeep,]
+```
+
+## Aplicar el análisis bioenv para buscar el ensamblaje de variables ambientales optimal
+
+```{r bioenv, dependson="prepEnvir"}
+bioEnv <- bioenv(fipl_matrix,envir,parallel=3,trace=T)
+save(bioEnv,file="bioEnv_fipl.RData")
+```
+
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```

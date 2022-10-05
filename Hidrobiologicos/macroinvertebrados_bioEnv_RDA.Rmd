@@ -1,0 +1,127 @@
+---
+title: "Análisis Bio-Env y RDA sobre macroinvertebrados"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+lang: "es"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage[normalem]{ulem}
+---
+
+
+************************
+
+Se trata en este documento de presentar los análisis realizados sobre las variables ambientales (BioEnv y RDA) y las comunidades 
+
+
+*************
+
+```{r setup, echo=F,message=F,warning=FALSE}
+require(openxlsx)
+require(RPostgreSQL)
+require(sp)
+require(sqldf)
+require(kableExtra)
+knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/minv_",echo=T)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+options(knitr.kable.NA = "---")
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+```
+
+# Function para formatear las matrices
+
+```{r code=readLines("../dbTab2mat.R")}
+eval(parse(text=readLines("../dbTab2mat.R")))
+```
+
+
+# Importación de los datos de la base de datos
+
+La base de datos contiene todos los datos de macroinvertebrados en VIEWS del schema "public", se pueden importar así:
+
+```{r cache=F}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^minv'")$table_name)
+import_minv <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(import_minv) <- listTable
+import_minv <- c(import_minv,lapply(import_minv[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  }))
+names(import_minv)[grepl("matrix",names(import_minv)) & !sapply(lapply(import_minv,class),function(x) "matrix"%in% x)]<- 
+	paste(names(import_minv)[grepl("matrix",names(import_minv)) & !sapply(lapply(import_minv,class),function(x) "matrix"%in% x)],"_raw",sep="" )
+import_minv$minv_ab_abs_matrix<-dbTab2mat(import_minv$minv_matrix_raw, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = "abs_abundance")
+```
+
+
+
+# Colores
+
+
+```{r, cache=F, message=FALSE,warning=FALSE}
+fol_data <- "../../Data_Documents/ExtraData/"
+wb <- loadWorkbook(file.path(fol_data,'Colores.xlsx'))
+colList<-lapply(names(wb),read.xlsx,xlsxFile=file.path(fol_data,'Colores.xlsx'))
+names(colList) <- names(wb)
+colList$zonas<-colList$zonas[order(colList$zonas$platform),]
+colList$aquatic_habitats <- colList$aquatic_habitats[order(colList$aquatic_habitats$habitat_spa),]
+```
+
+# Análisis de redundancia
+
+## Preparar los datos ambientales
+
+```{r prepEnvir}
+minv_matrix <- import_minv$minv_matrix
+stopifnot(import_minv$minv_envir_water$anh_tempo==import_minv$minv_envir_sedim$anh_tempo)
+sedim <- import_minv$minv_envir_sedim
+colnames(sedim) <- paste("sed",colnames(sedim),sep=".")
+water <- import_minv$minv_envir_water
+colnames(water) <- paste("wat",colnames(water),sep=".")
+envir<-cbind(sedim[sapply(sedim,mode)=="numeric"],water[sapply(water,mode)=="numeric"])
+rownames(envir)<-sedim$sed.anh_tempo
+# Manejar los valores faltantes
+## Primero suprimamos las variables que contienen más de 6 valores faltantes
+(nbNa<-sapply(envir,function(x)sum(is.na(x))))
+envir <- envir[sapply(envir,function(x)sum(is.na(x)))<6]
+## Segundo suprimamos las filas que contienen todavía valores faltantes
+envir <- na.omit(envir)
+dim(envir)
+# guardemos solo los datos completos en las 2 matrices
+(toKeep<-intersect(rownames(envir),rownames(minv_matrix)))
+minv_matrix <- minv_matrix[toKeep,]
+envir <- envir[toKeep,]
+```
+
+## Aplicar el análisis bioenv para buscar el ensamblaje de variables ambientales optimal
+
+```{r bioenv, dependson="prepEnvir"}
+require(vegan)
+bioEnv <- bioenv(minv_matrix,envir,parallel=3,trace=T)
+save(bioEnv,file="bioEnv_minv.RData")
+```
+
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```

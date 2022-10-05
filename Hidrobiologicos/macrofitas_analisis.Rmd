@@ -1,0 +1,669 @@
+---
+title: "Análisis de los datos de macrofitas"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+lang: "es"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage[normalem]{ulem}
+---
+
+
+************************
+
+Se trata en este documento de presentar los análisis realizados sobre los datos de macrofitas, organizados en la base de datos
+
+
+*************
+
+```{r setup, echo=F,message=F,warning=FALSE}
+require(openxlsx)
+require(RPostgreSQL)
+require(sp)
+require(sqldf)
+require(kableExtra)
+require(iNEXT)
+require(ggplot2)
+knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/mafi_",echo=T)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+options(knitr.kable.NA = "---")
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
+```
+
+# Function para formatear las matrices
+
+```{r code=readLines("../dbTab2mat.R")}
+eval(parse(text=readLines("../dbTab2mat.R")))
+```
+
+
+# Importación de los datos de la base de datos
+
+La base de datos contiene todos los datos de macrofitas en VIEWS del schema "public", se pueden importar así:
+
+```{r cache=F}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^mafi'")$table_name)
+import_mafi <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(import_mafi) <- listTable
+import_mafi <- c(import_mafi,lapply(import_mafi[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  }))
+names(import_mafi)[grepl("matrix",names(import_mafi)) & !sapply(lapply(import_mafi,class),function(x) "matrix"%in% x)]<- 
+	paste(names(import_mafi)[grepl("matrix",names(import_mafi)) & !sapply(lapply(import_mafi,class),function(x) "matrix"%in% x)],"_raw",sep="" )
+```
+
+
+
+# Colores
+
+
+```{r, cache=F, message=FALSE,warning=FALSE}
+fol_data <- "../../Data_Documents/ExtraData/"
+wb <- loadWorkbook(file.path(fol_data,'Colores.xlsx'))
+colList<-lapply(names(wb),read.xlsx,xlsxFile=file.path(fol_data,'Colores.xlsx'))
+names(colList) <- names(wb)
+colList$zonas<-colList$zonas[order(colList$zonas$platform),]
+colList$aquatic_habitats <- colList$aquatic_habitats[order(colList$aquatic_habitats$habitat_spa),]
+```
+
+# Información basica
+
+## Mapa de la zona
+
+```{r mapzona, cache=T, fig.width=11, fig.height=10}
+require(rpostgis)
+zonas<-pgGetGeom(fracking_db,query="SELECT platform,zona_geom AS geom FROM main.platform")
+landcov<-pgGetGeom(fracking_db,query="SELECT cd_landcov,landcov,landcov_spa,the_geom AS geom FROM spat.landcov LEFT JOIN spat.def_landcov USING (cd_landcov)")
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+infoTot<-import_mafi$mafi_info_sampling
+coordinates(infoTot) <- ~ x_coord_centroid + y_coord_centroid
+plot(infoTot, bg = colList$aquatic_habitats$color[match(infoTot$tipo_cuerp_agua, table= colList$aquatic_habitats$habitat_spa)],cex=2,pch=22,add=T)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
+legend("bottomright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title = "Tipo de cuerpo de agua", bty="n")
+```
+
+# Definición de las categorias
+
+```{r cache=F}
+mafi_matrix <- import_mafi$mafi_matrix
+stopifnot(all(rownames(import_mafi$mafi_ab_abs_matrix)==rownames(import_mafi$mafi_matrix)))
+infoTot <- import_mafi$mafi_info_sampling
+m <- match(rownames(mafi_matrix), table = infoTot$anh_tempo)
+anh <- as.numeric(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(mafi_matrix)))
+tempo <- factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\2",rownames(mafi_matrix)),levels = colList$tempo$cd_tempo, labels = colList$tempo$temporada)
+table(tempo)
+zona <- factor(infoTot$zone[m],levels=colList$zonas$platform)
+table(zona,tempo)
+tipCuerAg <- factor(infoTot$tipo_cuerp_agua[m],levels = colList$aquatic_habitats$habitat_spa)
+table(tipCuerAg,tempo)
+table(tipCuerAg,zona)
+
+# Cuales son las unidades de muestreo sin registros:
+infoTot$anh_tempo[!infoTot$anh_tempo %in% infoTot$anh_tempo[m]]
+```
+
+
+
+# Curvas de diversidad
+
+***********************
+
+**Anotar: Para que puedan funcionar las estimaciones de biodiversidad, debemos utilizar las incidencias. No tiene ningún sentido aplicar las estimaciones de diversidad con las coberturas, porque las estimaciones de diversidad real están calculadas con el número de "singleton" y "doublons" en las abundancias. La solución más eficiente y logica para estimar las curvas de biodiversidad sería utilizar el número de cuadrante que tiene la especie, pero parece que no tenemos acceso a esta información**
+
+
+*************************
+
+## Estimación por unidad de muestreo (anh_tempo)
+
+
+**Dado que no tenemos el numero de cuadrantes que tienen las especies, no tiene ningún sentido aplicar la estimación de diversidad a escala de la unidad de muestreo...**
+
+
+```{r iNEXT_SU, warning=F}
+mafi_matrix <- (import_mafi$mafi_matrix>0)*1
+```
+
+## Curvas y estimaciones por tipo de cuerpo de agua
+
+```{r iNEXT}
+(nbSU<-table(tipCuerAg))
+sum_occu <- by(mafi_matrix,tipCuerAg,colSums)
+mat_tipCuerAg <- Reduce(rbind,sum_occu)
+rownames(mat_tipCuerAg) <- names(sum_occu)[sapply(sum_occu,length)>0]
+stopifnot(rownames(mat_tipCuerAg)==names(nbSU))
+mat_tipCuerAg<-cbind(nbSU,mat_tipCuerAg)
+iNEXT_tipCuerAg <- iNEXT(apply(mat_tipCuerAg,1,function(x)sort(x[x>0],decreasing = T)),datatype = "incidence_freq")
+```
+
+
+```{r CurvaRiqueza_tipCuerAg_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de macrofitas colectados , calculos basados en la incidencia (número de eventos con presencia) de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_tipCuerAg,type=1,col=colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa %in% tipCuerAg],orderAssemblage = colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% tipCuerAg], labX="Número de muestreos", labY='Riqueza', title="Tipos de cuerpo de agua")
+A 
+```
+
+
+
+```{r iNEXT_tipCuerAg_t1_t2}
+#T1
+mafi_matrix_t1 <- mafi_matrix[tempo=="Aguas altas",]
+tipCuerAg_t1<-tipCuerAg[tempo=="Aguas altas"]
+(nbSU_t1<- table(tipCuerAg_t1))
+sum_occu <- by(mafi_matrix_t1,tipCuerAg_t1,colSums)
+mat_tipCuerAg_t1 <- Reduce(rbind,sum_occu)
+rownames(mat_tipCuerAg_t1) <- names(sum_occu)[sapply(sum_occu,length)>0]
+iNEXT_tipCuerAg_t1 <- iNEXT(apply(cbind(nbSU_t1,mat_tipCuerAg_t1),1,function(x)x[x>0]),datatype = "incidence_freq")
+
+#T2
+mafi_matrix_t2 <- mafi_matrix[tempo=="Aguas bajas",]
+tipCuerAg_t2<-tipCuerAg[tempo=="Aguas bajas"]
+(nbSU_t2<- table(tipCuerAg_t2))
+sum_occu <- by(mafi_matrix_t2,tipCuerAg_t2,colSums)
+mat_tipCuerAg_t2 <- Reduce(rbind,sum_occu)
+rownames(mat_tipCuerAg_t2) <- names(sum_occu)[sapply(sum_occu,length)>0]
+iNEXT_tipCuerAg_t2 <- iNEXT(apply(cbind(nbSU_t2,mat_tipCuerAg_t2),1,function(x)x[x>0]),datatype = "incidence_freq")
+
+```
+
+
+```{r curvaRiqueza_tipCuerAg_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de macrofitas colectada en la temporada de aguas altas, calculos basados en la incidencia total de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_tipCuerAg_t1,type=1,col=colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa %in% tipCuerAg_t1],orderAssemblage = colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% tipCuerAg_t1], labY='Riqueza', labX='Número de muestreos', title="Tipos de cuerpo de agua, temporada de aguas altas")
+A
+```
+
+```{r curvaRiqueza_tipCuerAg_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de macrofitas colectada en la temporada de aguas bajas, calculos basados en la incidencia total de las especies colectadas."}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_tipCuerAg_t2,type=1,col=colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa %in% tipCuerAg_t2],orderAssemblage = colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% tipCuerAg_t2], labY='Riqueza',labX='Número de muestreos', title="Tipos de cuerpo de agua, temporada de aguas bajas")
+A
+```
+
+```{r echo=F}
+est_tipCuerAg <-iNEXT_tipCuerAg$AsyEst
+tabEst_tipCuerAg <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo de cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_tipCuerAg
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_tipCuerAg$eventos<- tapply(infoTot$nb_event[m],tipCuerAg,sum)[!is.na(tapply(infoTot$nb_event,tipCuerAg,sum))]
+tabEst_tipCuerAg$completude<-(tabEst_tipCuerAg$riq_observado/tabEst_tipCuerAg$riq_estimado)*100
+tabEst_tipCuerAg$coverage <- iNEXT_tipCuerAg$DataInfo$SC[order(iNEXT_tipCuerAg$DataInfo$Assemblage)]
+
+est_tipCuerAg_t1 <-iNEXT_tipCuerAg_t1$AsyEst
+tabEst_tipCuerAg_t1 <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo de cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_tipCuerAg_t1
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_tipCuerAg_t1$eventos<- tapply(infoTot$nb_event[m[tempo=="Aguas altas"]],tipCuerAg_t1,sum)[!is.na(tapply(infoTot$nb_event[m[tempo=="Aguas altas"]],tipCuerAg_t1,sum))]
+tabEst_tipCuerAg_t1$completude<-(tabEst_tipCuerAg_t1$riq_observado/tabEst_tipCuerAg_t1$riq_estimado)*100
+tabEst_tipCuerAg_t1$coverage <- iNEXT_tipCuerAg_t1$DataInfo$SC[order(iNEXT_tipCuerAg_t1$DataInfo$Assemblage)]
+
+est_tipCuerAg_t2 <-iNEXT_tipCuerAg_t2$AsyEst
+tabEst_tipCuerAg_t2 <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Tipo de cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_tipCuerAg_t2
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_tipCuerAg_t2$eventos<- tapply(infoTot$nb_event[m[tempo=="Aguas bajas"]],tipCuerAg_t2,sum)[!is.na(tapply(infoTot$nb_event[m[tempo=="Aguas bajas"]],tipCuerAg_t2,sum))]
+tabEst_tipCuerAg_t2$completude<-(tabEst_tipCuerAg_t2$riq_observado/tabEst_tipCuerAg_t2$riq_estimado)*100
+tabEst_tipCuerAg_t2$coverage <- iNEXT_tipCuerAg_t2$DataInfo$SC[order(iNEXT_tipCuerAg_t2$DataInfo$Assemblage)]
+
+rbind(
+data.frame(
+  temporada='Ambas',
+  tipCurAg=tabEst_tipCuerAg$`Tipo de cuerpo de agua`,
+  eventos=tabEst_tipCuerAg$eventos,
+  coverage=tabEst_tipCuerAg$coverage,
+  comp=paste(round(tabEst_tipCuerAg$completude,2),"%"),
+  riq_observado=tabEst_tipCuerAg$riq_observado,
+  riq_estimado=paste(tabEst_tipCuerAg$riq_estimado,tabEst_tipCuerAg$riq_estimado_se,sep=" ± ")
+ ),
+data.frame(
+  temporada='Aguas altas',
+  tipCurAg=tabEst_tipCuerAg_t1$`Tipo de cuerpo de agua`,
+  eventos=tabEst_tipCuerAg_t1$eventos,
+  coverage=tabEst_tipCuerAg_t1$coverage,
+  comp=paste(round(tabEst_tipCuerAg_t1$completude,2),"%"),
+  riq_observado=tabEst_tipCuerAg_t1$riq_observado,
+  riq_estimado=paste(tabEst_tipCuerAg_t1$riq_estimado,tabEst_tipCuerAg_t1$riq_estimado_se,sep=" ± ")
+ ),
+data.frame(
+  temporada='Aguas bajas',
+  tipCurAg=tabEst_tipCuerAg_t2$`Tipo de cuerpo de agua`,
+  eventos=tabEst_tipCuerAg_t2$eventos,
+  coverage=tabEst_tipCuerAg_t2$coverage,
+  comp=paste(round(tabEst_tipCuerAg_t2$completude,2),"%"),
+  riq_observado=tabEst_tipCuerAg_t2$riq_observado,
+  riq_estimado=paste(tabEst_tipCuerAg_t2$riq_estimado,tabEst_tipCuerAg_t2$riq_estimado_se,sep=" ± ")
+ )
+)%>%
+  kable(booktabs=T, longtable=T,col.names = c("Temporada","Tipo de cuerpo de agua","eventos","coverage","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por Cobertura desde la matriz de abundancia")%>%
+  collapse_rows(columns = 1, valign = "middle", latex_hline = "major")%>%
+  add_header_above(c(" "=5, "q0 (riqueza)" = 2))%>%
+  landscape()
+```
+
+
+
+\clearpage
+
+
+
+
+## Zonas
+
+```{r iNEXT_zona, warning=FALSE}
+(nbSU<-tapply(infoTot$nb_event[m],zona,sum))
+sum_occu <- by(mafi_matrix,zona,colSums)
+matrix_zona <- Reduce(rbind,sum_occu)
+rownames(matrix_zona) <- names(sum_occu)[sapply(sum_occu,length)>0]
+iNEXT_zona <- iNEXT(apply(cbind(nbSU,matrix_zona),1,function(x)x[x>0]),datatype = "incidence_freq")
+```
+
+```{r CurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de macrofitas colectada, calculos basados en la incidencia de las especies colectadas. Representación de las zonas"}
+ ## especificaciones de ggplot
+A<-iNEXT_ggplot_optimizado(iNEXT_zona,type=1,col=colList$zonas$color[colList$zonas$platform %in% zona],orderAssemblage = colList$zonas$platform[colList$zonas$platform %in% zona], labY='Riqueza', labX='Número de muestreos')
+A
+```
+
+```{r echo=F}
+est_zona <-iNEXT_zona$AsyEst
+tabEst_zona <-
+cbind(
+sqldf(
+  "SELECT Assemblage \"Zona\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
+  FROM est_zona
+  WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+)
+)
+tabEst_zona$eventos<- tapply(infoTot$nb_event[m], zona, sum)
+tabEst_zona$completude<-(tabEst_zona$riq_observado/tabEst_zona$riq_estimado)*100
+tabEst_zona$coverage<-iNEXT_zona$DataInfo$SC[order(iNEXT_zona$DataInfo$Assemblage)]
+
+data.frame(
+  tipCurAg=tabEst_zona$Zona,
+  eventos=tabEst_zona$eventos,
+  coverage=tabEst_zona$coverage,
+  comp=paste(round(tabEst_zona$completude,2),"%"),
+  riq_observado=tabEst_zona$riq_observado,
+  riq_estimado=paste(tabEst_zona$riq_estimado,tabEst_zona$riq_estimado_se,sep=" ± ")
+ )%>%
+  kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","coverage","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por zonas desde la matriz de incidencia")%>%
+  add_header_above(c(" "=4, "q0 (riqueza)" = 2))
+```
+
+# Curvas de Rango Cobertura
+
+```{r}
+mafi_matrix <- import_mafi$mafi_matrix*10
+```
+
+## Matrix total
+
+```{r rangoDensidadTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Densidad, orden según las densidades promedias totales, mostrando las temporadas"}
+nb_sp<-15
+par(mar = c(10.1,6.5,1,4.1))
+mean_density <- sort(colMeans(mafi_matrix),decreasing = T)[1:nb_sp]
+plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(mean_density))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.2)
+ATX <- c(1,seq(10,1000,by=10))
+ATX <- ATX[1:(min(which(ATX>mean_density[1]))+1)]
+#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
+show <- c(T, ATX[2:length(ATX)]%%10==0)
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
+points(log10(colMeans(mafi_matrix[grep("T1",rownames(mafi_matrix)),names(mean_density)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
+points(log10(colMeans(mafi_matrix[grep("T2",rownames(mafi_matrix)),names(mean_density)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
+legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```
+
+
+## Mostrando las zonas
+
+
+```{r rangoDensidadTotal_zona, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Densidad, orden según las densidades promedias totales, mostrando las 3 zonas de muestreo"}
+nb_sp<-15
+par(mar = c(7.1,6.5,1,4.1))
+mean_density <- sort(colMeans(mafi_matrix),decreasing = T)[1:nb_sp]
+plot(1:nb_sp,log10(mean_density),ylab="Densidad total", xlab=NA,ylim=c(0,max(log10(mean_density))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
+ATX <- c(1,seq(10,1000,by=10))
+ATX <- ATX[1:(min(which(ATX>mean_density[1]))+1)]
+#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
+show <- c(T, ATX[2:length(ATX)]%%10==0)
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
+points(1:nb_sp,log10(colMeans(mafi_matrix[zona=="Caracterización",names(mean_density)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Caracterización"],bg=colList$zonas$color[colList$zonas$platform=="Caracterización"],lty=2,col=colList$zonas$color[colList$zonas$platform=="Caracterización"])
+points(1:nb_sp,log10(colMeans(mafi_matrix[zona=="Kalé",names(mean_density)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Kalé"], bg=colList$zonas$color[colList$zonas$platform=="Kalé"], lty=2, col=colList$zonas$color[colList$zonas$platform=="Kalé"])
+points(1:nb_sp,log10(colMeans(mafi_matrix[zona=="Platero",names(mean_density)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Platero"],bg=colList$zonas$color[colList$zonas$platform=="Platero"],lty=2,col=colList$zonas$color[colList$zonas$platform=="Platero"])
+legend("topright",pch=c(15,colList$zonas$pch),col=c("black",colList$zonas$color),pt.bg=c(NA,colList$zonas$color),legend=c("Todas",colList$zonas$platform),title="Zonas",bty="n")
+```
+
+## Mostrando los tipos de cuerpos de agua
+
+
+```{r rangoDensidadTotal_tipCuerAg, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad, orden según las densidades promedias totales, mostrando los tipos de cuerpos de agua"}
+nb_sp<-15
+par(mar = c(7.1,6.5,1,1))
+mean_density <- sort(colMeans(mafi_matrix),decreasing = T)[1:nb_sp]
+p_mean_densities_tipCuerAg <- by(data=mafi_matrix,INDICES = tipCuerAg, FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
+mean_densities_tipCuerAg <- Reduce(rbind,p_mean_densities_tipCuerAg,)
+rownames(mean_densities_tipCuerAg) <- names(p_mean_densities_tipCuerAg)[!sapply(p_mean_densities_tipCuerAg,is.null)]
+plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tipCuerAg)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
+ATX <- c(1,seq(10,1000,by=10))
+ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tipCuerAg))))+1)]
+#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
+show <- c(T, ATX[2:length(ATX)]%%10==0)
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
+
+
+for(i in 1:nrow(mean_densities_tipCuerAg))
+{
+    points(1:nb_sp,log10(mean_densities_tipCuerAg[i,]),type="b",pch=21,bg=colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa==rownames(mean_densities_tipCuerAg)[i]],lty=2,col=colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa==rownames(mean_densities_tipCuerAg)[i]])
+}
+legend("topright",pch=c(15,rep(21,nrow(mean_densities_tipCuerAg))),col=c("black",colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa %in% rownames(mean_densities_tipCuerAg)]),pt.bg=c(NA,colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa %in% rownames(mean_densities_tipCuerAg)]),legend=c("Todas",colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% rownames(mean_densities_tipCuerAg)]),title="Tipo de Cuerpo de Agua",bty="n")
+```
+
+## Por tipo de cuerpo de agua
+
+## Caño
+
+```{r rangoDensidadTotal_caño, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad en los caños, orden según las densidades promedias totales, mostrando las temporadas"}
+nb_sp<-15
+par(mar = c(7.1,6.5,1,1))
+mean_density <- sort(colMeans(mafi_matrix[tipCuerAg=="Caño",]),decreasing = T)[1:nb_sp]
+p_mean_densities_tempo <- by(data=mafi_matrix[tipCuerAg=="Caño",],INDICES = tempo[tipCuerAg=="Caño"], FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
+mean_densities_tempo <- Reduce(rbind,p_mean_densities_tempo,)
+rownames(mean_densities_tempo) <- names(p_mean_densities_tempo)[!sapply(p_mean_densities_tempo,is.null)]
+plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tempo)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
+ATX <- c(1,seq(10,1000,by=10))
+ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tempo))))+1)]
+#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
+show <- c(T, ATX[2:length(ATX)]%%10==0)
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
+
+
+for(i in 1:nrow(mean_densities_tempo))
+{
+    points(1:nb_sp,log10(mean_densities_tempo[i,]),type="b",pch=colList$tempo$pch[colList$tempo$temporada ==rownames(mean_densities_tempo)[i]],bg=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]],lty=2,col=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]])
+}
+legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),col=c("black",colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),pt.bg=c(NA,colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),legend=c("Todas",colList$tempo$temporada[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),title="Temporada",bty="n")
+```
+
+## Ciénaga
+
+```{r rangoDensidadTotal_ciénaga, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad en las ciénagas, orden según las densidades promedias totales, mostrando las temporadas"}
+nb_sp<-15
+par(mar = c(7.1,6.5,1,1))
+mean_density <- sort(colMeans(mafi_matrix[tipCuerAg=="Ciénaga",]),decreasing = T)[1:nb_sp]
+p_mean_densities_tempo <- by(data=mafi_matrix[tipCuerAg=="Ciénaga",],INDICES = tempo[tipCuerAg=="Ciénaga"], FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
+mean_densities_tempo <- Reduce(rbind,p_mean_densities_tempo,)
+rownames(mean_densities_tempo) <- names(p_mean_densities_tempo)[!sapply(p_mean_densities_tempo,is.null)]
+plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tempo)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
+ATX <- c(1,seq(10,1000,by=10))
+ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tempo))))+1)]
+#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
+show <- c(T, ATX[2:length(ATX)]%%10==0)
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
+
+
+for(i in 1:nrow(mean_densities_tempo))
+{
+    points(1:nb_sp,log10(mean_densities_tempo[i,]),type="b",pch=colList$tempo$pch[colList$tempo$temporada ==rownames(mean_densities_tempo)[i]],bg=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]],lty=2,col=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]])
+}
+legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),col=c("black",colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),pt.bg=c(NA,colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),legend=c("Todas",colList$tempo$temporada[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),title="Temporada",bty="n")
+```
+## Quebrada
+
+```{r rangoDensidadTotal_quebrada, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad en las quebradas, orden según las densidades promedias totales, mostrando las temporadas"}
+nb_sp<-15
+par(mar = c(9.1,6.5,1,1))
+mean_density <- sort(colMeans(mafi_matrix[tipCuerAg=="Quebrada",]),decreasing = T)[1:nb_sp]
+p_mean_densities_tempo <- by(data=mafi_matrix[tipCuerAg=="Quebrada",],INDICES = tempo[tipCuerAg=="Quebrada"], FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
+mean_densities_tempo <- Reduce(rbind,p_mean_densities_tempo,)
+rownames(mean_densities_tempo) <- names(p_mean_densities_tempo)[!sapply(p_mean_densities_tempo,is.null)]
+plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tempo)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
+ATX <- c(1,seq(10,1000,by=10))
+ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tempo))))+1)]
+#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
+show <- c(T, ATX[2:length(ATX)]%%10==0)
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
+
+
+for(i in 1:nrow(mean_densities_tempo))
+{
+    points(1:nb_sp,log10(mean_densities_tempo[i,]),type="b",pch=colList$tempo$pch[colList$tempo$temporada ==rownames(mean_densities_tempo)[i]],bg=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]],lty=2,col=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]])
+}
+legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),col=c("black",colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),pt.bg=c(NA,colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),legend=c("Todas",colList$tempo$temporada[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),title="Temporada",bty="n")
+```
+## Río
+
+```{r rangoDensidadTotal_río, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad en el río, orden según las densidades promedias totales, mostrando las temporadas"}
+nb_sp<-15
+par(mar = c(7.1,6.5,1,1))
+mean_density <- sort(colMeans(mafi_matrix[tipCuerAg=="Río",]),decreasing = T)[1:nb_sp]
+p_mean_densities_tempo <- by(data=mafi_matrix[tipCuerAg=="Río",],INDICES = tempo[tipCuerAg=="Río"], FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
+mean_densities_tempo <- Reduce(rbind,p_mean_densities_tempo,)
+rownames(mean_densities_tempo) <- names(p_mean_densities_tempo)[!sapply(p_mean_densities_tempo,is.null)]
+plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tempo)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+
+axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
+ATX <- c(1,seq(10,1000,by=10))
+ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tempo))))+1)]
+#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
+ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
+show <- c(T, ATX[2:length(ATX)]%%10==0)
+show[c(1,length(ATX))] <- T
+axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
+text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
+
+
+for(i in 1:nrow(mean_densities_tempo))
+{
+    points(1:nb_sp,log10(mean_densities_tempo[i,]),type="b",pch=colList$tempo$pch[colList$tempo$temporada ==rownames(mean_densities_tempo)[i]],bg=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]],lty=2,col=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]])
+}
+legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),col=c("black",colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),pt.bg=c(NA,colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),legend=c("Todas",colList$tempo$temporada[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),title="Temporada",bty="n")
+```
+
+# Diversidad beta (NMDS)
+
+
+************************
+
+Anotar:
+
+**Tuvé que sacar ANH_19_T2 de la matriz porqué:**
+
+```{r}
+mafi_matrix<-import_mafi$mafi_matrix
+# Especies presentes en ANH_19_T2:
+A<-mafi_matrix[rownames(mafi_matrix)=="ANH_19_T2",]
+names(A)[A>0]
+# Suma de la cobertura de está especie en otros sitios:
+sum(mafi_matrix[rownames(mafi_matrix)!="ANH_19_T2",names(A)[A>0]])
+```
+
+
+
+
+```{r nmds_tot_}
+anh <- anh[rownames(mafi_matrix)!="ANH_19_T2"]
+tipCuerAg <- tipCuerAg[rownames(mafi_matrix)!="ANH_19_T2"]
+zona <- zona[rownames(mafi_matrix)!="ANH_19_T2"]
+tempo <- tempo[rownames(mafi_matrix)!="ANH_19_T2"]
+mafi_matrix <- mafi_matrix[rownames(mafi_matrix)!="ANH_19_T2",]
+mafi_matrix <- mafi_matrix[,as.logical(colSums(mafi_matrix))]
+set.seed(198)# in order to be able to obtain the same results in two different runs
+require(vegan)
+(nmds_tot <- metaMDS(mafi_matrix,distance='manhattan',trymax = 1000,trace=F,k=2))
+nmds_tot_scores<-scores(nmds_tot)
+```
+
+
+```{r nmds_tot_stressplot, fig.cap="\\label{ndms_tot_stressplot} Grafica de estrés de la NMDS utilizando la distancia de Bray-Curtis sobre la matriz de cobertura"}
+A <- stressplot(nmds_tot)
+```
+
+*******************
+
+**Nota sobre la calidad de representación de la NMDS**
+
+En la figura \ref{ndms_tot_stressplot}, se muestra el "estrés" del método aplicado sobre la matriz de densidad de macrofitas.
+Las NMDS no tienen una homogeneización de las normas del espacio, es decir, una distancia de 2 cm en un lado del espacio no tiene obligatoriamente  el mismo sentido que una distancia de 2cm en otro lado del espacio.
+Lo que intenta optimizar la NMDS es el orden de las distancias entre los puntos en la matriz de distancia entre composiciones (acá matriz de distancia de Bray-Curtis) y las distancias en el espacio del análisis.
+El gráfico de la figura \ref{ndms_tot_stressplot} muestra el resultado de este esfuerzo de optimización.
+
+Acá el estrés es muy reducido, con un valor de **`r round(nmds_tot$stress,2)`** (es decir, un $`r round(nmds_tot$stress*100)`$\% de las distancias no están el mismo orden de las distancias de Bray-Curtis), y una correlación lineal mostrando un $R^2$ de 
+`r round(cor(A$y,A$yf,method="pearson")^2,2)`. Ahora bien, este estrés tan reducido viene en parte del hecho que muchas pares de comunidades no tienen niguna especie en común, así se vuelve muy facil para la NMDS crear un espacio donde las comunidades que no tienen espacio en común tienen la distancia maxima en el espacio...
+
+Anotar que el resultado del $R^2$ anterior tiene que analizarse con cuidado, hay mucho más distancia entre composiciones que de datos reales, y no se puede comparar a un $R^2$ clasico, las distancias no cumplen la condiciones de independencia que permiten utilizar los parametros clasicos en estadística.
+
+******************
+
+### Representación basica
+
+```{r nmds_tot_plot_basico,fig.height=10,fig.width=10}
+par(mar=rep(1,4))
+PCH <- colList$tempo$pch[tempo]
+COL <- colList$aquatic_habitats$color[tipCuerAg]
+plot(nmds_tot,display=c("species","sites"),yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+points(nmds_tot,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
+legend("topright",pch=colList$tempo$pch,legend=colList$tempo$temporada,title="temporada",bty="n")
+legend("bottomright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title="Cobertura",bty="n")
+
+```
+
+\clearpage
+
+
+### Representación de las especies
+
+```{r nmds_tot_species,fig.height=15,fig.width=15}
+plot(nmds_tot,display=c("site"),yaxt="n",xaxt="n",xlab=NA,ylab=NA, ylim=range(nmds_tot_scores$species[,2]),xlim=range(nmds_tot_scores$species[,1]))
+text(nmds_tot,display= "species")
+```
+\clearpage
+
+### Representación de las unidades de muestreo
+
+```{r nmds_tot_anh_tempo,fig.height=15,fig.width=15}
+plot(nmds_tot,display=c("species"),yaxt="n",xaxt="n",xlab=NA,ylab=NA,
+     ylim=range(nmds_tot_scores$sites[,2]),xlim=range(nmds_tot_scores$sites[,1]))
+text(nmds_tot,display="site")
+```
+
+\clearpage
+
+### Representación de las temporadas
+
+```{r nmds_tot_spider_temporada,fig.height=15,fig.width=15, fig.cap="Representación de las temporadas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordispider(nmds_tot,groups = anh,col="grey")
+ordispider(nmds_tot,groups = tempo,col=colList$tempo$color,lwd=4)
+ordihull(nmds_tot,groups = tempo,col=colList$tempo$color,lwd=4,draw="polygon",border=NA,alpha=25)
+legend("topright",fill=colList$tempo$color,legend=colList$tempo$temporada, title="Temporada",cex=2)
+```
+
+\clearpage
+
+
+### Representación de los tipos de cuerpo de agua
+
+```{r nmds_tot_spider_cobertura,fig.height=15,fig.width=15, fig.cap="Representación de los tipos de cuerpo de agua en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordihull(nmds_tot,groups = tipCuerAg,col=colList$aquatic_habitats$color,lwd=4,draw="polygon",border=NA,alpha=25)
+ordispider(nmds_tot,groups = anh,col="grey")
+ordispider(nmds_tot,groups = tipCuerAg,col=colList$aquatic_habitats$color,lwd=4)
+(onlyOne<-names(table(tipCuerAg)[table(tipCuerAg)==1]))
+points(nmds_tot,display="sites",pch=ifelse(tipCuerAg%in%onlyOne,21,NA),col=colList$aquatic_habitats$color[tipCuerAg],bg=colList$aquatic_habitats$color[tipCuerAg],cex=2)
+legend("topright",fill=colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa %in% tipCuerAg],legend=colList$aquatic_habitats$habitat_spa [colList$aquatic_habitats$habitat_spa %in% tipCuerAg], title="Tipo de cuerpo de agua",cex=2)
+```
+
+
+\clearpage
+
+### Representación de las zonas
+
+```{r nmds_tot_spider_zonas,fig.height=15,fig.width=15, fig.cap="Representación de las zonas en el espacio de la NMDS. Las lineas de color gris conectan los sitios (ANH) muestreados en las dos temporadas."}
+plot(nmds_tot,type="n",yaxt="n",xaxt="n",xlab=NA,ylab=NA)
+ordihull(nmds_tot,groups = zona, col=colList$zonas$color,lwd=4,draw="polygon",border=NA,alpha=25)
+ordispider(nmds_tot,groups = anh,col="grey")
+ordispider(nmds_tot,groups = zona,col=colList$zonas$color,lwd=4)
+legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title="Zona",cex=2)
+```
+
+
+
+\clearpage
+
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
