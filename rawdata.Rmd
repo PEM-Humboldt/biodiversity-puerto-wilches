@@ -99,13 +99,24 @@ dataGrupos$Hidrobiologico$registros_zooplancton <- read.xlsx(file.path(fol_data,
 dataGrupos$Hidrobiologico$registros_fitoplancton <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Fitoplancton", startRow = 1)
 dataGrupos$Hidrobiologico$registros_perifiton <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Perifiton ", startRow = 1)
 
-dataGrupos$Cameras_trampa$event <- read.xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_18septiembre2022.xlsx"), sheet = "Eventos")
+dataGrupos$Cameras_trampa$event <- read.xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"), sheet = "Eventos")
+dataGrupos$Cameras_trampa$registros <- read.xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"), sheet = "Registros")
 dataGrupos$Cameras_trampa$registros$eventDate
-dataGrupos$Cameras_trampa$registros <- read.xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_18septiembre2022.xlsx"), sheet = "Registros")
 types<-rep("skip",ncol(dataGrupos$Cameras_trampa$registros))
 types[colnames(dataGrupos$Cameras_trampa$registros)=="dateIdentified"]<-"date"
-A<-read_xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_18septiembre2022.xlsx"),sheet="Registros",col_types = types)
+A<-read_xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
 dataGrupos$Cameras_trampa$registros$dateIdentified[!is.na(A)]<-as.character(format(A[!is.na(A)],"%Y/%m/%d"))
+types<-rep("skip",ncol(dataGrupos$Cameras_trampa$registros))
+types[colnames(dataGrupos$Cameras_trampa$registros)=="eventDate"]<-"date"
+A<-read_xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
+dataGrupos$Cameras_trampa$registros$eventDate[!is.na(A)]<-as.character(format(A[!is.na(A)],"%Y-%m-%d"))
+
+types<-rep("skip",ncol(dataGrupos$Cameras_trampa$registros))
+types[colnames(dataGrupos$Cameras_trampa$registros)=="eventDate"]<-"text"
+A<-read_xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
+dataGrupos$Cameras_trampa$registros$eventDate[grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$",A$eventDate)]<-A$eventDate[grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$",A$eventDate)]
+
+
 
 save(dataGrupos,file="./dataGrupos.RData")
 ```

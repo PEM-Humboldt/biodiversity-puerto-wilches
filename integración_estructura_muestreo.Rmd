@@ -7256,7 +7256,7 @@ VALUES(
   'Camera traps',
   'Fototrampeo',
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of camera traps'),
-  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Time Elapsed (nigths)'),
+  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Time elapsed (nights)'),
   false,
   false,
   (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Number of individuals'),
@@ -7568,11 +7568,13 @@ SELECT cd_reg,count(*) FROM  raw_dwc.cameras_trampa_registros GROUP BY cd_reg HA
 
 **Parece que hay errores fuertes en las fechas de los registros**
 
+**YA HA SIDO CORREGIDO**
+
 ```{sql}
 SELECT cd_reg,e.event_id, 
-  SPLIT_PART(e.event_date,'/',1)::date date1,
-  SPLIT_PART(e.event_date,'/',2)::date date2,
-  r.event_date, r.event_time,name_tax
+  SPLIT_PART(e.event_date,'/',1)::date date1_event,
+  SPLIT_PART(e.event_date,'/',2)::date date2_event,
+  r.event_date event_date_registro, r.event_time event_time_registro,name_tax
 FROM raw_dwc.cameras_trampa_registros r
 LEFT JOIN raw_dwc.cameras_trampa_event e USING(cd_event)
 LEFT JOIN main.registros USING(cd_reg)
@@ -7582,10 +7584,16 @@ ORDER BY r.event_date::date, r.event_time::time
 
 ```
 
-
-# Attribución de los puntos de referencias a la plataformas
-
-TODO
+Comparación de fechas:
+```{sql}
+SELECT  e.event_id,e.date_time_begin, e.date_time_end, MIN(r.date_time) min_date_time_reg, MAX(r.date_time) min_date_time_reg
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+WHERE cd_gp_biol='catr'
+GROUP BY e.event_id,e.date_time_begin, e.date_time_end
+;
+```
 
 
 

@@ -225,8 +225,51 @@ WHERE cd_gp_biol='peri'
 ```
 
 
+# Filtro de 30 minutos para considerar registros como independientes en cameras trampas
 
 
+```{sql}
+INSERT INTO main.def_var_registros_extra(var_registros_extra,type_var,var_registros_extra_spa,var_registros_extra_comment)
+VALUES('30 minutes period','reference','periodo de 30 minutos','los grupos están definidos sobre un periodo de 30 minutos desde la primera fotografía y contienen todos los registros que tienen la misma especie en este periodo, dentro de un mismo evento'
+);
+BEGIN TRANSACTION;
+CREATE TEMPORARY TABLE period_30min
+(
+  id serial PRIMARY KEY,
+  cd_event int NOT NULL,
+  cd_tax int NOT NULL,
+  date_time_range tsrange NOT NULL
+)
+ON COMMIT DROP;
+DO 
+$$
+DECLARE r record;
+        curid int;
+BEGIN
+  FOR r IN SELECT cd_reg,cd_tax,cd_event,date_time FROM main.registros LEFT JOIN main.event USING (cd_event) LEFT JOIN main.gp_event USING (cd_gp_event) WHERE cd_gp_biol='catr' ORDER BY cd_event,date_time
+  LOOP
+   SELECT id INTO curid FROM period_30min p WHERE r.cd_tax=p.cd_tax AND r.cd_event=p.cd_event AND r.date_time <@ p.date_time_range;
+   IF curid IS NULL AND r.date_time IS NOT NULL THEN
+    INSERT INTO period_30min(cd_event,cd_tax,date_time_range)
+      VALUES(
+        r.cd_event,r.cd_tax,(SELECT tsrange(r.date_time,r.date_time + '30 min','[]'))
+      );
+   END IF;
+  END LOOP;
+END$$; 
+INSERT INTO main.registros_extra(cd_reg,cd_var_registros_extra,value_int)
+SELECT cd_reg,(SELECT cd_var_registros_extra FROM main.def_var_registros_extra WHERE var_registros_extra='30 minutes period'),id
+FROM main.registros reg
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN period_30min p ON p.cd_event=reg.cd_event AND p.cd_tax=reg.cd_tax AND reg.date_time <@ p.date_time_range
+WHERE cd_gp_biol='catr' AND id IS NOT NULL;
+COMMIT;
+SELECT value_int,COUNT(DISTINCT cd_reg)
+FROM main.registros_extra
+WHERE cd_var_registros_extra=(SELECT cd_var_registros_extra FROM main.def_var_registros_extra WHERE var_registros_extra='30 minutes period')
+GROUP BY value_int;
+```
 
 
 ```{r}
