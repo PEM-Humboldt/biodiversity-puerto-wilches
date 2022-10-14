@@ -521,9 +521,10 @@ CREATE TABLE main.def_var_registros_extra
     type_var varchar(20),
     var_registros_extra_spa text,
     var_registros_extra_comment text,
-    CHECK (type_var IN ('integer', 'double precision', 'categorial', 'free text', 'boolean')),
-    CHECK (type_var IN ('categorial','free text', 'boolean') OR cd_unit IS NOT NULL)
+    CHECK (type_var IN ('integer', 'double precision', 'categorial', 'free text', 'boolean','reference')),
+    CHECK (type_var IN ('categorial','free text', 'boolean','reference') OR cd_unit IS NOT NULL)
 );
+--Note: reference is used each time the variable is some code for grouping registros or to reference a variable from another table, without being a categoryba
 
 CREATE TABLE main.def_categ_registros_extra
 (

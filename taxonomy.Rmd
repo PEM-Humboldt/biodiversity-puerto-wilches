@@ -580,7 +580,7 @@ SELECT
   NULL AS vernacular_name,
   identification_qualifier,
   NULL AS identification_remarks
-FROM raw_dwc.peces_registros
+FROM raw_dwc.mamiferos_us_registros
 UNION ALL
 -------------------------------- CAMERAS TRAMPAS -------------------------------------------------------
 SELECT
@@ -2075,7 +2075,13 @@ SET cd_tax=t.cd_tax
 FROM main.taxo t
 WHERE tt.scientific_name=t.name_tax
 RETURNING tt.cd_tax;
+```
 
+```{sql}
+UPDATE raw_dwc.taxonomy_total tt
+SET cd_tax=t.cd_tax
+FROM main.taxo t
+WHERE tt.cd_tax IS NULL AND tt.scientific_name IS NULL AND COALESCE(tt.genus,tt.subfamily,tt.family,tt."order",tt.class, tt.phylum,tt.kingdom)=t.name_tax;
 ```
 
 

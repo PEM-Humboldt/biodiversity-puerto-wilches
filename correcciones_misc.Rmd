@@ -1,0 +1,285 @@
+---
+title: "Correcciones sobre los datos (después de la integración de las estructuras de muestreo)"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+---
+
+
+************************
+
+Se trata en este documento de ejecutar las correcciones sobre la base de datos
+
+*************
+
+
+```{r setup}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+require(openxlsx)
+require(RPostgreSQL)
+
+```
+
+```{r}
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+```
+
+
+# Cambios de las coordenadas de herpetos
+
+
+```{r}
+file <- "../Data_Documents/ExtraData/HerpetosCorreciones.xlsx"
+corr <- read.xlsx(file)
+colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
+dbWriteTable(fracking_db,c("raw_dwc","corr_coord_herp"),corr,overwrite=T)
+```
+Averiguar que los event_id correspondan:
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_herp c
+LEFT JOIN main.event e USING (event_id)
+GROUP BY c.event_id
+```
+
+
+```{sql}
+WITH a AS(
+SELECT 
+event_id,
+ST_SetSrid(ST_transform(
+   ST_MakeLine(ARRAY[
+     ST_SetSrid(ST_MakePoint(longitud_inicial,latitud_inicial),4326),
+     ST_SetSrid(ST_MakePoint(longitud_intermedia, latitud_intermedia),4326),
+     ST_SetSrid(ST_MakePoint(longitud_final,latitud_final),4326)
+  ])
+,(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.corr_coord_herp 
+)
+UPDATE main.event AS e
+SET li_geom=a.geom
+FROM a
+WHERE a.event_id=e.event_id
+RETURNING e.event_id, ST_length(li_geom)
+```
+
+
+# Cambios de las coordenadas de escarabajos
+
+
+```{r}
+file <- "../Data_Documents/ExtraData/EscarabajosCambio.xlsx"
+corr <- read.xlsx(file)
+colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
+dbWriteTable(fracking_db,c("raw_dwc","corr_coord_esca"),corr,overwrite=T)
+```
+Averiguar que los event_id correspondan:
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_esca c
+LEFT JOIN main.event e ON 'esca_'||c.event_id=e.event_id
+GROUP BY c.event_id
+```
+
+
+```{sql}
+WITH a AS(
+SELECT 
+'esca_'||event_id event_id,
+ST_SetSrid(ST_transform(
+     ST_SetSrid(ST_MakePoint(decimal_lon,decimal_lat),4326)
+,(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.corr_coord_esca 
+)
+UPDATE main.event AS e
+SET pt_geom=a.geom
+FROM a
+WHERE a.event_id=e.event_id
+RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
+```
+
+
+# Cambiar las coordenadas de Collembola
+
+```{r}
+file <- "../Data_Documents/ExtraData/CollembolaCambio.xlsx"
+corr <- read.xlsx(file)
+colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
+dbWriteTable(fracking_db,c("raw_dwc","corr_coord_cole"),corr,overwrite=T)
+```
+Averiguar que los event_id correspondan:
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_cole c
+LEFT JOIN main.event e ON 'cole_'||c.event_id=e.event_id
+GROUP BY c.event_id
+```
+
+Para colémbolos y hormigas, la anh 373 se vuelve 403 (ver rawdata.Rmd)
+
+```{sql}
+UPDATE raw_dwc.corr_coord_cole
+SET event_id=REGEXP_REPLACE(event_id,'373','403')
+WHERE event_id ~ '373'
+RETURNING event_id
+;
+```
+
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_cole c
+LEFT JOIN main.event e ON 'cole_'||c.event_id=e.event_id
+GROUP BY c.event_id
+```
+
+```{sql}
+WITH a AS(
+SELECT 
+'cole_'||event_id event_id,
+ST_SetSrid(ST_transform(
+     ST_SetSrid(ST_MakePoint(decimal_lon,decimal_lat),4326)
+,(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.corr_coord_cole 
+)
+UPDATE main.event AS e
+SET pt_geom=a.geom
+FROM a
+WHERE a.event_id=e.event_id
+RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
+```
+
+
+
+
+# Cambiar las coordenadas de Hormigas
+
+```{r}
+file <- "../Data_Documents/ExtraData/HormigasCambiar.xlsx"
+corr <- read.xlsx(file)
+colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
+dbWriteTable(fracking_db,c("raw_dwc","corr_coord_horm"),corr,overwrite=T)
+```
+Averiguar que los event_id correspondan:
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_horm c
+LEFT JOIN main.event e ON c.event_id=e.event_id
+GROUP BY c.event_id
+```
+
+Para colémbolos y hormigas, la anh 373 se vuelve 403 (ver rawdata.Rmd)
+
+```{sql}
+UPDATE raw_dwc.corr_coord_horm
+SET event_id=REGEXP_REPLACE(event_id,'373','403')
+WHERE event_id ~ '373'
+RETURNING event_id
+;
+```
+
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_horm c
+LEFT JOIN main.event e ON c.event_id=e.event_id
+GROUP BY c.event_id
+```
+
+```{sql}
+WITH a AS(
+SELECT 
+event_id event_id,
+ST_SetSrid(ST_transform(
+     ST_SetSrid(ST_MakePoint(decimal_lon,decimal_lat),4326)
+,(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.corr_coord_horm
+)
+UPDATE main.event AS e
+SET pt_geom=a.geom
+FROM a
+WHERE a.event_id=e.event_id
+RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
+```
+
+# Cambio coordenadas mamiferos
+
+```{r}
+file <- "../Data_Documents/ExtraData/MamiferosCambiar.xlsx"
+corr <- read.xlsx(file)
+colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
+dbWriteTable(fracking_db,c("raw_dwc","corr_coord_mami"),corr,overwrite=T)
+```
+Averiguar que los event_id correspondan:
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_mami c
+LEFT JOIN main.event e ON c.event_id=e.event_id
+GROUP BY c.event_id
+```
+
+
+```{sql}
+WITH a AS(
+SELECT 
+event_id event_id,
+ST_SetSrid(ST_transform(
+     ST_SetSrid(ST_MakePoint(decimal_lon,decimal_lat),4326)
+,(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.corr_coord_mami
+)
+UPDATE main.event AS e
+SET pt_geom=a.geom
+FROM a
+WHERE a.event_id=e.event_id
+RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
+```
+
+
+# Change date for ANH_18 for perifiton
+
+```{sql}
+SELECT 
+  cd_gp_biol,event_id,r.date_time,e.date_time_begin,e.date_time_end 
+FROM main.registros r 
+LEFT JOIN main.event e USING (cd_event) 
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref) 
+WHERE 
+  num_anh=18 
+  AND EXTRACT (YEAR FROM date_time_begin)=2021 
+  AND event_id ~ 'Bajas' 
+GROUP BY cd_gp_biol,event_id,r.date_time,e.date_time_begin,e.date_time_end;
+```
+
+```{sql}
+SELECT event_id, date_time_begin, date_time_end
+FROM main.event e
+WHERE event_id ~ 'ANH18-P-[ABC]-Bajas'
+```
+
+```{sql}
+UPDATE main.event
+SET date_time_begin='2022-03-28 12:00:00'::timestamp
+WHERE event_id ~ 'ANH18-P-[ABC]-Bajas'
+RETURNING event_id, date_time_begin
+```
+
+```{r}
+dbDisconnect(fracking_db)
+```
+

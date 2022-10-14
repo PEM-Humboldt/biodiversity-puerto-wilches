@@ -568,7 +568,8 @@ Para afectar un habitat a la escala del evento:
 
 1. si el habitat es acuatico se afecta el habitat escrito en las variables de habitat acuatico (definido a escala del punto de referencia ANH)
 2. si el metodo es de punto fijo de aves, se afecta el habitat homologado para este metodo
-3. si el grupo biologico es herpetos se afecta el habitat que corresponde a la longitud más larga del transecto
+<!--3. si el grupo biologico es herpetos se afecta el habitat que corresponde a la longitud más larga del transecto-->
+3. si el grupo biologico es herpetos se afecta el habitat que corresponde al punto intermedio del transecto
 4. sino, el habitat corresponde al punto del evento
 5. si el punto del evento corresponde a "NULL" o "Otro" en la capa de cobertura se afecta el habitat que corresponde a la mayoría de los habitat homologados para este ANH
 
@@ -577,8 +578,9 @@ Para afectar el habitat final (al grupo de eventos) se afecta el habitat mayorit
 ## cobertura a escala del evento
 
 
+**Version anterior**:
 
-```{sql}
+```sql
 CREATE MATERIALIZED VIEW habitat_event AS(
 WITH a AS(
 SELECT --DISTINCT ON (pr.cd_pt_ref,ge.cd_gp_event,e.cd_event)
@@ -643,6 +645,82 @@ SELECT
     WHEN aqu_ter='aquatic' THEN aqu_wat_bod
     WHEN aves_homol IS NOT NULL THEN aves_homol
     WHEN cd_gp_biol='herp' THEN landcov_herp
+    WHEN landcov_pt IS NOT NULL AND landcov_pt !='Other' THEN landcov_pt
+    WHEN landcov_pt IS NULL OR landcov_pt = 'Other' THEN landcov_homol_mayoritario
+  END habitat,
+  CASE 
+    WHEN aqu_ter='aquatic' THEN aqu_eco_type
+  END aqu_eco_type
+FROM b
+WHERE priority=1 
+)
+;
+```
+
+```{sql}
+CREATE MATERIALIZED VIEW habitat_event AS(
+WITH herp AS (
+SELECT e.cd_event,(ST_DumpPoints(li_geom)).*
+FROM main.event e
+), a AS(
+SELECT --DISTINCT ON (pr.cd_pt_ref,ge.cd_gp_event,e.cd_event)
+   pr.cd_pt_ref,
+   pr.name_pt_ref,
+   hd2.parent_even,
+   ge.cd_gp_event,
+   e.cd_event,
+   ge.cd_gp_biol,
+   event_id,
+   l1.cd_landcov, dl1.landcov landcov_pt,
+   CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END AS aqu_ter,
+   hc1.categ aqu_eco_type,
+   hc2.categ aqu_wat_bod,
+   hdlc.landcov aves_homol,
+   hdlc2.landcov landcov_homol_mayoritario,
+   count(*) nb
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia pr USING (cd_pt_ref)
+LEFT JOIN herp h ON ARRAY[2]=path AND e.cd_event=h.cd_event
+LEFT JOIN spat.landcov l1 ON ST_intersects(COALESCE(h.geom,e.pt_geom),l1.the_geom)
+LEFT JOIN spat.def_landcov dl1 ON l1.cd_landcov=dl1.cd_landcov
+--variable Freshwater ecosystem type
+LEFT JOIN main.habitat h1 ON pr.cd_pt_ref=h1.cd_pt_ref AND h1.cd_var_habitat=(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Freshwater ecosystem type')
+--variable Waterbody type
+LEFT JOIN main.def_categ_habitat hc1 ON h1.cd_categ=hc1.cd_categ
+LEFT JOIN main.habitat h2 ON pr.cd_pt_ref=h2.cd_pt_ref AND h2.cd_var_habitat=(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type')
+LEFT JOIN main.def_categ_habitat hc2 ON h2.cd_categ=hc2.cd_categ
+LEFT JOIN raw_geom.homolog_def hd ON ge.cd_protocol=(SELECT cd_protocol FROM main.def_protocol WHERE protocol='Bird point count') AND hd.grupo_biolo='Aves' AND hd.parent_even=pr.name_pt_ref
+LEFT JOIN spat.def_landcov hdlc ON hdlc.landcov_spa=hd.landcov_spa
+LEFT JOIN raw_geom.homolog_def hd2 ON hd2.parent_even=pr.name_pt_ref
+LEFT JOIN spat.def_landcov hdlc2 ON hdlc2.landcov_spa=hd2.landcov_spa
+WHERE cd_gp_biol != 'atro'
+--WHERE cd_gp_biol='herp'
+GROUP BY pr.cd_pt_ref,
+   ge.cd_gp_event,
+   e.cd_event,
+   event_id,
+   l1.cd_landcov, dl1.landcov,
+   CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END,
+   hc2.categ ,
+   hc1.categ ,
+   hdlc.landcov,
+   hdlc2.landcov,
+   ge.cd_gp_biol,
+   hd2.parent_even,
+   pr.name_pt_ref
+),b AS(
+SELECT *, ROW_NUMBER() OVER (PARTITION BY cd_pt_ref,cd_gp_event,cd_event ORDER BY nb DESC) priority
+FROM a
+)
+SELECT 
+  cd_gp_event,
+  cd_event,
+  aqu_ter,
+  CASE
+    WHEN aqu_ter='aquatic' THEN aqu_wat_bod
+    WHEN aves_homol IS NOT NULL THEN aves_homol
     WHEN landcov_pt IS NOT NULL AND landcov_pt !='Other' THEN landcov_pt
     WHEN landcov_pt IS NULL OR landcov_pt = 'Other' THEN landcov_homol_mayoritario
   END habitat,

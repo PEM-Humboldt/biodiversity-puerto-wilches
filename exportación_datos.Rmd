@@ -692,7 +692,8 @@ SELECT
   tgn.name_tax genus,
   --r.cd_tax,
   COALESCE(verbatim_taxon,t.name_tax) taxon,
-  SUM(qt_double)/3 density
+  SUM(qt_double)/3 density,
+  SUM(qt_int) abs_abundance
 FROM main.registros r
 LEFT JOIN main.taxo t USING (cd_tax)
 LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
@@ -751,6 +752,7 @@ SELECT
   name_pt_ref||'_'||cd_tempo anh_tempo,
   wat_body_type, tipo_cuerp_agua,
   eco_type,tipo_ecos,
+  platform "zone",
   number_of_bottles,
   total_volumen,
   COUNT(DISTINCT cd_event) nb_events,
@@ -769,6 +771,7 @@ LEFT JOIN main.gp_event ge USING (cd_gp_event)
 LEFT JOIN main.punto_referencia USING (cd_pt_ref)
 LEFT JOIN main.def_protocol USING (cd_protocol)
 LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform prp USING (cd_pt_ref,name_pt_ref)
 LEFT JOIN se ON se.anh_tempo=name_pt_ref||'_'||cd_tempo
 WHERE 
   ge.cd_gp_biol='fipl' 
@@ -777,6 +780,7 @@ GROUP BY
   name_pt_ref,
   wat_body_type, tipo_cuerp_agua,
   eco_type,tipo_ecos,
+  platform,
   number_of_bottles,
   total_volumen,
   cd_tempo
@@ -946,7 +950,8 @@ SELECT
    WHEN mt.pseudo_rank='GN' THEN verbatim_taxon
    ELSE t.name_tax
   END taxon,
-  SUM(qt_double)/3 density/*,
+  SUM(qt_double)/3 density,
+  SUM(qt_int) abs_abundance/*,
   find_higher_id(r.cd_tax,'SFAM') cd_sfam, 
   protocol*/
 FROM main.registros r
@@ -1003,6 +1008,7 @@ SELECT
   name_pt_ref||'_'||cd_tempo anh_tempo,
   wat_body_type, tipo_cuerp_agua,
   eco_type,tipo_ecos,
+  platform "zone",
   total_scraped_area_cm2,
   number_of_scraped_units,
   COUNT(DISTINCT cd_event) nb_events,
@@ -1026,6 +1032,7 @@ LEFT JOIN main.gp_event ge USING (cd_gp_event)
 LEFT JOIN main.punto_referencia USING (cd_pt_ref)
 LEFT JOIN main.def_protocol USING (cd_protocol)
 LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform prp USING (cd_pt_ref,name_pt_ref)
 LEFT JOIN se ON se.anh_tempo=name_pt_ref||'_'||cd_tempo
 WHERE 
   ge.cd_gp_biol='peri' 
@@ -1034,6 +1041,7 @@ GROUP BY
   name_pt_ref,
   wat_body_type, tipo_cuerp_agua,
   eco_type,tipo_ecos,
+  platform,
   total_scraped_area_cm2,
   number_of_scraped_units,
   cd_tempo
@@ -1216,7 +1224,8 @@ SELECT
    WHEN mt.pseudo_rank='GN' THEN verbatim_taxon
    ELSE t.name_tax
   END taxon,
-  SUM(qt_double)/3 density/*,
+  SUM(qt_double)/3 density,
+  SUM(qt_int) abs_abundance/*,
   find_higher_id(r.cd_tax,'SFAM') cd_sfam, 
   protocol*/
 FROM main.registros r
@@ -1273,6 +1282,7 @@ SELECT
   name_pt_ref||'_'||cd_tempo anh_tempo,
   wat_body_type, tipo_cuerp_agua,
   eco_type,tipo_ecos,
+  platform "zone",
   ARRAY_AGG(DISTINCT protocol) protocols,ARRAY_AGG(DISTINCT protocol_spa) protocolos,
   total_sampled_area_cm2,
   number_of_kicks,
@@ -1298,6 +1308,7 @@ LEFT JOIN main.gp_event ge USING (cd_gp_event)
 LEFT JOIN main.punto_referencia USING (cd_pt_ref)
 LEFT JOIN main.def_protocol USING (cd_protocol)
 LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform prp USING (cd_pt_ref,name_pt_ref)
 LEFT JOIN se ON se.anh_tempo=name_pt_ref||'_'||cd_tempo
 WHERE 
   ge.cd_gp_biol='minv' 
@@ -1308,6 +1319,7 @@ GROUP BY
   total_sampled_area_cm2,
   number_of_kicks,
   number_of_replicates,
+  platform,
   cd_tempo
 ORDER BY 
   name_pt_ref||'_'||cd_tempo
@@ -1543,6 +1555,7 @@ SELECT
   name_pt_ref||'_'||cd_tempo anh_tempo,
   wat_body_type, tipo_cuerp_agua,
   eco_type,tipo_ecos,
+  platform "zone",
   total_sampled_area_m2,
   number_of_quadrats,
   COUNT(DISTINCT cd_event) nb_events,
@@ -1566,6 +1579,7 @@ LEFT JOIN main.gp_event ge USING (cd_gp_event)
 LEFT JOIN main.punto_referencia USING (cd_pt_ref)
 LEFT JOIN main.def_protocol USING (cd_protocol)
 LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN punto_ref_platform prp USING (cd_pt_ref,name_pt_ref)
 LEFT JOIN se ON se.anh_tempo=name_pt_ref||'_'||cd_tempo
 WHERE 
   ge.cd_gp_biol='mafi' 
@@ -1574,6 +1588,7 @@ GROUP BY
   name_pt_ref,
   wat_body_type, tipo_cuerp_agua,
   eco_type,tipo_ecos,
+  platform,
   total_sampled_area_m2,
   number_of_quadrats,
   cd_tempo
@@ -2745,6 +2760,39 @@ ORDER BY
   name_pt_ref||'_'||cd_tempo,
   SUM(qt_int) DESC
 );
+
+
+CREATE OR REPLACE VIEW pece_incidence_matrix AS
+ SELECT (punto_referencia.name_pt_ref::text || '_'::text) || s.cd_tempo::text AS anh_tempo,
+        CASE
+            WHEN mt.pseudo_rank::text = 'SP'::text THEN mt.verbatim_taxon
+            ELSE t.name_tax
+        END AS taxon,
+        COUNT(DISTINCT e.cd_event) incidence
+   FROM main.registros r
+     LEFT JOIN main.event e USING (cd_event)
+     LEFT JOIN main.event_extra ee ON e.cd_event = ee.cd_event AND ee.cd_var_event_extra = (( SELECT def_var_event_extra.cd_var_event_extra
+           FROM main.def_var_event_extra
+          WHERE def_var_event_extra.var_event_extra = 'date_begin'::text))
+     LEFT JOIN main.event_extra eep ON e.cd_event = eep.cd_event AND eep.cd_var_event_extra = (( SELECT def_var_event_extra.cd_var_event_extra
+           FROM main.def_var_event_extra
+          WHERE def_var_event_extra.var_event_extra = 'period'::text))
+     LEFT JOIN main.def_season s ON COALESCE(r.date_time, e.date_time_begin, (ee.value_text || ' 12:00:00'::text)::timestamp without time zone) <@ s.date_range
+     LEFT JOIN main.gp_event ge USING (cd_gp_event)
+     LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+     LEFT JOIN main.def_protocol USING (cd_protocol)
+     LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax, 'SP'::character varying) = t.cd_tax
+     LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+  WHERE ge.cd_gp_biol = 'pece'::bpchar AND (t.name_tax IS NOT NULL OR mt.pseudo_rank::text = 'SP'::text) AND eep.cd_categ_event_extra = (( SELECT def_categ_event_extra.cd_categ_event_extra
+           FROM main.def_categ_event_extra
+          WHERE def_categ_event_extra.categ = 'Day'::text))
+  GROUP BY punto_referencia.name_pt_ref, (
+        CASE
+            WHEN mt.pseudo_rank::text = 'SP'::text THEN mt.verbatim_taxon
+            ELSE t.name_tax
+        END), s.cd_tempo
+  ORDER BY ((punto_referencia.name_pt_ref::text || '_'::text) || s.cd_tempo::text), (sum(r.qt_int)) DESC;
+
 ```
 
 ## Información sobre los "sampling unit" de las matrices
@@ -2941,7 +2989,7 @@ LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
 LEFT JOIN se ON se.anh_tempo=name_pt_ref||'_'||cd_tempo
 WHERE 
   ge.cd_gp_biol='pece'
-  AND protocol='Cast nets'
+  AND protocol='Electric fishing'
   AND eep.cd_categ_event_extra=(SELECT cd_categ_event_extra FROM main.def_categ_event_extra WHERE categ='Day')
 GROUP BY 
   name_pt_ref||'_'||cd_tempo,
@@ -3099,6 +3147,24 @@ GROUP BY
   total_sampling_time_min_gillnets,
   platform;
 
+
+
+CREATE OR REPLACE VIEW pece_envir AS
+
+SELECT
+   name_pt_ref||'_'||s.cd_tempo anh_tempo,
+   cd_tempo,temp, ph, oxy_dis, cond, oil_film, float_mat, subst_compl_idx, struc_compl_idx, canopy_cover
+FROM main.event e
+LEFT JOIN main.def_season s ON e.date_time_begin <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.phy_chi_peces  USING (cd_pt_ref,cd_tempo)
+WHERE cd_gp_biol='pece'
+GROUP BY 
+  name_pt_ref||'_'||s.cd_tempo,
+   cd_tempo,temp, ph, oxy_dis, cond, oil_film, float_mat, subst_compl_idx, struc_compl_idx, canopy_cover
+ORDER BY name_pt_ref||'_'||s.cd_tempo
+;
 ```
 
 ## Listas
@@ -3179,7 +3245,7 @@ export_pece <- lapply(listTable,dbReadTable,conn=fracking_db)
 names(export_pece) <- listTable
 export_pece[grep("matrix",listTable)] <- lapply(export_pece[grep("matrix",listTable)],function(x)
   {
-    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    col_content <- c("abundance","density","incidence")[c("abundance","density","incidence") %in% colnames(x)]
     o_checklist <- !as.logical(length(col_content))
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
   })
