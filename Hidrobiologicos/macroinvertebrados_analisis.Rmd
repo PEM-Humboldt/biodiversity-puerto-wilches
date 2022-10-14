@@ -692,40 +692,4 @@ legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title=
 
 \clearpage
 
-# Análisis de redundancia
 
-## Preparar los datos ambientales
-
-```{r prepEnvir}
-stopifnot(import_minv$minv_envir_water$anh_tempo==import_minv$minv_envir_sedim$anh_tempo)
-sedim <- import_minv$minv_envir_sedim
-colnames(sedim) <- paste("sed",colnames(sedim),sep=".")
-water <- import_minv$minv_envir_water
-colnames(water) <- paste("wat",colnames(water),sep=".")
-envir<-cbind(sedim[sapply(sedim,mode)=="numeric"],water[sapply(water,mode)=="numeric"])
-rownames(envir)<-sedim$sed.anh_tempo
-# Manejar los valores faltantes
-## Primero suprimamos las variables que contienen más de 6 valores faltantes
-#(nbNa<-sapply(envir,function(x)sum(is.na(x))))
-#envir <- envir[sapply(envir,function(x)sum(is.na(x)))<6]
-## Segundo suprimamos las filas que contienen todavía valores faltantes
-envir <- na.omit(envir)
-dim(envir)
-# guardemos solo los datos completos en las 2 matrices
-(toKeep<-intersect(rownames(envir),rownames(minv_matrix)))
-minv_matrix <- minv_matrix[toKeep,]
-envir <- envir[toKeep,]
-```
-
-## Aplicar el análisis bioenv para buscar el ensamblaje de variables ambientales optimal
-
-```{r bioenv, dependson=prepEnvir}
-bioEnv <- bioenv(minv_matrix,envir,parallel=3,trace=T)
-```
-
-
-
-
-```{r}
-dbDisconnect(fracking_db)
-```

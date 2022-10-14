@@ -125,6 +125,27 @@ plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= col
 legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
 ```
 
+### Adding ANH names
+```{r, mapWithAnhNames, fig.width=11, fig.height=10}
+library(raster)
+SQL <- 
+"SELECT num_anh,ST_centroid(ST_collect(pt_geom)) geom
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE cd_gp_biol='cole'
+GROUP BY num_anh
+"
+pt_ref_labels <- pgGetGeom(fracking_db,query = SQL)
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
+text(pt_ref_labels,pt_ref_labels$num_anh,col="black",halo=T,cex=.7,pos=3)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
+```
+
 # Definición de las categorias
 
 ```{r cache=F}

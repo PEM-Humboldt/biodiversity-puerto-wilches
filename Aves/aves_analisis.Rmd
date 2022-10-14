@@ -124,6 +124,29 @@ plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= col
 legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
 ```
 
+
+### Adding ANH names
+```{r, mapWithAnhNames, fig.width=11, fig.height=10}
+library(raster)
+SQL <- 
+"SELECT name_pt_ref,ST_centroid(ST_collect(pt_geom)) geom
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE cd_gp_biol='aves' AND protocol='Bird point count'
+GROUP BY name_pt_ref
+"
+pt_ref_labels <- pgGetGeom(fracking_db,query = SQL)
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
+text(pt_ref_labels,pt_ref_labels$name_pt_ref,col="black",halo=T,cex=.7,pos=3)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
+```
+
+
 # Definición de las categorias
 
 ```{r cache=F}
@@ -151,7 +174,15 @@ infoTot$anh_tempo[!infoTot$anh_tempo %in% infoTot$anh_tempo[m]]
 
 **Anotar: para realizar el documento rápidamente, utilizo acá las abundancias tal como calculadas para hacer la matriz de datos de aves. Sin embargo es posible que el modo de calculo de las abundancias introduzca un sesgo en las estimaciones de diversidad. Tengo que tomar un tiempo de reflexión para pensarlo... En 1/2 días volveré con una decisión de como tratar esos datos en el marco de la estimación de diversidad...**
 
+
+**SOLUCIÓN: finalmente creé una segunda matriz "puresum" que hace una suma simple del número de individuos observados en los puntos fijos. Todos los calculos iNEXT van a estar con está matriz, aúnque las NMDS y curvas de rango-abundancia van a utilizar la matriz que utiliza los maximos por replicaciones de punto fijo**
+
 *******************
+
+```{r}
+aves_matrix<-import_aves$aves_point_count_puresum_matrix
+```
+
 
 ## Estimación por sampling unit
 
@@ -387,8 +418,6 @@ data.frame(
 
 
 \clearpage
-
-
 
 
 ## Zonas

@@ -132,6 +132,28 @@ plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= col
 legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
 ```
 
+### Con los números de ANH
+
+```{r, mapWithAnhNames, fig.width=11, fig.height=10}
+library(raster)
+SQL <- 
+"SELECT num_anh,ST_centroid(ST_collect(pt_geom)) geom
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE cd_gp_biol='horm'
+GROUP BY num_anh
+"
+pt_ref_labels <- pgGetGeom(fracking_db,query = SQL)
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
+text(pt_ref_labels,pt_ref_labels$num_anh,col="black",halo=T,cex=.7,pos=3)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
+```
+
 # Definición de las categorias
 
 ```{r cache=F}
@@ -155,11 +177,7 @@ infoTot$anh_tempo[!infoTot$anh_tempo %in% infoTot$anh_tempo[m]]
 
 # Curvas de diversidad
 
-Los números de Hill q1 y q2 están basados respectivamente en cálculos que toman en cuenta la repartición de las abundancias y la equidad de la repartición entre la abundancias.
-Formalmente, los datos que tenemos para las hormigas son matrices de incidencias que no representan exactamente las abundancias de las hormigas, sin embargo, en la mayoría de los casos las incidencias están muy correlacionadas con las abundancias.
-Por esta razón, y por petición de Luisa Arcila, voy a incluir acá los cálculos de q1 y q2.
-Ahora bien, no estoy seguro del calculo que iNEXT hace para calcular esos indices desde las matrices de incidencia (anotar: los datos que utiliza el paquete son el numéro de unidad de muestreo, acá siempre 25 y las incidencias es decir el numero de presencias de la especie en los 25 muestreos).
-**Utilizar con cuidado, y si necesario, obtener las especificaciones de los cálculos de esos índices en iNEXT**
+**Yo tenía mis reservas con los calculos de diversidad Q1 y Q2 desde las incidencias, pero después de revisar los cálculos hechos en el paquete iNEXT, me dí cuenta que estaban totalmente adecuado para el concepto de números de Hill**
 
 **Anotar: el número de unidades de muestreo en las gráficas es el número total (es decir consideramos 25 unidades de muestreo en una sola ANH/temporada).**
 
@@ -254,13 +272,13 @@ iNEXT_landcov_t2 <- iNEXT(apply(cbind(nbEvents_landcov_t2,mat_landcov_t2),1,func
 ```
 
 
-```{r curvaRiqueza_landcov_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada en la temporada de aguas altas, calculos basados en la abundancia total de las especies colectadas."}
+```{r curvaRiqueza_landcov_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada en la temporada de aguas altas, calculos basados en la incidencia total de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t1,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t1],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t1], labY='Riqueza', labX='Número de unidades de muestreo', title="Coberturas, temporada de aguas altas")
 A
 ```
 
-```{r curvaRiqueza_landcov_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada en la temporada de aguas bajas, calculos basados en la abundancia total de las especies colectadas."}
+```{r curvaRiqueza_landcov_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada en la temporada de aguas bajas, calculos basados en la incidencia total de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t2,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t2],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t2], labY='Riqueza', labX='Número de unidades de muestreo', title="Coberturas, temporada de aguas bajas")
 A
@@ -420,7 +438,7 @@ nbEvents_zona<-nbEvents_zona[!is.na(nbEvents_zona)]
 iNEXT_zona <- iNEXT(apply(cbind(nbEvents_zona,matrix_zona),1,function(x)x[x>0]),datatype = "incidence_freq")
 ```
 
-```{r CurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada, calculos basados en la abundancia de las especies colectadas. Representación de las zonas"}
+```{r CurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de hormigas colectada, calculos basados en la incidencia de las especies colectadas. Representación de las zonas"}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_zona,type=1,col=colList$zonas$color[colList$zonas$platform %in% zona],orderAssemblage = colList$zonas$platform[colList$zonas$platform %in% zona], labY='Riqueza', labX='Número de unidades de muestreo')
 A
@@ -623,7 +641,7 @@ nmds_tot_scores<-scores(nmds_tot)
 ```
 
 
-```{r nmds_tot_stressplot, fig.cap="\\label{ndms_tot_stressplot} Grafica de estrés de la NMDS utilizando la distancia de Bray-Curtis sobre la matriz de abundancia"}
+```{r nmds_tot_stressplot, fig.cap="\\label{ndms_tot_stressplot} Grafica de estrés de la NMDS utilizando la distancia de Bray-Curtis sobre la matriz de incidencia"}
 A <- stressplot(nmds_tot)
 ```
 

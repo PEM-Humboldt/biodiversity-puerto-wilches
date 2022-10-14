@@ -25,9 +25,7 @@ header-includes:
 
 ************************
 
-Se trata en este documento de presentar los análisis realizados sobre los datos de colémbolos, organizados en la base de datos.
-
-La idea acá es aplicar todos los análisis soló sobre los datos de Pitfall, para ver si los análisis cambian en comparación con los análisis sobre la asociación entre berlese y pitfall...
+Se trata en este documento de presentar los análisis realizados sobre los datos de colémbolos, organizados en la base de datos
 
 
 *************
@@ -40,7 +38,7 @@ require(sqldf)
 require(kableExtra)
 require(iNEXT)
 require(ggplot2)
-knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/Pitfall_",echo=T)
+knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/pitfall_",echo=T)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
@@ -127,11 +125,32 @@ plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= col
 legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
 ```
 
+### Adding ANH names
+```{r, mapWithAnhNames, fig.width=11, fig.height=10}
+library(raster)
+SQL <- 
+"SELECT num_anh,ST_centroid(ST_collect(pt_geom)) geom
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE cd_gp_biol='cole' AND protocol='Pitfall (arthropods)'
+GROUP BY num_anh
+"
+pt_ref_labels <- pgGetGeom(fracking_db,query = SQL)
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
+text(pt_ref_labels,pt_ref_labels$num_anh,col="black",halo=T,cex=.7,pos=3)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
+```
+
 # Definición de las categorias
 
 ```{r cache=F}
 cole_matrix <- import_cole$cole_pitfall_matrix
-infoTot <- import_cole$cole_info_sampling_pitfall
+infoTot <- import_cole$cole_info_sampling_total
 m <- match(rownames(cole_matrix), table = infoTot$anh_tempo)
 anh <- as.numeric(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(cole_matrix)))
 tempo <- factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\2",rownames(cole_matrix)),levels = colList$tempo$cd_tempo, labels = colList$tempo$temporada)
@@ -161,7 +180,7 @@ iNEXT_SU<-iNEXT(x=dataFor_iNEXT_SU,datatype = "abundance")
 ```{r echo=F}
 ## Formatting the table of estimation
 est_su<-iNEXT_SU$AsyEst
-coverage <- list(coverage=iNEXT_SU$DataInfo$SC[order(iNEXT_SU$DataInfo$Assemblage)])
+coverage<-list(coverage=iNEXT_SU$DataInfo$SC[order(iNEXT_SU$DataInfo$Assemblage)])
 cbind(
 sqldf(
   "SELECT Assemblage anh_tempo, Observed observado, ROUND(Estimator,2) ||' ± '||ROUND(\"s.e.\",2) estimado
@@ -185,7 +204,7 @@ sqldf(
   ",drv="SQLite"
 )
 )%>%append(values=coverage,after=1)%>%data.frame()%>%
-  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo",col.names = c("anh_tempo","coverage",rep(c("observado","estimado"),3)))%>%
+  kable(booktabs=T, longtable=T,caption = "Estimaciones de diversidad por unidad de muestreo",col.names=c("anh_tempo","coverage",rep(c("observado","estimado"),3)))%>%
   add_header_above(c(" "=2, "q0 (riqueza)" = 2, "q1 (Shannon)" = 2, "q2 (Simpson)"=2))%>%
   kable_styling(latex_options = "striped")
 ```
@@ -273,7 +292,7 @@ sqldf(
 )
 tabEst_landcov$eventos<- tapply(infoTot$nb_event[m],landcov,sum)[!is.na(tapply(infoTot$nb_event,landcov,sum))]
 tabEst_landcov$completude<-(tabEst_landcov$riq_observado/tabEst_landcov$riq_estimado)*100
-tabEst_landcov$coverage <- iNEXT_landcov$DataInfo$SC[order(iNEXT_landcov$DataInfo$Assemblage)]
+tabEst_landcov$coverage<-iNEXT_landcov$DataInfo$SC[order(iNEXT_landcov$DataInfo$Assemblage)]
 
 est_landcov_t1 <-iNEXT_landcov_t1$AsyEst
 tabEst_landcov_t1 <-
@@ -332,7 +351,6 @@ sqldf(
 tabEst_landcov_t2$eventos<- tapply(infoTot$nb_event[m[tempo=="Aguas bajas"]],landcov_t2,sum)[!is.na(tapply(infoTot$nb_event[m[tempo=="Aguas bajas"]],landcov_t2,sum))]
 tabEst_landcov_t2$completude<-(tabEst_landcov_t2$riq_observado/tabEst_landcov_t2$riq_estimado)*100
 tabEst_landcov_t2$coverage <- iNEXT_landcov_t2$DataInfo$SC[order(iNEXT_landcov_t2$DataInfo$Assemblage)]
-
 rbind(
 data.frame(
   temporada='Ambas',
@@ -431,7 +449,7 @@ sqldf(
 )
 tabEst_zona$eventos<- tapply(infoTot$nb_event[m], zona, sum)
 tabEst_zona$completude<-(tabEst_zona$riq_observado/tabEst_zona$riq_estimado)*100
-tabEst_zona$coverage<-iNEXT_zona$DataInfo$SC[order(iNEXT_zona$DataInfo$Assemblage)]
+tabEst_zona$coverage <- iNEXT_zona$DataInfo$SC[order(iNEXT_zona$DataInfo$Assemblage)]
 
 data.frame(
   tipCurAg=tabEst_zona$Zona,
@@ -586,9 +604,8 @@ Las NMDS no tienen una homogeneización de las normas del espacio, es decir, una
 Lo que intenta optimizar la NMDS es el orden de las distancias entre los puntos en la matriz de distancia entre composiciones (acá matriz de distancia de Bray-Curtis) y las distancias en el espacio del análisis.
 El gráfico de la figura \ref{ndms_tot_stressplot} muestra el resultado de este esfuerzo de optimización.
 
-Acá el estrés es aceptable, con un valor de **`r round(nmds_tot$stress,2)`** (es decir, un $`r round(nmds_tot$stress*100)`$\% de las distancias no están el mismo orden de las distancias de Bray-Curtis), y una correlación lineal mostrando un $R^2$ de 
+Acá el estrés es fuerte, aunque aceptable, con un valor de **`r round(nmds_tot$stress,2)`** (es decir, un $`r round(nmds_tot$stress*100)`$\% de las distancias no están el mismo orden de las distancias de Bray-Curtis), y una correlación lineal mostrando un $R^2$ de 
 `r round(cor(A$y,A$yf,method="pearson")^2,2)`. <!--Así se puede utilizar esta NMDS con 2 dimensiones de espacio, con las precauciones necesarías de tomar en cuenta la no-estabilidad de los resultados...-->
-
 
 Anotar que el resultado del $R^2$ anterior tiene que analizarse con cuidado, hay mucho más distancia entre composiciones que de datos reales, y no se puede comparar a un $R^2$ clasico, las distancias no cumplen la condiciones de independencia que permiten utilizar los parametros clasicos en estadística.
 
@@ -670,7 +687,9 @@ legend("topright",fill=colList$zonas$color,legend=colList$zonas$platform, title=
 
 \clearpage
 
+
+
+
 ```{r}
 dbDisconnect(fracking_db)
 ```
-

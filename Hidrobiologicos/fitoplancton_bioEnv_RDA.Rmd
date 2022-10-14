@@ -139,7 +139,7 @@ envir <- envir[toKeep,]
 ## Aplicar el análisis bioenv para buscar el ensamblaje de variables ambientales optimal
 
 ```{r bioenv, dependson="prepEnvir"}
-bioEnv <- bioenv(fipl_matrix,envir,parallel=3,trace=T)
+bioEnv <- bioenv(fipl_matrix,envir,parallel=1,trace=T)
 save(bioEnv,file="bioEnv_fipl.RData")
 ```
 

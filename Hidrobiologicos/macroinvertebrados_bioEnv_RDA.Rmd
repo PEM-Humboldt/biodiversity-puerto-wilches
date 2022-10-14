@@ -113,13 +113,29 @@ envir <- envir[toKeep,]
 
 ## Aplicar el análisis bioenv para buscar el ensamblaje de variables ambientales optimal
 
-```{r bioenv, dependson="prepEnvir"}
+```r 
+bioenv, dependson="prepEnvir"
 require(vegan)
 bioEnv <- bioenv(minv_matrix,envir,parallel=3,trace=T)
 save(bioEnv,file="bioEnv_minv.RData")
 ```
 
+```{r}
+load("bioEnv_minv.RData")
+varBest <- names(envir)[bioEnv$models[[bioEnv$whichbest]][[1]]]
+```
 
+
+# RDA
+```{r, fig.width=10, fig.height=10}
+require(vegan)
+minv_hellinger <- decostand(minv_matrix,method = "hellinger")
+(RDA_minv <- rda(minv_hellinger,envir[,varBest]))
+RsquareAdj(RDA_minv)
+plot(RDA_minv)
+#plot(RDA,display="lc")
+#text(RDA,display="species")
+```
 
 
 ```{r}

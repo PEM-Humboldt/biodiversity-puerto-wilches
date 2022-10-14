@@ -124,6 +124,28 @@ legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_
 legend("bottomright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title = "Tipo de cuerpo de agua", bty="n")
 ```
 
+### Con los nombres de ANH
+```{r, mapWithAnhNames, fig.width=11, fig.height=10}
+library(raster)
+SQL <- 
+"SELECT name_pt_ref,ST_centroid(ST_collect(pt_geom)) geom
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE cd_gp_biol='mafi'
+GROUP BY name_pt_ref
+"
+pt_ref_labels <- pgGetGeom(fracking_db,query = SQL)
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+plot(infoTot, bg = colList$aquatic_habitats$color[match(infoTot$tipo_cuerp_agua, table= colList$aquatic_habitats$habitat_spa)],cex=2,pch=22,add=T)
+text(pt_ref_labels,pt_ref_labels$name_pt_ref,col="black",halo=T,cex=.4,pos=3)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
+legend("bottomright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title = "Tipo de cuerpo de agua", bty="n")
+```
+
+
 # Definición de las categorias
 
 ```{r cache=F}
@@ -153,12 +175,15 @@ infoTot$anh_tempo[!infoTot$anh_tempo %in% infoTot$anh_tempo[m]]
 **Anotar: Para que puedan funcionar las estimaciones de biodiversidad, debemos utilizar las incidencias. No tiene ningún sentido aplicar las estimaciones de diversidad con las coberturas, porque las estimaciones de diversidad real están calculadas con el número de "singleton" y "doublons" en las abundancias. La solución más eficiente y logica para estimar las curvas de biodiversidad sería utilizar el número de cuadrante que tiene la especie, pero parece que no tenemos acceso a esta información**
 
 
+**Sin las abundancias pensé en un primer tiempo que no tenía sentido calcular los números de Hill Q1 y Q2, que representan las reparticiones de abundancias entre especies. Con este razonamiento olvidé que las abundancias son sólo una manera de estimar las probabilidades efectivas relativas de presencia de las especies, lo que el paquete iNEXT calcula gracias a estimación probabilistas. Por está razón incluyo ahora los números de Hill Q1 y Q2, pero cuidado en su interpretación, no están calculados directamente con las abundancias colectadas...**
+
+
 *************************
 
 ## Estimación por unidad de muestreo (anh_tempo)
 
 
-**Dado que no tenemos el numero de cuadrantes que tienen las especies, no tiene ningún sentido aplicar la estimación de diversidad a escala de la unidad de muestreo...**
+**Dado que no tenemos el numero de cuadrantes que tienen las especies, no tiene ningún sentido aplicar la estimación de diversidad a escala de la unidad de muestreo... ANOTAR: en el futuro, si se pueden integrar los datos de cobertura de las especies en cada cuadrante, es un dato muy util para tener estimaciones precisas de la diversidad efectiva de los macrofitas**
 
 
 ```{r iNEXT_SU, warning=F}
@@ -230,6 +255,20 @@ sqldf(
   WHERE Diversity='Species richness'
   ORDER BY Assemblage
   ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sha_observado, ROUND(Estimator,2) sha_estimado, ROUND(\"s.e.\",2) sha_estimado_se
+  FROM est_tipCuerAg
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sim_observado, ROUND(Estimator,2) sim_estimado, ROUND(\"s.e.\",2) sim_estimado_se
+  FROM est_tipCuerAg
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
 )
 )
 tabEst_tipCuerAg$eventos<- tapply(infoTot$nb_event[m],tipCuerAg,sum)[!is.na(tapply(infoTot$nb_event,tipCuerAg,sum))]
@@ -243,6 +282,20 @@ sqldf(
   "SELECT Assemblage \"Tipo de cuerpo de agua\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
   FROM est_tipCuerAg_t1
   WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sha_observado, ROUND(Estimator,2) sha_estimado, ROUND(\"s.e.\",2) sha_estimado_se
+  FROM est_tipCuerAg
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sim_observado, ROUND(Estimator,2) sim_estimado, ROUND(\"s.e.\",2) sim_estimado_se
+  FROM est_tipCuerAg
+  WHERE Diversity='Simpson diversity'
   ORDER BY Assemblage
   ",drv="SQLite"
 )
@@ -260,6 +313,20 @@ sqldf(
   WHERE Diversity='Species richness'
   ORDER BY Assemblage
   ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sha_observado, ROUND(Estimator,2) sha_estimado, ROUND(\"s.e.\",2) sha_estimado_se
+  FROM est_tipCuerAg_t2
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sim_observado, ROUND(Estimator,2) sim_estimado, ROUND(\"s.e.\",2) sim_estimado_se
+  FROM est_tipCuerAg_t2
+  WHERE Diversity='Simpson diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
 )
 )
 tabEst_tipCuerAg_t2$eventos<- tapply(infoTot$nb_event[m[tempo=="Aguas bajas"]],tipCuerAg_t2,sum)[!is.na(tapply(infoTot$nb_event[m[tempo=="Aguas bajas"]],tipCuerAg_t2,sum))]
@@ -274,7 +341,11 @@ data.frame(
   coverage=tabEst_tipCuerAg$coverage,
   comp=paste(round(tabEst_tipCuerAg$completude,2),"%"),
   riq_observado=tabEst_tipCuerAg$riq_observado,
-  riq_estimado=paste(tabEst_tipCuerAg$riq_estimado,tabEst_tipCuerAg$riq_estimado_se,sep=" ± ")
+  riq_estimado=paste(tabEst_tipCuerAg$riq_estimado,tabEst_tipCuerAg$riq_estimado_se,sep=" ± "),
+  sha_observado=tabEst_tipCuerAg$sha_observado,
+  sha_estimado=paste(tabEst_tipCuerAg$sha_estimado,tabEst_tipCuerAg$sha_estimado_se,sep=" ± "),
+  sim_observado=tabEst_tipCuerAg$sim_observado,
+  sim_estimado=paste(tabEst_tipCuerAg$sim_estimado,tabEst_tipCuerAg$sim_estimado_se,sep=" ± ")
  ),
 data.frame(
   temporada='Aguas altas',
@@ -283,7 +354,11 @@ data.frame(
   coverage=tabEst_tipCuerAg_t1$coverage,
   comp=paste(round(tabEst_tipCuerAg_t1$completude,2),"%"),
   riq_observado=tabEst_tipCuerAg_t1$riq_observado,
-  riq_estimado=paste(tabEst_tipCuerAg_t1$riq_estimado,tabEst_tipCuerAg_t1$riq_estimado_se,sep=" ± ")
+  riq_estimado=paste(tabEst_tipCuerAg_t1$riq_estimado,tabEst_tipCuerAg_t1$riq_estimado_se,sep=" ± "),
+  sha_observado=tabEst_tipCuerAg$sha_observado,
+  sha_estimado=paste(tabEst_tipCuerAg$sha_estimado,tabEst_tipCuerAg$sha_estimado_se,sep=" ± "),
+  sim_observado=tabEst_tipCuerAg$sim_observado,
+  sim_estimado=paste(tabEst_tipCuerAg$sim_estimado,tabEst_tipCuerAg$sim_estimado_se,sep=" ± ")
  ),
 data.frame(
   temporada='Aguas bajas',
@@ -292,12 +367,16 @@ data.frame(
   coverage=tabEst_tipCuerAg_t2$coverage,
   comp=paste(round(tabEst_tipCuerAg_t2$completude,2),"%"),
   riq_observado=tabEst_tipCuerAg_t2$riq_observado,
-  riq_estimado=paste(tabEst_tipCuerAg_t2$riq_estimado,tabEst_tipCuerAg_t2$riq_estimado_se,sep=" ± ")
+  riq_estimado=paste(tabEst_tipCuerAg_t2$riq_estimado,tabEst_tipCuerAg_t2$riq_estimado_se,sep=" ± "),
+  sha_observado=tabEst_tipCuerAg$sha_observado,
+  sha_estimado=paste(tabEst_tipCuerAg$sha_estimado,tabEst_tipCuerAg$sha_estimado_se,sep=" ± "),
+  sim_observado=tabEst_tipCuerAg$sim_observado,
+  sim_estimado=paste(tabEst_tipCuerAg$sim_estimado,tabEst_tipCuerAg$sim_estimado_se,sep=" ± ")
  )
 )%>%
-  kable(booktabs=T, longtable=T,col.names = c("Temporada","Tipo de cuerpo de agua","eventos","coverage","Riqueza colectada","observado","estimado"),caption="Estimaciones de diversidad por Cobertura desde la matriz de abundancia")%>%
+  kable(booktabs=T, longtable=T,col.names = c("Temporada","Tipo de cuerpo de agua","eventos","coverage","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por Cobertura desde la matriz de abundancia")%>%
   collapse_rows(columns = 1, valign = "middle", latex_hline = "major")%>%
-  add_header_above(c(" "=5, "q0 (riqueza)" = 2))%>%
+  add_header_above(c(" "=5, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))%>%
   landscape()
 ```
 
@@ -332,6 +411,20 @@ sqldf(
   "SELECT Assemblage \"Zona\", Observed riq_observado, ROUND(Estimator,2) riq_estimado, ROUND(\"s.e.\",2) riq_estimado_se
   FROM est_zona
   WHERE Diversity='Species richness'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sha_observado, ROUND(Estimator,2) sha_estimado, ROUND(\"s.e.\",2) sha_estimado_se
+  FROM est_zona
+  WHERE Diversity='Shannon diversity'
+  ORDER BY Assemblage
+  ",drv="SQLite"
+),
+sqldf(
+  "SELECT ROUND(Observed,2) sim_observado, ROUND(Estimator,2) sim_estimado, ROUND(\"s.e.\",2) sim_estimado_se
+  FROM est_zona
+  WHERE Diversity='Simpson diversity'
   ORDER BY Assemblage
   ",drv="SQLite"
 )

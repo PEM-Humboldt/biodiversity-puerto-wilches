@@ -123,6 +123,27 @@ coordinates(infoTot) <- ~ x_coord_centroid + y_coord_centroid
 plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
 legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
 ```
+### Adding ANH names
+```{r, mapWithAnhNames, fig.width=11, fig.height=10}
+library(raster)
+SQL <- 
+"SELECT name_pt_ref,ST_centroid(ST_collect(pt_geom)) geom
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE cd_gp_biol='mami' AND protocol='Mist nets'
+GROUP BY name_pt_ref
+"
+pt_ref_labels <- pgGetGeom(fracking_db,query = SQL)
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
+text(pt_ref_labels,pt_ref_labels$name_pt_ref,col="black",halo=T,cex=1,pos=3)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
+```
+
 
 # Definición de las categorias
 
@@ -554,7 +575,7 @@ Anotar que el resultado del $R^2$ anterior tiene que analizarse con cuidado, hay
 
 ******************
 
-### Representación basica
+## Representación basica
 
 ```{r nmds_tot_plot_basico,fig.height=10,fig.width=10}
 par(mar=rep(1,4))
@@ -570,13 +591,27 @@ legend("bottomright",fill=colList$landcover$color,legend=colList$landcover$landc
 \clearpage
 
 
-### Representación de las especies
+## Representación de las especies
 
 ```{r nmds_tot_species,fig.height=15,fig.width=15}
 plot(nmds_tot,display=c("site"),yaxt="n",xaxt="n",xlab=NA,ylab=NA, ylim=range(nmds_tot_scores$species[,2]),xlim=range(nmds_tot_scores$species[,1]))
 text(nmds_tot,display= "species")
 ```
 \clearpage
+
+### Con los poligonos de cobertura
+
+Así como dijimos en la reunión en Villa de Leiva, añado los poligonos de cobertura en este grafico.
+
+Anotar que las especies dan "direcciones", inclusive si no están en los poligonos. Es decir *Rhynconycteris naso* tiene está probablemente en los bosques riparios que tienen una communidad que se diferencia particularmente de las communidades de palma...
+
+```{r nmds_tot_species_conCobertura,fig.height=15,fig.width=15}
+plot(nmds_tot,display=c("site"),yaxt="n",xaxt="n",xlab=NA,ylab=NA, ylim=range(nmds_tot_scores$species[,2]),xlim=range(nmds_tot_scores$species[,1]))
+text(nmds_tot,display= "species")
+ordihull(nmds_tot,groups = landcov,col=colList$landcover$color,lwd=4,draw="polygon",border=NA,alpha=25)
+```
+
+
 
 ### Representación de las unidades de muestreo
 

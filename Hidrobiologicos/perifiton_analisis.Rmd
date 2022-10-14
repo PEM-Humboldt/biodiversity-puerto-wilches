@@ -125,6 +125,29 @@ legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_
 legend("bottomright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title = "Tipo de cuerpo de agua", bty="n")
 ```
 
+### Adding ANH names
+
+```{r, mapWithAnhNames, fig.width=11, fig.height=10}
+library(raster)
+SQL <- 
+"SELECT name_pt_ref,ST_centroid(ST_collect(pt_geom)) geom
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE cd_gp_biol='peri'
+GROUP BY name_pt_ref
+"
+pt_ref_labels <- pgGetGeom(fracking_db,query = SQL)
+plot(zonas,col=NA)
+plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
+plot(zonas,col=NA,border="black",add=T)
+plot(infoTot, bg = colList$aquatic_habitats$color[match(infoTot$tipo_cuerp_agua, table= colList$aquatic_habitats$habitat_spa)],cex=2,pch=22,add=T)
+text(pt_ref_labels,pt_ref_labels$name_pt_ref,col="black",halo=T,cex=.4,pos=3)
+legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
+legend("bottomright",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title = "Tipo de cuerpo de agua", bty="n")
+```
+
+
 # Definición de las categorias
 
 ```{r cache=F}
