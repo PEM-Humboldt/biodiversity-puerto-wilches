@@ -46,14 +46,41 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 })
 options(knitr.kable.NA = "---")
 fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
-source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
 ```
 
-# Function para formatear las matrices
+# Definición de las funciones
+## Función para formatear las matrices
 
 ```{r code=readLines("../dbTab2mat.R")}
 eval(parse(text=readLines("../dbTab2mat.R")))
 ```
+
+## Función para guardar archivos excel
+
+```{r code=readLines("../saveInExcel.R")}
+eval(parse(text=readLines("../saveInExcel.R")))
+```
+
+## Función para las curvas de rango-abundancia
+
+```{r code=readLines("../rangoAbundanciaEtc.R")}
+eval(parse(text=readLines("../rangoAbundanciaEtc.R")))
+```
+
+## Función para los perfiles de números efectivos de taxones (Hill)
+
+```{r code=readLines("../graphQ0Q1Q2.R")}
+eval(parse(text=readLines("../graphQ0Q1Q2.R")))
+```
+
+## Función para las graficas de curvas de acumulación
+
+Adaptación del codigo de Vladimir Sandoval:
+
+```{r code=readLines("../ggplot_iNEXT.R")}
+eval(parse(text=readLines("../ggplot_iNEXT.R")))
+```
+
 
 
 # Importación de los datos de la base de datos
@@ -424,213 +451,126 @@ data.frame(
   sim_estimado=paste(tabEst_zona$sim_estimado,tabEst_zona$sim_estimado_se,sep=" ± ")
  )%>%
   kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","coverage","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por zonas desde la matriz de abundancia")%>%
+  column_spec(4,'1.5cm')
   add_header_above(c(" "=4, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))
 ```
 
+# Perfiles de números efectivos de especies
+
+```{r perfiles_espEfectivas, fig.height=7, fig.width=9,fig.cap="Perfiles de números efectivos de especies de Hill calculados gracias al paquete iNEXT. Las barras de errores representan los intervalos de confiancia de las estimaciones de los números de Hill"}
+iNEXT_tot <- iNEXT(sort(colSums(mari_matrix),decreasing=T),datatype = "abundance")
+effectiveTaxNbProfile(iNEXT_tot, iNEXT_categ = iNEXT_landcov, colCateg = colList$landcover$color, categLevels = colList$landcover$landcov_spa, YLAB="Número efectivo de especies (Hill)")
+```
+\clearpage
+
+
 # Curvas de rango Abundancia
+
+```{r}
+mari_matrix<-import_mari$mari_matrix
+rango_abundancia<-list()
+```
+
 
 ## Matrix total
 
-```{r rangoAbundanciaTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(mari_matrix),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(mari_matrix[grep("T1",rownames(mari_matrix)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
-points(log10(colSums(mari_matrix[grep("T2",rownames(mari_matrix)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```{r rangoAbundanciaTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado las abundancias en cada temporada."}
+rango_abundancia$total_tempo <- rankAbundance(mari_matrix,type="abundance",extraLines = tempo,extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(8,5.5,1,8),posNameSp = -.1, byTICK = 250, byLABELS = 500)
 ```
+
+\clearpage
+
 
 
 ## Mostrando las zonas
 
-
-```{r rangoAbundanciaTotal_zona, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las 3 zonas de muestreo"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(mari_matrix),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(1:nb_sp,log10(colSums(mari_matrix[zona=="Caracterización",names(sum_abundancia)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Caracterización"],bg=colList$zonas$color[colList$zonas$platform=="Caracterización"],lty=2,col=colList$zonas$color[colList$zonas$platform=="Caracterización"])
-points(1:nb_sp,log10(colSums(mari_matrix[zona=="Kalé",names(sum_abundancia)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Kalé"], bg=colList$zonas$color[colList$zonas$platform=="Kalé"], lty=2, col=colList$zonas$color[colList$zonas$platform=="Kalé"])
-points(1:nb_sp,log10(colSums(mari_matrix[zona=="Platero",names(sum_abundancia)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Platero"],bg=colList$zonas$color[colList$zonas$platform=="Platero"],lty=2,col=colList$zonas$color[colList$zonas$platform=="Platero"])
-legend("topright",pch=c(15,colList$zonas$pch),col=c("black",colList$zonas$color),pt.bg=c(NA,colList$zonas$color),legend=c("Todas",colList$zonas$platform),title="Zonas",bty="n")
+```{r rangoAbundanciaTotal_zona, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las zona. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado las abundancias en cada zona."}
+rango_abundancia$total_zona <- rankAbundance(mari_matrix,type="abundance",extraLines = zona,extraPch = colList$zonas$pch, extraCol = colList$zonas$color,legendTitle = "Zona",legendOut = T, MARG=c(8,5.5,1,8),posNameSp = -.1,byTICK = 250,byLABELS = 500)
 ```
+
+\clearpage
 
 ## Mostrando las coberturas
 
-
-```{r rangoAbundanciaTotal_cobertura, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las coberturas"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,10.1))
-sum_abundancia <- sort(colSums(mari_matrix),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-sum_abundancias_cobertura <- by(data=mari_matrix,INDICES = landcov, FUN = function(x,c)colSums(x[,c]),c=names(sum_abundancia))
-sum_abundancias_cobertura[!sapply(sum_abundancias_cobertura,is.null)] <- lapply(sum_abundancias_cobertura[!sapply(sum_abundancias_cobertura,is.null)],function(x)ifelse(x<1,1,x))
-for(i in 1:length(sum_abundancias_cobertura))
-{
-  if(!is.null(sum_abundancias_cobertura[[i]]))
-  {
-    points(1:nb_sp,log10(sum_abundancias_cobertura[[i]]),type="b",pch=21,bg=colList$landcover$color[colList$landcover$landcov_spa==names(sum_abundancias_cobertura)[i]],lty=2,col=colList$landcover$color[colList$landcover$landcov_spa==names(sum_abundancias_cobertura)[i]])
-  }
-}
-par(xpd=T)
-legend("topright",pch=c(15,rep(21,sum(!sapply(sum_abundancias_cobertura,is.null)))),col=c("black",colList$landcover$color[!sapply(sum_abundancias_cobertura,is.null)]),pt.bg=c(NA,colList$landcover$color[!sapply(sum_abundancias_cobertura,is.null)]),legend=c("Todas",colList$landcover$landcov_spa[!sapply(sum_abundancias_cobertura,is.null)]),title="Coberturas",bty="n",inset=c(-.3,0))
+```{r rangoAbundanciaTotal_cobertura, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las coberturas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada cobertura."}
+rango_abundancia$total_cobertura <- rankAbundance(mari_matrix,type="abundance",extraLines = landcov, extraCol = colList$landcover$color,legendTitle = "Cobertura",legendOut = T, MARG=c(8,5.5,1,8),posNameSp = -.1,byTICK = 250, byLABELS = 500)
 ```
+
+\clearpage
 
 
 ## Por coberturas
-### Bosque Abierto
-
-```{r rangoAbundancia_bosque_abierto, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques abiertos, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(mari_matrix[landcov=="Bosque Abierto",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(as.matrix(t(mari_matrix[landcov=="Bosque Abierto" & grepl("T1",rownames(mari_matrix)), names(sum_abundancia)])))), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(mari_matrix[landcov=="Bosque Abierto" & grepl("T2",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
-
-### Bosque Abierto
-
-```{r rangoAbundancia_bosque_denso, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques densos, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(mari_matrix[landcov=="Bosque Denso",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=5)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%5==0),length(ATX))])
-show <- ATX%%5==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(mari_matrix[landcov=="Bosque Denso" & grepl("T1",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(mari_matrix[landcov=="Bosque Denso" & grepl("T2",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
-
 ### Bosque ripario
 
-```{r rangoAbundancia_bosque_ripario, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los bosques riparios, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(mari_matrix[landcov=="Bosque Ripario",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(mari_matrix[landcov=="Bosque Ripario" & grepl("T1",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(mari_matrix[landcov=="Bosque Ripario" & grepl("T2",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```{r rangoAbundanciaTotal_bosque_ripario, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los bosques riparios, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
+mat<-mari_matrix[landcov=="Bosque Ripario",]
+mat<-mat[,as.logical(colSums(mat))]
+rango_abundancia$bosqueRipario_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Ripario"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(8,6.5,1,8),posNameSp = -.1,byTICK = 20,byLABELS = 40)
 ```
+\clearpage
+
+
+\clearpage
+
+### Bosque Abierto
+
+```{r rangoAbundanciaTotal_Bosque_Abierto, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en las bosque abiertos, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
+mat<-mari_matrix[landcov=="Bosque Abierto",]
+mat<-mat[,as.logical(colSums(mat))]
+rango_abundancia$bosque_abierto_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Abierto"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9,5.5,1,8),posNameSp = -.1,byTICK =  20, byLABELS = 40)
+```
+
+\clearpage
+
+### Bosque Denso
+
+```{r rangoAbundanciaTotal_Bosque_Denso, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en las bosque densos, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
+mat<-mari_matrix[landcov=="Bosque Denso",]
+mat<-mat[,as.logical(colSums(mat))]
+rango_abundancia$bosque_denso_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Denso"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.5,5.5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1)
+```
+
+\clearpage
 
 ### Herbazales
 
-```{r rangoAbundancia_herbazales, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los herbazales, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(mari_matrix[landcov=="Herbazales",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(mari_matrix[landcov=="Herbazales" & grepl("T1",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(mari_matrix[landcov=="Herbazales" & grepl("T2",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```{r rangoAbundanciaTotal_Herbazales, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los herbazales, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
+mat<-mari_matrix[landcov=="Herbazales",]
+mat<-mat[,as.logical(colSums(mat))]
+rango_abundancia$herbazales_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Herbazales"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(8,7.5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1)
 ```
 
-### Palma
-
-```{r rangoAbundancia_palma, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en las palma, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(mari_matrix[landcov=="Palma",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(mari_matrix[landcov=="Palma" & grepl("T1",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(mari_matrix[landcov=="Palma" & grepl("T2",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
-```
+\clearpage
 
 ### Pastos
 
-```{r rangoAbundancia_pastos, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia , orden según las abundancias totales, en los pastos, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(mari_matrix[landcov=="Pastos",]),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=1)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%5==0),length(ATX))])
-show <- ATX%%5==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(mari_matrix[landcov=="Pastos" & grepl("T1",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T1"], lty=2)
-points(log10(colSums(mari_matrix[landcov=="Pastos" & grepl("T2",rownames(mari_matrix)), names(sum_abundancia)])), type="b", pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"], bg = colList$tempo$color[colList$tempo$cd_tempo=="T2"], lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```{r rangoAbundanciaTotal_Pastos, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los pastos, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
+mat<-mari_matrix[landcov=="Pastos",]
+mat<-mat[,as.logical(colSums(mat))]
+rango_abundancia$pastos_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Pastos"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(8,5.5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1)
 ```
+
+\clearpage
+
+### Palma
+
+```{r rangoAbundanciaTotal_Palma, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en las palmas, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
+mat<-mari_matrix[landcov=="Palma",]
+mat<-mat[,as.logical(colSums(mat))]
+rango_abundancia$palma_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Palma"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(8,7.5,1,8),byTICK = 50, byLABELS = 100,posNameSp = -.1)
+```
+
+\clearpage
+
+
+
+## Exportar los datos de los graficos
+
+```{r}
+rango_abundancia<-lapply(rango_abundancia,function(x)as.data.frame(t(x)))
+save_in_excel("dataRangoAbundancia.xlsx",rango_abundancia)
+```
+
 
 # Diversidad beta (NMDS)
 

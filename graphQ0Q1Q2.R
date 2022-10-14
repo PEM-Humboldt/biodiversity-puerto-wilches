@@ -20,6 +20,9 @@ effectiveTaxNbProfile <- function(
     mat_barplot <- rbind(mat_barplot,Reduce(rbind,by(est_categ,est_categ$Assemblage,function(x)matrix(x$Estimator,ncol=3,dimnames=list(unique(x$Assemblage),c("Q0 (richness)","Q1 (Shannon)","Q2 (Simpson)"))))))
     mat_lower <- rbind(mat_lower,Reduce(rbind,by(est_categ,est_categ$Assemblage,function(x)matrix(x$LCL,ncol=3,dimnames=list(unique(x$Assemblage),c("Q0 (richness)","Q1 (Shannon)","Q2 (Simpson)"))))))
     mat_upper <- rbind(mat_upper,Reduce(rbind,by(est_categ,est_categ$Assemblage,function(x)matrix(x$UCL,ncol=3,dimnames=list(unique(x$Assemblage),c("Q0 (richness)","Q1 (Shannon)","Q2 (Simpson)"))))))
+    mat_barplot[is.na(mat_barplot)]<-0
+    mat_lower[is.na(mat_barplot)|is.na(mat_lower)]<-0
+    mat_upper[is.na(mat_barplot)|is.na(mat_upper)]<-0
   }
   A<-barplot(mat_barplot,beside = T,ylim=c(0,max(mat_upper)),col=c(colTotal,colCateg[categLevels%in%rownames(mat_barplot)]),legend=T,args.legend=list(bty="n",title=titleLegend),ylab=YLAB,las=1)
   segments(A,mat_lower,A,mat_upper,col=colErrorBar,lwd=2)

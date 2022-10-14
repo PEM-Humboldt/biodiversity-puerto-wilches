@@ -14,7 +14,7 @@
 rankAbundance <- function(
     mat,
     type = c("abundance","incidence","cover","density"),
-    nbSp = 15,
+    nbSp = min(15,ncol(mat)),
     extraLines = NA,
     Ycalc = if(type == "incidence") {identity} else {log10},
     extraPch = 21,
@@ -24,15 +24,16 @@ rankAbundance <- function(
     legendPlace = "topright",
     legend1 = "Total",
     legendTitle = NULL,
-    legendInset = if(legendOut){c(-.2,0)} else {c(0,0)},
+    legendInset = if(legendOut){c(-.3,0)} else {c(0,0)},
     addProfiles = T,
     profilesOut = T,
-    profilesOutFig = c(.85,.99,0.25,0.5),
+    profilesOutFig = c(.8,.99,0.25,0.5),
     profilesInFigRatioX=.20,
     profilesInFigRatioY=.25,
+    titleProfile="Perfiles",
     labY = "Total abundance",
-    calc = ifelse(type %in% c("abundance","incidence"),colSums,colMeans),
-    MARG = c(10.1,6.5,1,ifelse(legendOut|profilesOut,10,1)),
+    calc = if(type %in% c("abundance","incidence")){colSums} else{colMeans},
+    MARG = c(10.1,6.5,1,ifelse(legendOut|profilesOut,9,1)),
     byTICK = 50,
     byLABELS = byTICK*2,
     maxLABELS = 500000,
@@ -114,19 +115,18 @@ rankAbundance <- function(
     {
       cat_calc_profiles<-by(mat,extraLines,function(x)sort(calc(x)[calc(x)>0],decreasing = T))
       plot(x=1:ncol(mat),y=Ycalc(tot_calc_profiles),type='l',ylim=range(Ycalc(Reduce(c,c(tot_calc_profiles,cat_calc_profiles)))),bty='n',lwd=1.2,xaxt='n',yaxt='n',main=titleProfile)
-    }else{
-      plot(x=1:ncol(mat),y=Ycalc(tot_calc_profiles),type='l',bty='n',lwd=1.2,xaxt='n',yaxt='n',main=titleProfile)
-    }
-    axis(1,at = seq(0,ncol(mat)),labels=F,lwd.ticks = -1,pos=min(Ycalc(Reduce(c,c(tot_calc_profiles,cat_calc_profiles)))))
-    axis(2,at=c(min(Ycalc(Reduce(c,c(tot_calc_profiles,cat_calc_profiles)))),Ycalc(ATX)),labels=F,tck=-0.05)
-    if(!all(is.na(extraLines)))
-    {
+      axis(1,at = seq(0,ncol(mat)),labels=F,lwd.ticks = -1,pos=min(Ycalc(Reduce(c,c(tot_calc_profiles,cat_calc_profiles)))))
+      axis(2,at=c(min(Ycalc(Reduce(c,c(tot_calc_profiles,cat_calc_profiles)))),Ycalc(ATX)),labels=F,tck=-0.05)
       for(i in 1:nlevels(extraLines))
       {
         lev<-levels(extraLines)[i]
         if (!lev %in% unique(extraLines)) {next}
         points(x=1:length(cat_calc_profiles[[i]]),y=Ycalc(cat_calc_profiles[[i]]),col=extraCol[i],type='l')
       }
+    }else{
+      plot(x=1:ncol(mat),y=Ycalc(tot_calc_profiles),type='l',bty='n',lwd=1.2,xaxt='n',yaxt='n',main=titleProfile)
+      axis(1,at = seq(0,ncol(mat)),labels=F,lwd.ticks = -1,pos=min(Ycalc(tot_calc_profiles[tot_calc_profiles>0])))
+      axis(2,at=c(min(Ycalc(tot_calc_profiles[tot_calc_profiles>0])),Ycalc(ATX)),labels=F,tck=-0.05)
     }
 #  if(delimPerfil){
 #    segments(0,nbSp,max(c(Ycalc(posAxisX),0.00000001),na.rm = T),max(c(Ycalc(posAxisX),0.0000001),na.rm = T),col="grey",2)

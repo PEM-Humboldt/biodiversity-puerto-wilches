@@ -18,46 +18,6 @@ th <- theme(
   plot.background = element_blank()
 )
 
-th2 <- theme(
-  axis.title = element_text(face = "bold", size = 18),
-  #axis.line = element_line(colour = "black", size = 1),
-  axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-  axis.text = element_text(size = 16),
-  axis.ticks = element_line(colour = "black", size = .75),
-  axis.ticks.length = unit(.20, "cm"),
-  panel.background = element_rect(fill = "white", colour = "black", size = 1),
-  panel.grid.major = element_blank(),
-  panel.grid.minor = element_blank(),
-  #legend.title = element_text(face = "bold", size = 10),
-  legend.title = element_blank(),
-  legend.key = element_blank(),
-  legend.text = element_text(size = 14),
-  legend.position = "right",
-  legend.background = element_blank(),
-  line = element_line(size = 1),
-  plot.background = element_blank()
-)
-
-th3 <- theme(
-  axis.title = element_text(face = "bold", size =18),
-  #axis.line = element_line(colour = "black", size = 1),
-  #axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-  axis.text = element_text(size = 16),
-  axis.ticks = element_line(colour = "black", size = .75),
-  axis.ticks.length = unit(.20, "cm"),
-  panel.background = element_rect(fill = "white", colour = "black", size = 1),
-  panel.grid.major = element_blank(),
-  panel.grid.minor = element_blank(),
-  #legend.title = element_text(face = "bold", size = 10),
-  legend.title = element_blank(),
-  legend.key = element_blank(),
-  legend.text = element_text(size = 14),
-  legend.position = "right",
-  legend.background = element_blank(),
-  line = element_line(size = 1),
-  plot.background = element_blank()
-)
-
 iNEXT_ggplot_optimizado <- function(iNEXT_object,type,col,orderAssemblage,labX="Número de individuos",labY="Diversidad",themeDef=th,title="")
 {
   x <- names(iNEXT_object$iNextEst)

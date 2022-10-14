@@ -46,15 +46,44 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 })
 options(knitr.kable.NA = "---")
 fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
-source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
 set.seed(19841218)
 ```
 
-# Function para formatear las matrices
+
+# Definición de las funciones
+## Función para formatear las matrices
 
 ```{r code=readLines("../dbTab2mat.R")}
 eval(parse(text=readLines("../dbTab2mat.R")))
 ```
+
+## Función para guardar archivos excel
+
+```{r code=readLines("../saveInExcel.R")}
+eval(parse(text=readLines("../saveInExcel.R")))
+```
+
+## Función para las curvas de rango-abundancia
+
+```{r code=readLines("../rangoAbundanciaEtc.R")}
+eval(parse(text=readLines("../rangoAbundanciaEtc.R")))
+```
+
+## Función para los perfiles de números efectivos de taxones (Hill)
+
+```{r code=readLines("../graphQ0Q1Q2.R")}
+eval(parse(text=readLines("../graphQ0Q1Q2.R")))
+```
+
+## Función para las graficas de curvas de acumulación
+
+Adaptación del codigo de Vladimir Sandoval:
+
+```{r code=readLines("../ggplot_iNEXT.R")}
+eval(parse(text=readLines("../ggplot_iNEXT.R")))
+```
+
+
 
 
 # Importación de los datos de la base de datos
@@ -868,15 +897,8 @@ sum_trasmallo <- rep(0,nb_sp); names(sum_trasmallo) <- names(sum_incidencia)
 sum_trasmallo[names(sum_incidencia)%in%names(sum_trasmallo)] <- p_sum_trasmallo[names(sum_trasmallo)[names(sum_incidencia)%in%names(sum_trasmallo)]]
 sum_trasmallo[is.na(sum_trasmallo)]<-0
 
-plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
-text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
-COL<-rainbow(4)
-points(sum_atarraya,type="b",bg=COL[1],pch=21,lty=2)
-points(sum_arrastre,type="b",bg=COL[2],pch=22,lty=2)
-points(sum_electropesca,type="b",bg=COL[3],pch=23,lty=2)
-points(sum_trasmallo,type="b",bg=COL[4],pch=24,lty=2)
-legend("topright",pch=c(15,21:24),col="black",pt.bg=c(NA,COL),legend=c("total", "Atarraya","Arrastre","Electropesca","Trasmallo"),title="Arte de pesca",bty="n")
+rank_abundance$incidenciaTot_artes<- rankAbundance(rbind(sum_atarraya,sum_arrastre,sum_electropesca,sum_trasmallo),extraLines = factor(c("Atarraya","Arrastre","Electropesca","Trasmallo")),type="incidence",legendTitle = "Arte de pesca",legendOut = T, MARG=c(11,5.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 5,byLABELS=10,posNameSp=-.1,profilesOutFig = c(.8,.99,0.35,0.6))
+
 ```
 
 
@@ -884,132 +906,119 @@ legend("topright",pch=c(15,21:24),col="black",pt.bg=c(NA,COL),legend=c("total", 
 
 
 ```{r rangoIncidenciaTotal_tipCuerAg, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia con todas las artes de pesca, y separadas por tipos de cuerpo de agua"}
-nb_sp<-15
-par(mar = c(10.1,6.1,1,4.1))
-sum_incidencia <- sort(colSums(matrix_todo),decreasing = T)[1:nb_sp]
-tipCuerpAg<-factor(info_todo$tipo_cuerp_agua[match(rownames(matrix_todo),table= info_todo$anh_tempo)],levels=colList$aquatic_habitats$habitat_spa)
-sum_incidencias_tipCuerpAg <- Reduce(rbind,by(matrix_todo[,names(sum_incidencia)],tipCuerpAg,colSums))
-
-plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
-text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
-for(i in 1:nrow(sum_incidencias_tipCuerpAg))
-{
-  points(sum_incidencias_tipCuerpAg[i,],type="b",col=colList$aquatic_habitats$color[i],bg=colList$aquatic_habitats$color[i],pch=21,lty=2)
-}
-
-legend("topright",pch=c(15,rep(21,4)),pt.bg=c(NA,colList$aquatic_habitats$color),col=c("black",colList$aquatic_habitats$color),legend=c("total", colList$aquatic_habitats$habitat_spa),title="Tipo de cuerpo de agua",bty="n")
+rank_abundance$incidenciaTot_tipCuerAg<- rankAbundance(matrix_todo,extraLines = tipCuerAg,type="incidence", extraCol = colList$aquatic_habitats$color,legendTitle = "Tipo de cuerpo de agua",legendOut = T, MARG=c(11,5.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 5,byLABELS=10,posNameSp=-.1,profilesOutFig = c(.8,.99,0.35,0.6))
 ```
 
 ## Mostrando las zonas
 
 
 ```{r rangoIncidenciaTotal_zonas, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Incidencia con todas las artes de pesca, y separadas por zonas"}
-nb_sp<-15
-par(mar = c(10.1,6.1,1,4.1))
-sum_incidencia <- sort(colSums(matrix_todo),decreasing = T)[1:nb_sp]
-zonas<-factor(info_todo$zone[match(rownames(matrix_todo),table= info_todo$anh_tempo)],levels=colList$zonas$platform)
-sum_incidencias_zonas <- Reduce(rbind,by(matrix_todo[,names(sum_incidencia)],zonas,colSums))
-
-plot(1:nb_sp,sum_incidencia,ylab="Suma de las incidencias", xlab=NA,ylim=c(0,max(sum_incidencia)*1.1),pch=15,bty="n",xaxt="n",las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, pos=0,outer=T)
-text(x=(1:nb_sp)+.2,y=par("usr")[3]-1,names(sum_incidencia),xpd=NA,srt=45,adj=1.1)
-for(i in 1:nrow(sum_incidencias_zonas))
-{
-  points(sum_incidencias_zonas[i,],type="b",col=colList$zonas$color[i],bg=colList$zonas$color[i],pch=colList$zonas$pch[i],lty=2)
-}
-
-legend("topright",pch=c(15,colList$zonas$pch),pt.bg=c(NA,colList$zonas$color),col=c("black",colList$zonas$color),legend=c("total", colList$zonas$platform),title="Zonas",bty="n")
+rank_abundance$incidenciaTot_zonas<- rankAbundance(matrix_todo,extraLines = zonas,type="incidence", extraCol = colList$zonas$color,legendTitle = "Tipo de cuerpo de agua",legendOut = T, MARG=c(11,5.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 5,byLABELS=10,posNameSp=-.1,profilesOutFig = c(.8,.99,0.35,0.6))
 ```
 
 ## Por arte de pesca
 ### Atarraya
 
-```{r rangoabundancia_atarraya, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por atarraya"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(matrix_atarraya),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(matrix_atarraya[grep("T1",rownames(matrix_atarraya)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
-points(log10(colSums(matrix_atarraya[grep("T2",rownames(matrix_atarraya)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```{r}
+info_atarraya$tipo_cuerp_agua <- factor(info_atarraya$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+m<-match(rownames(matrix_atarraya),table=info_atarraya$anh_tempo)
+tipCuerAg<-info_atarraya$tipo_cuerp_agua[m]
+info_atarraya$zone <- factor(info_atarraya$zone,colList$zonas$platform)
+zonas<-info_atarraya$zone[m]
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(matrix_atarraya)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+rank_abundance<-list()
+```
+
+```{r rangoabundancia_atarraya_tempo, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por atarraya"}
+rank_abundance$atarraya_tempo <- rankAbundance(matrix_atarraya,extraLines = tempo,type="abundance",extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(11,7.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 100,byLABELS=200,posNameSp=-.1,profilesOutFig = c(.8,.99,0.45,0.7))
+```
+
+```{r rangoabundancia_atarraya_tipCuerAg, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por atarraya"}
+rank_abundance$atarraya_tempo <- rankAbundance(matrix_atarraya,extraLines = tipCuerAg,type="abundance", extraCol = colList$aquatic_habitats$color,legendTitle = "Tipo de cuerpo de agua",legendOut = T, MARG=c(11,7.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 100,byLABELS=200,posNameSp=-.1,profilesOutFig = c(.8,.99,0.45,0.7))
 ```
 
 ### Arrastre
 
-```{r rangoabundancia_arrastre, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por arrastre"}
-nb_sp<-15
-par(mar = c(10.1,6.9,1,4.1))
-sum_abundancia <- sort(colSums(matrix_arrastre),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,2000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(matrix_arrastre[grep("T1",rownames(matrix_arrastre)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
-points(log10(colSums(matrix_arrastre[grep("T2",rownames(matrix_arrastre)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+
+```{r}
+info_arrastre$tipo_cuerp_agua <- factor(info_arrastre$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+m<-match(rownames(matrix_arrastre),table=info_arrastre$anh_tempo)
+tipCuerAg<-info_arrastre$tipo_cuerp_agua[m]
+info_arrastre$zone <- factor(info_arrastre$zone,colList$zonas$platform)
+zonas<-info_arrastre$zone[m]
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(matrix_arrastre)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+rank_abundance<-list()
 ```
+
+```{r rangoabundancia_arrastre_tempo, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por arrastre"}
+rank_abundance$arrastre_tempo <- rankAbundance(matrix_arrastre,extraLines = tempo,type="abundance",extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(11,7.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 100,byLABELS=200,posNameSp=-.1,profilesOutFig = c(.8,.99,0.45,0.7))
+```
+
+```{r rangoabundancia_arrastre_tipCuerAg, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por arrastre"}
+rank_abundance$arrastre_tempo <- rankAbundance(matrix_arrastre,extraLines = tipCuerAg,type="abundance", extraCol = colList$aquatic_habitats$color,legendTitle = "Tipo de cuerpo de agua",legendOut = T, MARG=c(11,7.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 100,byLABELS=200,posNameSp=-.1,profilesOutFig = c(.8,.99,0.45,0.7))
+```
+
+
 
 ### Electropesca
 
-```{r rangoabundancia_electropesca, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por electropesca"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(matrix_electropesca),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=10)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%50==0),length(ATX))])
-show <- ATX%%100==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-points(log10(colSums(matrix_electropesca[grep("T1",rownames(matrix_electropesca)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
-points(log10(colSums(matrix_electropesca[grep("T2",rownames(matrix_electropesca)),names(sum_abundancia)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+
+
+```{r}
+info_electropesca$tipo_cuerp_agua <- factor(info_electropesca$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+m<-match(rownames(matrix_electropesca),table=info_electropesca$anh_tempo)
+tipCuerAg<-info_electropesca$tipo_cuerp_agua[m]
+info_electropesca$zone <- factor(info_electropesca$zone,colList$zonas$platform)
+zonas<-info_electropesca$zone[m]
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(matrix_electropesca)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+rank_abundance<-list()
+```
+
+```{r rangoabundancia_electropesca_tempo, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por electropesca"}
+rank_abundance$electropesca_tempo <- rankAbundance(matrix_electropesca,extraLines = tempo,type="abundance",extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(11,7.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 100,byLABELS=200,posNameSp=-.1,profilesOutFig = c(.8,.99,0.45,0.7))
+```
+
+```{r rangoabundancia_electropesca_tipCuerAg, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por electropesca"}
+rank_abundance$electropesca_tempo <- rankAbundance(matrix_electropesca,extraLines = tipCuerAg,type="abundance", extraCol = colList$aquatic_habitats$color,legendTitle = "Tipo de cuerpo de agua",legendOut = T, MARG=c(11,7.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 100,byLABELS=200,posNameSp=-.1,profilesOutFig = c(.8,.99,0.45,0.7))
 ```
 
 ### Trasmallo
 
-No se pueden mostrar las temporadas, porque las abundancias son demasiado bajas
 
-```{r rangoabundancia_trasmallo, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por trasmallo"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-sum_abundancia <- sort(colSums(matrix_trasmallo),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(sum_abundancia),ylab="Abundancia total", xlab=NA,ylim=c(0,max(log10(sum_abundancia))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=0)
-ATX <- seq(0,1000,by=5)
-ATX <- ATX[1:(min(which(ATX>sum_abundancia[1]))+1)]
-#ATX <- ATX[(max(which(ATX<sum_abundancia[nb_sp]))-1):min(which(ATX>sum_abundancia[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
-show <- ATX%%10==0
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.1,names(sum_abundancia),xpd=NA,srt=45,adj=1.1)
-#points(log10(colSums(matrix_trasmallo[grep("T1",rownames(matrix_trasmallo)),names(sum_abundancia)])),type="b",pch=24,bg="grey",lty=2)
-#points(log10(colSums(matrix_trasmallo[grep("T2",rownames(matrix_trasmallo)),names(sum_abundancia)])),type="b",pch=25,bg="grey",lty=2)
-#legend("topright",pch=c(15,24,25),col="black",pt.bg="grey",legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+
+
+```{r}
+info_trasmallo$tipo_cuerp_agua <- factor(info_trasmallo$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+m<-match(rownames(matrix_trasmallo),table=info_trasmallo$anh_tempo)
+tipCuerAg<-info_trasmallo$tipo_cuerp_agua[m]
+info_trasmallo$zone <- factor(info_trasmallo$zone,colList$zonas$platform)
+zonas<-info_trasmallo$zone[m]
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(matrix_trasmallo)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+rank_abundance<-list()
 ```
 
+```{r rangoabundancia_trasmallo_tempo, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por trasmallo"}
+rank_abundance$trasmallo_tempo <- rankAbundance(matrix_trasmallo,extraLines = tempo,type="abundance",extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(11,7.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 10,byLABELS=10,posNameSp=-.1,profilesOutFig = c(.8,.99,0.45,0.7))
+```
+
+```{r rangoabundancia_trasmallo_tipCuerAg, fig.height=5, fig.width=8, fig.cap="Grafica Rango-abundancia, recolectado por trasmallo"}
+rank_abundance$trasmallo_tempo <- rankAbundance(matrix_trasmallo,extraLines = tipCuerAg,type="abundance", extraCol = colList$aquatic_habitats$color,legendTitle = "Tipo de cuerpo de agua",legendOut = T, MARG=c(11,7.5,1,8),posAxisX = -0.06,labY="Incidencia total",byTICK = 10,byLABELS=10,posNameSp=-.1,profilesOutFig = c(.8,.99,0.45,0.7))
+```
+
+## Exportar los datos de los graficos
+
+```{r}
+rango_cobertura<-lapply(rank_abundance,function(x)as.data.frame(t(x)))
+save_in_excel("pece_dataRangoCobertura.xlsx",rango_cobertura)
+```
+
+
+
 # Diversidad beta (NMDS)
+
+**ANOTAR: para unificar con los demás grupos biológicos, modifiqué un poco las graficas... si para alguna razón, prefieres quedar con las gráficas anteriores, no dudes en pedir!**
+
+
 ## Matriz de occurrencia total (todas las artes de pesca)
 
 ```{r nmds_tot_}

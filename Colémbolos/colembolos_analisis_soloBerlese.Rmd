@@ -49,14 +49,34 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 options(knitr.kable.NA = "---")
 fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
 source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
-set.seed(0940925)
 ```
 
-# Function para formatear las matrices
+
+# Definición de las funciones
+## Función para formatear las matrices
 
 ```{r code=readLines("../dbTab2mat.R")}
 eval(parse(text=readLines("../dbTab2mat.R")))
 ```
+
+## Función para guardar archivos excel
+
+```{r code=readLines("../saveInExcel.R")}
+eval(parse(text=readLines("../saveInExcel.R")))
+```
+
+## Función para las curvas de rango-abundancia
+
+```{r code=readLines("../rangoAbundanciaEtc.R")}
+eval(parse(text=readLines("../rangoAbundanciaEtc.R")))
+```
+
+## Función para los perfiles de números efectivos de taxones (Hill)
+
+```{r code=readLines("../graphQ0Q1Q2.R")}
+eval(parse(text=readLines("../graphQ0Q1Q2.R")))
+```
+
 
 
 # Importación de los datos de la base de datos

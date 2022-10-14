@@ -49,10 +49,30 @@ fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
 source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
 ```
 
-# Function para formatear las matrices
+
+# Definición de las funciones
+## Función para formatear las matrices
 
 ```{r code=readLines("../dbTab2mat.R")}
 eval(parse(text=readLines("../dbTab2mat.R")))
+```
+
+## Función para guardar archivos excel
+
+```{r code=readLines("../saveInExcel.R")}
+eval(parse(text=readLines("../saveInExcel.R")))
+```
+
+## Función para las curvas de rango-abundancia
+
+```{r code=readLines("../rangoAbundanciaEtc.R")}
+eval(parse(text=readLines("../rangoAbundanciaEtc.R")))
+```
+
+## Función para los perfiles de números efectivos de taxones (Hill)
+
+```{r code=readLines("../graphQ0Q1Q2.R")}
+eval(parse(text=readLines("../graphQ0Q1Q2.R")))
 ```
 
 
@@ -434,205 +454,108 @@ data.frame(
   sim_estimado=paste(tabEst_zona$sim_estimado,tabEst_zona$sim_estimado_se,sep=" ± ")
  )%>%
   kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","coverage","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por zonas desde la matriz de abundancia")%>%
+  column_spec(4,width='1.5cm')
   add_header_above(c(" "=4, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))
 ```
+
+
+
+# Perfiles de números de taxones efectivos
+
+```{r perfiles_espEfectivas, fig.height=7, fig.width=9,fig.cap="Perfiles de números de taxones efectivos de Hill calculados gracias al paquete iNEXT. Las barras de errores representan los intervalos de confiancia de las estimaciones de los números de Hill"}
+iNEXT_tot <- iNEXT(sort(colSums(fipl_matrix),decreasing=T),datatype ="abundance")
+effectiveTaxNbProfile(iNEXT_tot, iNEXT_categ = iNEXT_tipCuerAg, colCateg = colList$aquatic_habitats$color, categLevels = colList$aquatic_habitats$habitat_spa, titleLegend = "Tipo de cuerpo de agua", YLAB = "Número efectivo de taxones(Hill)")
+```
+
+\clearpage
 
 # Curvas de Rango Densidad
 
 ```{r}
 fipl_matrix <- import_fipl$fipl_matrix
+rango_densidad<- list()
 ```
 
 ## Matrix total
 
-```{r rangoDensidadTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Densidad, orden según las densidades promedias totales, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(10.1,6.5,1,4.1))
-mean_density <- sort(colMeans(fipl_matrix),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(mean_density))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.2)
-ATX <- c(1,seq(100,1000000,by=100))
-ATX <- ATX[1:(min(which(ATX>mean_density[1]))+1)]
-#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%500==0),length(ATX))])
-show <- c(T, ATX[2:length(ATX)]%%1000==0)
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
-points(log10(colMeans(fipl_matrix[grep("T1",rownames(fipl_matrix)),names(mean_density)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T1"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T1"],lty=2)
-points(log10(colMeans(fipl_matrix[grep("T2",rownames(fipl_matrix)),names(mean_density)])),type="b",pch=colList$tempo$pch[colList$tempo$cd_tempo=="T2"],bg=colList$tempo$color[colList$tempo$cd_tempo=="T2"],lty=2)
-legend("topright",pch=c(15,colList$tempo$pch),col="black",pt.bg=c(NA,colList$tempo$color),legend=c("Ambas","Aguas altas","Aguas bajas"),title="Temporada",bty="n")
+```{r rangoDensidadTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-densidad, orden según las densidades promedias totales, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas los taxones y está ordenado según las densidades en cada temporada."}
+rango_densidad$total_tempo <- rankAbundance(fipl_matrix,type="density",extraLines = tempo,extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(8,5.5,1,8),posAxisX = -0.06,labY="densidad promedia (ind/L)        ",byTICK = 50000,byLABELS=100000,posNameSp=-.1)
 ```
 
+\clearpage
 
 ## Mostrando las zonas
 
 
-```{r rangoDensidadTotal_zona, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Densidad, orden según las densidades promedias totales, mostrando las 3 zonas de muestreo"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,4.1))
-mean_density <- sort(colMeans(fipl_matrix),decreasing = T)[1:nb_sp]
-plot(1:nb_sp,log10(mean_density),ylab="Densidad total", xlab=NA,ylim=c(0,max(log10(mean_density))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
-ATX <- c(1,seq(500,1000000,by=500))
-ATX <- ATX[1:(min(which(ATX>mean_density[1]))+1)]
-#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
-show <- c(T, ATX[2:length(ATX)]%%10==0)
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
-points(1:nb_sp,log10(colMeans(fipl_matrix[zona=="Caracterización",names(mean_density)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Caracterización"],bg=colList$zonas$color[colList$zonas$platform=="Caracterización"],lty=2,col=colList$zonas$color[colList$zonas$platform=="Caracterización"])
-points(1:nb_sp,log10(colMeans(fipl_matrix[zona=="Kalé",names(mean_density)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Kalé"], bg=colList$zonas$color[colList$zonas$platform=="Kalé"], lty=2, col=colList$zonas$color[colList$zonas$platform=="Kalé"])
-points(1:nb_sp,log10(colMeans(fipl_matrix[zona=="Platero",names(mean_density)])),type="b",pch=colList$zonas$pch[colList$zonas$platform=="Platero"],bg=colList$zonas$color[colList$zonas$platform=="Platero"],lty=2,col=colList$zonas$color[colList$zonas$platform=="Platero"])
-legend("topright",pch=c(15,colList$zonas$pch),col=c("black",colList$zonas$color),pt.bg=c(NA,colList$zonas$color),legend=c("Todas",colList$zonas$platform),title="Zonas",bty="n")
+
+```{r rangoDensidadTotal_zonas, fig.height=5, fig.width=8, fig.cap="Grafica Rango-densidad, orden según las densidades promedias totales, mostrando las zonas. El subgrafico \"Perfiles\" incluye todas los taxones y está ordenado según las densidades en cada zona."}
+rango_densidad$total_zona <- rankAbundance(fipl_matrix,type="density",extraLines = zona,extraPch = colList$zonas$pch, extraCol = colList$zonas$color,legendTitle = "Zonas",legendOut = T, MARG=c(6,5.5,1,8),posAxisX = -0.06,labY="densidad promedia (ind/L)      ",byTICK = 25000,byLABELS=50000, posNameSp=-.1)
 ```
+
+\clearpage
 
 ## Mostrando los tipos de cuerpos de agua
 
-
-```{r rangoDensidadTotal_tipCuerAg, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad, orden según las densidades promedias totales, mostrando los tipos de cuerpos de agua"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,1))
-mean_density <- sort(colMeans(fipl_matrix),decreasing = T)[1:nb_sp]
-p_mean_densities_tipCuerAg <- by(data=fipl_matrix,INDICES = tipCuerAg, FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
-mean_densities_tipCuerAg <- Reduce(rbind,p_mean_densities_tipCuerAg,)
-rownames(mean_densities_tipCuerAg) <- names(p_mean_densities_tipCuerAg)[!sapply(p_mean_densities_tipCuerAg,is.null)]
-plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tipCuerAg)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
-ATX <- c(1,seq(500,1000000,by=500))
-ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tipCuerAg))))+1)]
-#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
-show <- c(T, ATX[2:length(ATX)]%%10==0)
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
-
-
-for(i in 1:nrow(mean_densities_tipCuerAg))
-{
-    points(1:nb_sp,log10(mean_densities_tipCuerAg[i,]),type="b",pch=21,bg=colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa==rownames(mean_densities_tipCuerAg)[i]],lty=2,col=colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa==rownames(mean_densities_tipCuerAg)[i]])
-}
-legend("topright",pch=c(15,rep(21,nrow(mean_densities_tipCuerAg))),col=c("black",colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa %in% rownames(mean_densities_tipCuerAg)]),pt.bg=c(NA,colList$aquatic_habitats$color[colList$aquatic_habitats$habitat_spa %in% rownames(mean_densities_tipCuerAg)]),legend=c("Todas",colList$aquatic_habitats$habitat_spa[colList$aquatic_habitats$habitat_spa %in% rownames(mean_densities_tipCuerAg)]),title="Tipo de Cuerpo de Agua",bty="n")
+```{r rangoDensidadTotal_tipCuerAg, fig.height=5, fig.width=8, fig.cap="Grafica Rango-densidad, orden según las densidades promedias totales, mostrando los tipos de cuerpo de agua. El subgrafico \"Perfiles\" incluye todas los taxones y está ordenado según las densidades en cada tipo de cuerpo de agua."}
+rango_densidad$total_tipCuerAg <- rankAbundance(fipl_matrix,type="density",extraLines = tipCuerAg, extraCol = colList$aquatic_habitats$color,legendTitle = "Tipos de cuerpo de agua",legendOut = T, MARG=c(8,5.5,1,8),posAxisX = -0.06,labY="densidad promedia (ind/L)               ",byTICK = 25000,byLABELS=50000,posNameSp = -.1)
 ```
+
+\clearpage
 
 ## Por tipo de cuerpo de agua
 
-## Caño
+### Caño
 
-```{r rangoDensidadTotal_caño, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad en los caños, orden según las densidades promedias totales, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,1))
-mean_density <- sort(colMeans(fipl_matrix[tipCuerAg=="Caño",]),decreasing = T)[1:nb_sp]
-p_mean_densities_tempo <- by(data=fipl_matrix[tipCuerAg=="Caño",],INDICES = tempo[tipCuerAg=="Caño"], FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
-mean_densities_tempo <- Reduce(rbind,p_mean_densities_tempo,)
-rownames(mean_densities_tempo) <- names(p_mean_densities_tempo)[!sapply(p_mean_densities_tempo,is.null)]
-plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tempo)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
-ATX <- c(1,seq(500,1000000,by=500))
-ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tempo))))+1)]
-#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
-show <- c(T, ATX[2:length(ATX)]%%10==0)
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
-
-
-for(i in 1:nrow(mean_densities_tempo))
-{
-    points(1:nb_sp,log10(mean_densities_tempo[i,]),type="b",pch=colList$tempo$pch[colList$tempo$temporada ==rownames(mean_densities_tempo)[i]],bg=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]],lty=2,col=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]])
-}
-legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),col=c("black",colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),pt.bg=c(NA,colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),legend=c("Todas",colList$tempo$temporada[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),title="Temporada",bty="n")
+```{r rangoDensidadCaño, fig.height=5, fig.width=8, fig.cap="Grafica Rango-densidad en los caños, orden según las densidades promedias totales, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas los taxones y está ordenado según las densidades en cada temporada."}
+mat <- fipl_matrix[tipCuerAg=="Caño",]
+mat <- mat[,as.logical(colSums(mat))]
+rango_densidad$caño_tempo <- rankAbundance(mat,type="density",extraLines = tempo[tipCuerAg=="Caño"],extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(6,5.5,1,8),posAxisX = -0.06,labY="densidad promedia (ind/L)             ",byTICK = 25000,byLABELS=50000,posNameSp=-.1)
 ```
 
-## Ciénaga
+\clearpage
 
-```{r rangoDensidadTotal_ciénaga, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad en las ciénagas, orden según las densidades promedias totales, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,1))
-mean_density <- sort(colMeans(fipl_matrix[tipCuerAg=="Ciénaga",]),decreasing = T)[1:nb_sp]
-p_mean_densities_tempo <- by(data=fipl_matrix[tipCuerAg=="Ciénaga",],INDICES = tempo[tipCuerAg=="Ciénaga"], FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
-mean_densities_tempo <- Reduce(rbind,p_mean_densities_tempo,)
-rownames(mean_densities_tempo) <- names(p_mean_densities_tempo)[!sapply(p_mean_densities_tempo,is.null)]
-plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tempo)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+### Ciénaga
 
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
-ATX <- c(1,seq(500,1000000,by=500))
-ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tempo))))+1)]
-#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
-show <- c(T, ATX[2:length(ATX)]%%10==0)
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
-
-
-for(i in 1:nrow(mean_densities_tempo))
-{
-    points(1:nb_sp,log10(mean_densities_tempo[i,]),type="b",pch=colList$tempo$pch[colList$tempo$temporada ==rownames(mean_densities_tempo)[i]],bg=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]],lty=2,col=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]])
-}
-legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),col=c("black",colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),pt.bg=c(NA,colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),legend=c("Todas",colList$tempo$temporada[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),title="Temporada",bty="n")
+```{r rangoDensidadCienaga, fig.height=5, fig.width=8, fig.cap="Grafica Rango-densidad en las ciénagas, orden según las densidades promedias totales, mostrando las temporadas. "}
+mat <- fipl_matrix[tipCuerAg=="Ciénaga",]
+mat <- mat[,as.logical(colSums(mat))]
+rango_densidad$cienaga_tempo <- rankAbundance(mat,type="density", MARG=c(6,5.5,1,8),posAxisX = -0.09,labY="densidad promedia (ind/L)              ",byTICK = 100000,byLABELS=100000,posNameSp=-.1,addProfiles = T, profilesOut = T,legendOut = T, extraLines = tempo[tipCuerAg=="Ciénaga"], maxLABELS = 10000000, extraPch = colList$tempo$pch,extraCol = colList$tempo$color)
 ```
-## Quebrada
-
-```{r rangoDensidadTotal_quebrada, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad en las quebradas, orden según las densidades promedias totales, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(9.1,6.5,1,1))
-mean_density <- sort(colMeans(fipl_matrix[tipCuerAg=="Quebrada",]),decreasing = T)[1:nb_sp]
-p_mean_densities_tempo <- by(data=fipl_matrix[tipCuerAg=="Quebrada",],INDICES = tempo[tipCuerAg=="Quebrada"], FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
-mean_densities_tempo <- Reduce(rbind,p_mean_densities_tempo,)
-rownames(mean_densities_tempo) <- names(p_mean_densities_tempo)[!sapply(p_mean_densities_tempo,is.null)]
-plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tempo)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
-
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.1)
-ATX <- c(1,seq(500,10000,by=500))
-ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tempo))))+1)]
-#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
-show <- c(T, ATX[2:length(ATX)]%%10==0)
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.25,names(mean_density),xpd=NA,srt=45,adj=1.1)
 
 
-for(i in 1:nrow(mean_densities_tempo))
-{
-    points(1:nb_sp,log10(mean_densities_tempo[i,]),type="b",pch=colList$tempo$pch[colList$tempo$temporada ==rownames(mean_densities_tempo)[i]],bg=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]],lty=2,col=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]])
-}
-legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),col=c("black",colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),pt.bg=c(NA,colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),legend=c("Todas",colList$tempo$temporada[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),title="Temporada",bty="n")
+\clearpage
+
+### Quebrada
+
+
+```{r rangoDensidadQuebrada, fig.height=5, fig.width=8, fig.cap="Grafica Rango-densidad en las quebradas, orden según las densidades promedias totales, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas los taxones y está ordenado según las densidades en cada temporada."}
+mat <- fipl_matrix[tipCuerAg=="Quebrada",]
+mat <- mat[,as.logical(colSums(mat))]
+rango_densidad$quebrada_tempo <- rankAbundance(mat,type="density",extraLines = tempo[tipCuerAg=="Quebrada"],extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(7.5,6.5,1,8),posAxisX = -0.09,labY="densidad promedia (ind/L)                   ",byTICK = 2500,byLABELS=5000,posNameSp=-.1)
 ```
-## Río
 
-```{r rangoDensidadTotal_río, fig.height=5, fig.width=9, fig.cap="Grafica Rango-Densidad en el río, orden según las densidades promedias totales, mostrando las temporadas"}
-nb_sp<-15
-par(mar = c(7.1,6.5,1,1))
-mean_density <- sort(colMeans(fipl_matrix[tipCuerAg=="Río",]),decreasing = T)[1:nb_sp]
-p_mean_densities_tempo <- by(data=fipl_matrix[tipCuerAg=="Río",],INDICES = tempo[tipCuerAg=="Río"], FUN = function(x,c)colMeans(x[,c]),c=names(mean_density))
-mean_densities_tempo <- Reduce(rbind,p_mean_densities_tempo,)
-rownames(mean_densities_tempo) <- names(p_mean_densities_tempo)[!sapply(p_mean_densities_tempo,is.null)]
-plot(1:nb_sp,log10(mean_density),ylab="Densidad promedia", xlab=NA,ylim=c(0,max(log10(rbind(mean_density,mean_densities_tempo)))*1.1),pch=15,bty="n",xaxt="n",yaxt="n", las=2,type="b",lty=3)
+\clearpage
 
-axis(side=1,at=1:nb_sp,labels=FALSE,lwd.tick=-1, outer=T, pos=-.05)
-ATX <- c(1,seq(500,10000,by=500))
-ATX <- ATX[1:(min(which(ATX>max(rbind(mean_density,mean_densities_tempo))))+1)]
-#ATX <- ATX[(max(which(ATX<mean_density[nb_sp]))-1):min(which(ATX>mean_density[1]))+1]
-ATX <- unique(ATX[c(1,which(ATX%%10==0),length(ATX))])
-show <- c(T, ATX[2:length(ATX)]%%10==0)
-show[c(1,length(ATX))] <- T
-axis(side=2,at=c(0,log10(ATX)[2:length(ATX)]),labels=ifelse(show,ATX,NA),las=2)
-text(x=(1:nb_sp)+.2,y=-.05,names(mean_density),xpd=NA,srt=45,adj=1.1)
+### Río
 
+**Una sola temporada**
 
-for(i in 1:nrow(mean_densities_tempo))
-{
-    points(1:nb_sp,log10(mean_densities_tempo[i,]),type="b",pch=colList$tempo$pch[colList$tempo$temporada ==rownames(mean_densities_tempo)[i]],bg=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]],lty=2,col=colList$tempo$color[colList$tempo$temporada==rownames(mean_densities_tempo)[i]])
-}
-legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),col=c("black",colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),pt.bg=c(NA,colList$tempo$color[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),legend=c("Todas",colList$tempo$temporada[colList$tempo$temporada %in% rownames(mean_densities_tempo)]),title="Temporada",bty="n")
+```{r rangoDensidadRío, fig.height=5, fig.width=8, fig.cap="Grafica Rango-densidad en los ríos, orden según las densidades promedias totales. El subgrafico \"Perfiles\" incluye todos los taxones."}
+mat <- fipl_matrix[tipCuerAg=="Río",]
+mat <- mat[,as.logical(colSums(mat))]
+rango_densidad$rio_tempo <- rankAbundance(mat,type="density", MARG=c(7.5,6.5,1,8),posAxisX = -0.09,labY="densidad promedia (ind/L)                   ",byTICK = 1,byLABELS=1,posNameSp=-.1)
 ```
+
+\clearpage
+
+
+## Exportar los datos de los graficos
+
+```{r}
+rango_densidad<-lapply(rango_densidad,function(x)as.data.frame(t(x)))
+save_in_excel("fipl_dataRangoDensidad.xlsx",rango_densidad)
+```
+
 
 # Diversidad beta (NMDS)
 
@@ -640,7 +563,7 @@ legend("topright",pch=c(15,colList$tempo$pch[colList$tempo$temporada %in% rownam
 
 **Para poder realizar la NMDS debemos suprimir las comunidades de Río que no tienen suficiente taxones comunes con las demás comunidades**
 
-**Ademas, probablemente debido a las diferencias tan grandes entre las densidades más fuertes y las más pequeñas, la distancia de Bray-Curtis da resultados ilogicos... Utilizarémos la distancia de Manhattan**
+**Ademas, probablemente debido a las diferencias tan grandes entre las densidades más fuertes y las más pequeñas, la distancia de Bray-Curtis da resultados ilógicos... Utilizaremos la distancia de Manhattan**
 
 ***************
 
