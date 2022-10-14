@@ -58,3 +58,4 @@ devDocs/*.tex
 *.aux
 *.toc
 *.swp
+*.csv
