@@ -6452,7 +6452,7 @@ VALUES(
   'Square centimeters',
   'Centimetros cuadrados',
   'cm2',
-  1/10000
+  0.0001
   )
   ,(
   (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='volume'),
@@ -6608,7 +6608,7 @@ VALUES(
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of replicates'),
   false,
   false,
-  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Individuals per square meter'),
+  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Individual density (ind/m2)'),
   NULL
 )
 ,(
@@ -6618,7 +6618,7 @@ VALUES(
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of replicates'),
   false,
   false,
-  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Densidad de individuos (ind/cm2)'),
+  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind_spa='Densidad de individuos (ind/cm2)'),
   NULL
 )
 ,(
@@ -6668,7 +6668,7 @@ VALUES(
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of replicates'),
   false,
   false,
-  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Densidad de individuos (ind/m2)'),
+  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind_spa='Densidad de individuos (ind/m2)'),
   'Draga/Red tipo D - Asociados a macrofitas, Se trata de una asociacion entre metodos, por las condiciones particulares del evento de muestreo'
 )
 
@@ -7235,6 +7235,12 @@ VALUES(
   'Número de cameras trampa',
   'camera traps',
   1
+  ),
+  ((SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='time'),
+  'Number of days',
+  'Número de días',
+  'days',
+  60*24
   )
 RETURNING cd_unit,unit;
 ```
@@ -7246,6 +7252,11 @@ VALUES(
   'Número de cameras trampa',
   (SELECT cd_unit FROM main.def_unit WHERE cd_measurement_type=(SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='number of traps') AND unit='Number of camera traps'),
   'int'
+  ),
+  ('Elapsed time (days)',
+  'Duración (días)',
+  (SELECT cd_unit FROM main.def_unit WHERE cd_measurement_type=(SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='time') AND unit='Number of days'),
+  'int'
   )
 RETURNING cd_var_samp_eff, var_samp_eff ;
 ```
@@ -7256,7 +7267,7 @@ VALUES(
   'Camera traps',
   'Fototrampeo',
   (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Number of camera traps'),
-  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Time elapsed (nights)'),
+  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Elapsed time (days)'),
   false,
   false,
   (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Number of individuals'),
@@ -7595,6 +7606,802 @@ GROUP BY e.event_id,e.date_time_begin, e.date_time_end
 ;
 ```
 
+# Botanica (integración en curso)
+
+**********************************
+
+**Notas para botánica**:
+
+1. Para los epifitas, el nivel *event* no corresponde a lo que debería: nos queda difícil anotar los esfuerzos de muestreo y las características de las mallas o de los transectos en la estructura actual...
+1. En relación con el punto anterior: las medidas de esfuerzo dadas en cada "event_id" no corresponden con los esfuerzos que se aplicaron en campo al nivel de los eventos, hay que multiplicar este esfuerzo por números de mallas
+1. Cuando se anote "epifitas no vasculares", está implícito que se ha podido hacer también epifitas no vasculares, pero no es siempre el caso
+1. Hay filas de la pestaña de epifitas no vasculares que corresponden a la ausencia de organismos, si bien entiendo que esa información puede ser util, no está conforme a lo que debería entrar a un DwC. Adémas, se afectan a "Plantae" sin ninguna razón...
+1. No se anotaron las horas...
+1. Siempre en esos protocolos de plantas, la definición del "individuo" se vuelve complicada... un tag corresponde a una ramificación, y cada ramificación de un arbol obtiene una fila del archivo, lo que es muy practico para analizar el crecimiento de los individuo, pero confuso en terminos de abundancia...
+1. Para las epifitas vasculares, tambien se considera una definición rara de la cobertura, en percentaje, pero no entiendo a que correspondera
+
+*Lo que pienso hacer es*:
+
+1. crear un evento por malla, eso implica utilizar event_id con nuevos nombres
+1. suprimir las filas de registros que no corresponden a organismos, anotar la cobertura, 100%-total debería corresponder a las filas excluídas. Si no es el caso, pedir más informaciones... 
+
+************************************
+
+
+Para entender el plan de muestreo
+
+
+```{sql}
+SELECT e.occurrence_id, e.sampling_protocol, COUNT(DISTINCT a."row.names") nb_reg_arbo, COUNT (DISTINCT ev."row.names") nb_reg_epi_vas, COUNT (DISTINCT env."row.names")  nb_reg_epi_novas 
+FROM raw_dwc.botanica_event e 
+LEFT JOIN raw_dwc.botanica_registros_arborea a ON e.occurrence_id=a.event_id 
+LEFT JOIN raw_dwc.botanica_registros_epi_vas ev ON e.occurrence_id = ev.event_id 
+LEFT JOIN raw_dwc.botanica_registros_epi_novas env ON e.occurrence_id=env.event_id
+GROUP BY e.occurrence_id, e.sampling_protocol
+```
+
+Acá tenemos un problema: como saber si se realizó el muestro de epifitas vasculares (como hacer la diferencia entre "no encontraron" y "no se hizó")
+--> Sandra me envió la lista que integré a la consulta
+
+
+```{sql}
+WITH a AS(
+SELECT e.occurrence_id,
+	REGEXP_REPLACE(e.occurrence_id,'^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$','\1')::int anh_num,
+	REGEXP_REPLACE(e.occurrence_id,'^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$','\2')::int repli,
+	CASE
+		WHEN e.sampling_protocol='Muestreo de comunidades de hierbas para estimar coberturas en cuadrantes de un metro cuadrado' THEN ARRAY[NULL]
+		WHEN e.sampling_protocol='Muestreo de flora epifita no vascular sugerido por la ANLA para solicitudes de licenciamiento ambiental.' THEN 
+			CASE
+				WHEN e.occurrence_id IN ('ANH_12_1_F','ANH_18_1_F','ANH_284_1_F','ANH_307_1_F','ANH_308_1_F','ANH_312_1_F','ANH_319_1_F','ANH_320_1_F','ANH_335_1_F','ANH_395_1_F') THEN ARRAY['epva','epnv']
+				ELSE ARRAY['epnv']
+			END
+		WHEN e.sampling_protocol='Transecto de inventario de flora arbórea (Oliver et al. 2002, Global Patterns of Plant Diversity: Alwyn H. Gentry Forest Transec Data Set, Missouri Botanical Garden Press) ajustado a DAP mínimo de 5 cm' THEN ARRAY['arbo']
+	END cds_gp_biol
+FROM raw_dwc.botanica_event e
+),b AS(
+SELECT occurrence_id, anh_num, repli, UNNEST(cds_gp_biol) cd_gp_biol
+FROM a
+)
+SELECT anh_num, cd_gp_biol, ARRAY_AGG(repli ORDER BY repli) replis, ARRAY_AGG(occurrence_id) event_ids
+FROM b
+WHERE cd_gp_biol IS NOT NULL
+GROUP BY anh_num,cd_gp_biol
+ORDER BY cd_gp_biol,anh_num
+```
+
+## ANH
+
+* **utilizar occurrenceID para el eventID puede ser muy confuso cuando este juego de datos vaya a pasar a las bases de datos internacionales como GBIF, debería ser eventID**
+
+Insertar los datos de anh:
+
+``` {sql}
+INSERT INTO main.punto_referencia(name_pt_ref, num_anh)
+WITH a AS(
+SELECT
+	REGEXP_REPLACE(occurrence_id,'^(ANH_[0-9]{1,3})_([0-9]{1,2})(_F)?$','\1') anh_name,
+	REGEXP_REPLACE(occurrence_id,'^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$','\1')::int anh_num
+FROM raw_dwc.botanica_event
+)
+SELECT anh_name, anh_num
+FROM a
+GROUP BY anh_name,anh_num
+ORDER BY anh_num
+ON CONFLICT (name_pt_ref) DO NOTHING
+RETURNING cd_pt_ref, name_pt_ref
+;
+```
+
+dar las referencias en las tablas de botanica
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_event ADD COLUMN cd_pt_ref int REFERENCES main.punto_referencia(cd_pt_ref) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE raw_dwc.botanica_registros_arborea ADD COLUMN cd_pt_ref int REFERENCES main.punto_referencia(cd_pt_ref) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE raw_dwc.botanica_registros_epi_vas ADD COLUMN cd_pt_ref int REFERENCES main.punto_referencia(cd_pt_ref) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE raw_dwc.botanica_registros_epi_novas ADD COLUMN cd_pt_ref int REFERENCES main.punto_referencia(cd_pt_ref) ON DELETE SET NULL ON UPDATE CASCADE;
+
+UPDATE raw_dwc.botanica_event
+SET cd_pt_ref=pr.cd_pt_ref
+FROM main.punto_referencia pr
+WHERE REGEXP_REPLACE(occurrence_id, '^(ANH_[0-9]{1,3})_([0-9]{1,2})(_F)?$', '\1') = name_pt_ref
+;
+
+UPDATE raw_dwc.botanica_registros_arborea
+SET cd_pt_ref=pr.cd_pt_ref
+FROM main.punto_referencia pr
+WHERE REGEXP_REPLACE(event_id, '^(ANH_[0-9]{1,3})_([0-9]{1,2})(_F)?$', '\1') = name_pt_ref
+;
+
+UPDATE raw_dwc.botanica_registros_epi_vas
+SET cd_pt_ref=pr.cd_pt_ref
+FROM main.punto_referencia pr
+WHERE REGEXP_REPLACE(event_id, '^(ANH_[0-9]{1,3})_([0-9]{1,2})(_F)?$', '\1') = name_pt_ref
+;
+
+UPDATE raw_dwc.botanica_registros_epi_novas
+SET cd_pt_ref=pr.cd_pt_ref
+FROM main.punto_referencia pr
+WHERE REGEXP_REPLACE(event_id, '^(ANH_[0-9]{1,3})_([0-9]{1,2})(_F)?$', '\1') = name_pt_ref
+;
+
+
+SELECT true;
+```
+
+Averiguando que ninguna fila no tenga anh
+
+```{sql}
+SELECT occurrence_id FROM raw_dwc.botanica_event WHERE cd_pt_ref IS NULL;
+```
+
+```{sql}
+SELECT occurrence_id,event_id FROM raw_dwc.botanica_registros_arborea WHERE cd_pt_ref IS NULL;
+```
+
+```{sql}
+SELECT occurrence_id,event_id FROM raw_dwc.botanica_registros_epi_vas WHERE cd_pt_ref IS NULL;
+```
+
+```{sql}
+SELECT occurrence_id,event_id FROM raw_dwc.botanica_registros_epi_novas WHERE cd_pt_ref IS NULL;
+```
+
+## Unit, sampling efforts definition, abundance definition, protocolo
+
+```{sql}
+INSERT INTO main.def_protocol(protocol,protocol_spa,cd_var_samp_eff_1,cd_var_samp_eff_2,samp_eff_1_implicit,samp_eff_2_implicit,cd_var_ind_qt,description_spa, description)
+VALUES(
+  'Tree systematic transect (DBH>5cm)',
+  'Transecto sistemático de arbóles (DAP>5cm)',
+  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Covered distance'),
+  NULL,
+  false,
+  NULL,
+  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Number of individuals'),
+  NULL,
+  'Oliver et al. 2002, Global Patterns of Plant Diversity: Alwyn H. Gentry Forest Transec Data Set, Missouri Botanical Garden Press, adapted to 5cm DBH'
+),(
+  'Systematic transect for vascular epiphytes (<2m high)',
+  'Transecto sistemático para epifitas vasculares (<2m altura)',
+  (SELECT cd_var_samp_eff FROM main.def_var_samp_eff WHERE var_samp_eff='Covered distance'),
+  NULL,
+  false,
+  NULL,
+  (SELECT cd_var_ind_qt FROM main.def_var_ind_qt WHERE var_qt_ind='Cover (%)'),
+  NULL,
+  NULL
+)
+RETURNING cd_protocol,protocol,protocol_spa;
+```
+
+## Personas
+
+```{sql}
+INSERT INTO main.people(verbatim_person)
+WITH a AS(
+SELECT DISTINCT INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))) AS name_person
+FROM raw_dwc.botanica_registros_arborea
+UNION
+SELECT DISTINCT INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | '))))
+FROM raw_dwc.botanica_registros_arborea
+UNION
+SELECT DISTINCT INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))) AS name_person
+FROM raw_dwc.botanica_registros_epi_vas
+UNION
+SELECT DISTINCT INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | '))))
+FROM raw_dwc.botanica_registros_epi_vas
+UNION
+SELECT DISTINCT INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))) AS name_person
+FROM raw_dwc.botanica_registros_epi_novas
+UNION
+SELECT DISTINCT INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | '))))
+FROM raw_dwc.botanica_registros_epi_novas
+)
+SELECT DISTINCT REGEXP_REPLACE(name_person, '- ','-')
+FROM a
+ORDER BY REGEXP_REPLACE(name_person, '- ','-')
+ON CONFLICT(verbatim_person) DO NOTHING
+RETURNING cd_person, verbatim_person
+```
+
+Dar los codigos a las tables de origen:
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_registros_arborea ADD COLUMN cds_recorded_by int[];
+ALTER TABLE raw_dwc.botanica_registros_epi_vas ADD COLUMN cds_recorded_by int[];
+ALTER TABLE raw_dwc.botanica_registros_epi_novas ADD COLUMN cds_recorded_by int[];
+ALTER TABLE raw_dwc.botanica_registros_arborea ADD COLUMN cds_identified_by int[];
+ALTER TABLE raw_dwc.botanica_registros_epi_vas ADD COLUMN cds_identified_by int[];
+ALTER TABLE raw_dwc.botanica_registros_epi_novas ADD COLUMN cds_identified_by int[];
+
+WITH a AS(
+SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))),'- ','-') AS name_person
+FROM raw_dwc.botanica_registros_arborea
+),b AS(
+SELECT "row.names", ARRAY_AGG(cd_person) cds
+FROM a
+LEFT JOIN main.people p ON a.name_person=p.verbatim_person
+GROUP BY "row.names"
+)
+UPDATE raw_dwc.botanica_registros_arborea AS r
+SET cds_recorded_by=b.cds
+FROM b
+WHERE r."row.names"=b."row.names"
+RETURNING r."row.names", cds_recorded_by
+;
+
+WITH a AS(
+SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | ')))),'- ','-') AS name_person
+FROM raw_dwc.botanica_registros_arborea
+),b AS(
+SELECT "row.names", ARRAY_AGG(cd_person) cds
+FROM a
+LEFT JOIN main.people p ON a.name_person=p.verbatim_person
+GROUP BY "row.names"
+)
+UPDATE raw_dwc.botanica_registros_arborea AS r
+SET cds_identified_by=b.cds
+FROM b
+WHERE r."row.names"=b."row.names"
+RETURNING r."row.names", cds_identified_by
+;
+
+-----------
+
+WITH a AS(
+SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))),'- ','-') AS name_person
+FROM raw_dwc.botanica_registros_epi_vas
+),b AS(
+SELECT "row.names", ARRAY_AGG(cd_person) cds
+FROM a
+LEFT JOIN main.people p ON a.name_person=p.verbatim_person
+GROUP BY "row.names"
+)
+UPDATE raw_dwc.botanica_registros_epi_vas AS r
+SET cds_recorded_by=b.cds
+FROM b
+WHERE r."row.names"=b."row.names"
+RETURNING r."row.names", cds_recorded_by
+;
+
+WITH a AS(
+SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | ')))),'- ','-') AS name_person
+FROM raw_dwc.botanica_registros_epi_vas
+),b AS(
+SELECT "row.names", ARRAY_AGG(cd_person) cds
+FROM a
+LEFT JOIN main.people p ON a.name_person=p.verbatim_person
+GROUP BY "row.names"
+)
+UPDATE raw_dwc.botanica_registros_epi_vas AS r
+SET cds_identified_by=b.cds
+FROM b
+WHERE r."row.names"=b."row.names"
+RETURNING r."row.names", cds_identified_by
+;
+
+-------------
+
+WITH a AS(
+SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(recorded_by, ' | ')))),'- ','-') AS name_person
+FROM raw_dwc.botanica_registros_epi_novas
+),b AS(
+SELECT "row.names", ARRAY_AGG(cd_person) cds
+FROM a
+LEFT JOIN main.people p ON a.name_person=p.verbatim_person
+GROUP BY "row.names"
+)
+UPDATE raw_dwc.botanica_registros_epi_novas AS r
+SET cds_recorded_by=b.cds
+FROM b
+WHERE r."row.names"=b."row.names"
+RETURNING r."row.names", cds_recorded_by
+;
+
+
+WITH a AS(
+SELECT "row.names", REGEXP_REPLACE(INITCAP(TRIM(UNNEST(STRING_TO_ARRAY(identified_by, ' | ')))),'- ','-') AS name_person
+FROM raw_dwc.botanica_registros_epi_novas
+),b AS(
+SELECT "row.names", ARRAY_AGG(cd_person) cds
+FROM a
+LEFT JOIN main.people p ON a.name_person=p.verbatim_person
+GROUP BY "row.names"
+)
+UPDATE raw_dwc.botanica_registros_epi_novas AS r
+SET cds_identified_by=b.cds
+FROM b
+WHERE r."row.names"=b."row.names"
+RETURNING r."row.names", cds_identified_by
+;
+
+
+SELECT 1;
+```
+
+## gp_event
+
+```{sql}
+INSERT INTO main.gp_event(cd_pt_ref,cd_gp_biol,cd_protocol,campaign_nb)
+WITH a AS(
+SELECT e.occurrence_id,
+	REGEXP_REPLACE(e.occurrence_id,'^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$','\1')::int anh_num,
+	REGEXP_REPLACE(e.occurrence_id,'^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$','\2')::int repli,
+	CASE
+		WHEN e.sampling_protocol='Muestreo de comunidades de hierbas para estimar coberturas en cuadrantes de un metro cuadrado' THEN ARRAY[NULL]
+		WHEN e.sampling_protocol='Muestreo de flora epifita no vascular sugerido por la ANLA para solicitudes de licenciamiento ambiental.' THEN 
+			CASE
+				WHEN e.occurrence_id IN ('ANH_12_1_F','ANH_18_1_F','ANH_284_1_F','ANH_307_1_F','ANH_308_1_F','ANH_312_1_F','ANH_319_1_F','ANH_320_1_F','ANH_335_1_F','ANH_395_1_F') THEN ARRAY['epva','epnv']
+				ELSE ARRAY['epnv']
+			END
+		WHEN e.sampling_protocol='Transecto de inventario de flora arbórea (Oliver et al. 2002, Global Patterns of Plant Diversity: Alwyn H. Gentry Forest Transec Data Set, Missouri Botanical Garden Press) ajustado a DAP mínimo de 5 cm' THEN ARRAY['arbo']
+	END cds_gp_biol
+FROM raw_dwc.botanica_event e
+), unnest_biol AS(
+SELECT occurrence_id event_id_old, anh_num, repli repli_old, UNNEST(cds_gp_biol) cd_gp_biol
+FROM a
+)
+SELECT DISTINCT pr.cd_pt_ref, cd_gp_biol,
+	CASE
+		WHEN cd_gp_biol = 'arbo' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol = 'Tree systematic transect (DBH>5cm)')
+		WHEN cd_gp_biol = 'epva' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol = 'Systematic transect for vascular epiphytes (<2m high)')
+		WHEN cd_gp_biol = 'epnv' THEN (SELECT cd_protocol FROM main.def_protocol WHERE protocol = 'Sampling quadrats')
+	END cd_protocol,
+	1 AS campaign_nb
+FROM unnest_biol ub
+LEFT JOIN main.punto_referencia pr ON ub.anh_num=pr.num_anh
+WHERE cd_gp_biol IS NOT NULL
+ORDER BY cd_gp_biol, cd_pt_ref;
+```
+
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_event ADD COLUMN cd_gp_event int REFERENCES main.gp_event(cd_gp_event) ON DELETE SET NULL;
+ALTER TABLE raw_dwc.botanica_event ADD COLUMN cds_gp_event int[];
+
+WITH a AS(
+SELECT "row.names",e.occurrence_id,
+	REGEXP_REPLACE(e.occurrence_id,'^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$','\1')::int anh_num,
+	REGEXP_REPLACE(e.occurrence_id,'^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$','\2')::int repli,
+	CASE
+		WHEN e.sampling_protocol='Muestreo de comunidades de hierbas para estimar coberturas en cuadrantes de un metro cuadrado' THEN ARRAY[NULL]
+		WHEN e.sampling_protocol='Muestreo de flora epifita no vascular sugerido por la ANLA para solicitudes de licenciamiento ambiental.' THEN 
+			CASE
+				WHEN e.occurrence_id IN ('ANH_12_1_F','ANH_18_1_F','ANH_284_1_F','ANH_307_1_F','ANH_308_1_F','ANH_312_1_F','ANH_319_1_F','ANH_320_1_F','ANH_335_1_F','ANH_395_1_F') THEN ARRAY['epva','epnv']
+				ELSE ARRAY['epnv']
+			END
+		WHEN e.sampling_protocol='Transecto de inventario de flora arbórea (Oliver et al. 2002, Global Patterns of Plant Diversity: Alwyn H. Gentry Forest Transec Data Set, Missouri Botanical Garden Press) ajustado a DAP mínimo de 5 cm' THEN ARRAY['arbo']
+	END cds_gp_biol
+FROM raw_dwc.botanica_event e
+), unnest_biol AS(
+SELECT "row.names",occurrence_id event_id_old, anh_num, repli repli_old, UNNEST(cds_gp_biol) cd_gp_biol
+FROM a
+), b AS(
+SELECT ub."row.names", ARRAY_AGG(cd_gp_biol ORDER BY cd_gp_biol) ,ARRAY_AGG(cd_gp_event ORDER BY cd_gp_biol) cds_gp_event, SUM(cd_gp_event) FILTER (WHERE cd_gp_biol<>'epva') cd_gp_event
+FROM unnest_biol ub
+LEFT JOIN main.punto_referencia pr ON ub.anh_num=pr.num_anh
+LEFT JOIN main.gp_event USING (cd_gp_biol,cd_pt_ref)
+GROUP BY ub."row.names"
+ORDER BY ub."row.names"::int
+)
+UPDATE raw_dwc.botanica_event e
+SET cd_gp_event=b.cd_gp_event, cds_gp_event=b.cds_gp_event
+FROM b
+WHERE e."row.names"=b."row.names"
+RETURNING e.occurrence_id, e.cd_gp_event
+;
+```
+
+## event
+
+Vamos a crear nuevos eventos que corresponden  a un quadrat (una malla)
+Para eso debemos mezclar las pestañas de eventos y de registros en el caso de las epifitas no-vasculares.
+
+**Etapa 1**: Averiguar que cada fila de los archivos de registros corresponden a una fila del archivo de eventos, y que esos recibieron al menos un cd_gp_event
+
+```{sql}
+--Arboles
+SELECT a."row.names", ARRAY_AGG(e."row.names") row_names_event, ARRAY_AGG(e.cd_gp_event) cd_gp_event
+FROM raw_dwc.botanica_registros_arborea a
+LEFT JOIN raw_dwc.botanica_event e ON e.occurrence_id=a.event_id
+GROUP BY a."row.names"
+HAVING ARRAY_LENGTH(ARRAY_AGG(e."row.names"),1)<>1 OR  ARRAY_LENGTH(ARRAY_AGG(e.cd_gp_event),1)<>1
+ORDER BY a."row.names"::int;
+
+--Epifitas no-vasculares
+SELECT a."row.names", ARRAY_AGG(e."row.names") row_names_event, ARRAY_AGG(e.cd_gp_event) cd_gp_event
+FROM raw_dwc.botanica_registros_epi_novas a
+LEFT JOIN raw_dwc.botanica_event e ON e.occurrence_id=a.event_id
+GROUP BY a."row.names"
+HAVING ARRAY_LENGTH(ARRAY_AGG(e."row.names"),1)<>1 OR  ARRAY_LENGTH(ARRAY_AGG(e.cd_gp_event),1)<>1
+ORDER BY a."row.names"::int;
+
+-- Epifitas vasculares
+WITH unnest_gps_event AS(
+SELECT "row.names",occurrence_id,UNNEST(cds_gp_event) cd_gp_event
+FROM raw_dwc.botanica_event
+)
+SELECT a."row.names", ARRAY_AGG(e."row.names") row_names_event, ARRAY_AGG(e.cd_gp_event) cd_gp_event
+FROM raw_dwc.botanica_registros_epi_vas a
+LEFT JOIN unnest_gps_event e ON e.occurrence_id=a.event_id
+GROUP BY a."row.names"
+HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT e."row.names"),1)<>1 
+ORDER BY a."row.names"::int;
+
+```
+
+### Eventos de arboles
+
+
+
+```{sql}
+INSERT INTO main.event(cd_gp_event,event_id,num_replicate, description_replicate, date_time_begin, date_time_end, locality_verb, event_remarks, samp_effort_1, samp_effort_2, pt_geom)
+SELECT cd_gp_event,
+  'arbo_'||occurrence_id,
+  REGEXP_REPLACE(occurrence_id,'^ANH_[0-9]{1,3}_([0-9]{1,3})$','\1')::int num_replicate,
+  'transect:'||REGEXP_REPLACE(occurrence_id,'^ANH_[0-9]{1,3}_([0-9]{1,3})$','\1') description_replicate,
+  NULL AS date_time_begin,
+  NULL AS date_time_end,
+  locality locality_verb,
+  event_remarks,
+  50 as samp_effort_1,
+  NULL AS samp_effort_2,
+  ST_SetSRID(ST_Transform(ST_SetSRID(ST_MakePoint(decimal_longitude::double precision,decimal_latitude::double precision),4326),(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) pt_geom
+FROM raw_dwc.botanica_event
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+WHERE cd_gp_biol='arbo'
+RETURNING main.event.cd_event, main.event.cd_gp_event, main.event.event_id, main.event.num_replicate, main.event.description_replicate, main.event.date_time_begin, main.event.date_time_end, main.event.locality_verb, main.event.event_remarks, main.event.pt_geom
+;
+```
+
+Damos los cd_event a todos las filas:
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_event ADD COLUMN cd_event int REFERENCES main.event(cd_event) ON DELETE SET NULL;
+ALTER TABLE raw_dwc.botanica_registros_arborea ADD COLUMN cd_event int REFERENCES main.event(cd_event);
+
+UPDATE raw_dwc.botanica_event AS t
+SET cd_event=e.cd_event
+FROM main.event e
+WHERE 'arbo_'||t.occurrence_id=e.event_id;
+
+UPDATE raw_dwc.botanica_registros_arborea AS t
+SET cd_event=e.cd_event
+FROM main.event e
+WHERE 'arbo_'||t.event_id=e.event_id;
+
+SELECT true;
+```
+
+### Eventos de epifitas no-vasculares
+
+
+
+
+```{sql}
+INSERT INTO main.event(cd_gp_event,event_id,num_replicate, description_replicate, date_time_begin, date_time_end, locality_verb, event_remarks, samp_effort_1, samp_effort_2, pt_geom)
+WITH a AS(
+SELECT DISTINCT cd_gp_event,
+  be.occurrence_id,
+  REGEXP_REPLACE(bren.organism_remarks,'^Número de forofito ([0-9]{1,2})_([0-9])$','\1')::int forofito,
+  REGEXP_REPLACE(bren.organism_remarks,'^Número de forofito ([0-9]{1,2})_([0-9])$','\2')::int malla,
+  REGEXP_REPLACE(be.occurrence_id,'^ANH_[0-9]{1,3}_([0-9]{1,3})_F$','\1')::int transect,
+  NULL::timestamp AS date_time_begin,
+  NULL::timestamp AS date_time_end,
+  locality locality_verb,
+  NULL AS event_remarks,
+  0.0625 as samp_effort_1,
+  1 AS samp_effort_2,
+  ST_SetSRID(ST_Transform(ST_SetSRID(ST_MakePoint(decimal_longitude::double precision,decimal_latitude::double precision),4326),(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) pt_geom
+FROM raw_dwc.botanica_event be
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN raw_dwc.botanica_registros_epi_novas bren ON be.occurrence_id=bren.event_id
+WHERE cd_gp_biol='epnv' AND bren.organism_remarks ~ '^Número de forofito [0-9]{1,2}_[0-9]$'
+)
+SELECT cd_gp_event, 
+	occurrence_id || forofito || '_' || malla event_id,
+	ROW_NUMBER() OVER (PARTITION BY occurrence_id ORDER BY forofito,malla) num_replicate,
+	'transect:'||transect||'|phorophyte:'||forofito||'|quadrat:'||malla description_replicate,
+	date_time_begin,
+	date_time_end,
+	locality_verb,
+	event_remarks,
+	samp_effort_1,
+	samp_effort_2,
+	pt_geom
+FROM a
+RETURNING main.event.cd_event, main.event.cd_gp_event, main.event.event_id, main.event.num_replicate, main.event.description_replicate, main.event.date_time_begin, main.event.date_time_end, main.event.locality_verb, main.event.event_remarks, main.event.pt_geom
+;
+```
+
+Damos los cd_event a todos las filas:
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_event ADD COLUMN cds_event_epnv int[];
+ALTER TABLE raw_dwc.botanica_registros_epi_novas ADD COLUMN cd_event int REFERENCES main.event(cd_event);
+
+WITH a AS(
+SELECT be."row.names", be.occurrence_id, ARRAY_AGG(e.event_id) event_ids, ARRAY_AGG(e.cd_event) cds_event_epnv
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN raw_dwc.botanica_event be ON e.cd_gp_event=be.cd_gp_event AND REGEXP_REPLACE(e.event_id,'^(ANH_[0-9]{1,3}_[0-9]{1,2}_F)[0-9]{1,2}_[0-9]$','\1')=be.occurrence_id
+WHERE cd_gp_biol='epnv'
+GROUP BY be."row.names", be.occurrence_id
+)
+UPDATE raw_dwc.botanica_event AS t
+SET cds_event_epnv=a.cds_event_epnv
+FROM a
+WHERE t."row.names"=a."row.names";
+
+WITH a AS(
+SELECT bren."row.names",bren.event_id old_event_id,
+  REGEXP_REPLACE(bren.organism_remarks,'^Número de forofito ([0-9]{1,2})_([0-9])$','\1')::int forofito,
+  REGEXP_REPLACE(bren.organism_remarks,'^Número de forofito ([0-9]{1,2})_([0-9])$','\2')::int malla
+FROM raw_dwc.botanica_registros_epi_novas bren
+WHERE bren.organism_remarks ~ '^Número de forofito ([0-9]{1,2})_([0-9])$'
+),b AS(
+SELECT cd_event,event_id
+FROM main.event
+LEFT JOIN main.gp_event USING(cd_gp_event)
+WHERE cd_gp_biol='epnv'
+),c AS(
+SELECT *
+FROM a
+LEFT JOIN b ON
+	REGEXP_REPLACE(b.event_id,'^(ANH_[0-9]{1,3}_[0-9]{1,2}_F)[0-9]{1,2}_[0-9]$','\1')=a.old_event_id AND
+	REGEXP_REPLACE(b.event_id,'^(ANH_[0-9]{1,3}_[0-9]{1,2}_F)([0-9]{1,2})_[0-9]$','\2')::int=a.forofito  AND
+	REGEXP_REPLACE(b.event_id,'^(ANH_[0-9]{1,3}_[0-9]{1,2}_F)([0-9]{1,2})_([0-9])$','\3')::int=a.malla
+)
+UPDATE raw_dwc.botanica_registros_epi_novas AS t
+SET cd_event=c.cd_event
+FROM c
+WHERE c."row.names"=t."row.names";
+
+SELECT true;
+```
+
+### Epifitas vasculares
+
+
+```{sql}
+INSERT INTO main.event(cd_gp_event,event_id,num_replicate, description_replicate, date_time_begin, date_time_end, locality_verb, event_remarks, samp_effort_1, samp_effort_2, pt_geom)
+SELECT ge.cd_gp_event,
+  'epva_'||REGEXP_REPLACE(occurrence_id,'^(ANH_[0-9]{1,3}_[0-9]{1,3})_F','\1') event_id,
+  1::int AS num_replicate,
+  'transect:'||REGEXP_REPLACE(occurrence_id,'^ANH_[0-9]{1,3}_([0-9]{1,3})_F$','\1') description_replicate,
+  NULL AS date_time_begin,
+  NULL AS date_time_end,
+  locality locality_verb,
+  NULL event_remarks,
+  50 as samp_effort_1,
+  NULL AS samp_effort_2,
+  ST_SetSRID(ST_Transform(ST_SetSRID(ST_MakePoint(decimal_longitude::double precision,decimal_latitude::double precision),4326),(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) pt_geom
+FROM raw_dwc.botanica_event be
+LEFT JOIN main.gp_event ge ON ARRAY[ge.cd_gp_event] <@ be.cds_gp_event
+WHERE cd_gp_biol='epva'
+RETURNING main.event.cd_event, main.event.cd_gp_event, main.event.event_id, main.event.num_replicate, main.event.description_replicate, main.event.date_time_begin, main.event.date_time_end, main.event.locality_verb, main.event.event_remarks, main.event.pt_geom
+;
+```
+
+Damos los cd_event a todos las filas:
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_registros_epi_vas ADD COLUMN cd_event int REFERENCES main.event(cd_event);
+
+UPDATE raw_dwc.botanica_event AS t
+SET cd_event=e.cd_event
+FROM main.event e
+WHERE 'epva_'||REGEXP_REPLACE(t.occurrence_id,'^(ANH_[0-9]{1,3}_[0-9]{1,3})_F','\1')=e.event_id;
+
+UPDATE raw_dwc.botanica_registros_epi_vas AS t
+SET cd_event=e.cd_event
+FROM main.event e
+WHERE 'epva_'||REGEXP_REPLACE(t.event_id,'^(ANH_[0-9]{1,3}_[0-9]{1,3})_F','\1')=e.event_id;
+
+SELECT true;
+```
+### Añadir las fechas (sin horas) en la tabla event_extra
+
+```{sql}
+INSERT INTO main.event_extra(cd_event,cd_var_event_extra,value_text)
+WITH a AS(
+SELECT "row.names",UNNEST(ARRAY_CAT(ARRAY[cd_event],cds_event_epnv)) cd_event,event_date::date
+FROM raw_dwc.botanica_event
+)
+SELECT cd_event,
+	(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='date_begin'),
+	event_date::text
+FROM a
+WHERE cd_event IS NOT NULL;
+```
+
+## registros
+
+### Arboles
+
+```{sql}
+SELECT occurrence_id, count(*)
+FROM raw_dwc.botanica_registros_arborea
+GROUP BY occurrence_id
+HAVING count(*)>1;
+```
+
+
+```{sql}
+SELECT e.occurrence_id, e.event_date-- r.event_date, e.event_time, r.event_time
+FROM raw_dwc.botanica_registros_arborea r
+LEFT JOIN raw_dwc.botanica_event e USING(cd_event)
+--ORDER BY r.event_date::date, r.event_time::time
+
+```
+
+
+
+```{sql}
+INSERT INTO main.registros(cd_event, cds_recorded_by, date_time, cd_tax, cd_morfo, date_ident, cds_identified_by, qt_int,remarks, occurrence_id, organism_id)
+SELECT
+ cd_event,
+ cds_recorded_by,
+ NULL date_time,
+ tt.cd_tax,
+ tt.cd_morfo,
+ TO_DATE(date_identified,'YYYY-MM-DD') date_ident,
+ cds_identified_by,
+ organism_quantity::int qt_int,
+ CASE
+ 	WHEN r.occurrence_remarks ='' THEN NULL
+	ELSE r.occurrence_remarks
+ END remarks,
+ r.occurrence_id,
+ SPLIT_PART(occurrence_id,':',7) organism_id
+ --ROW_NUMBER() OVER (ORDER BY (e.date_time_begin::date||' '||event_time)::timestamp)
+ --NULL AS organism_id,
+ -- organism_id::text
+ --ST_SetSRID(ST_Transform(ST_SetSRID(ST_MakePoint(measurement_value__longitud_,measurement_value__latitud_), 4326),  (SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116)
+FROM raw_dwc.botanica_registros_arborea r
+LEFT JOIN raw_dwc.taxonomy_total tt ON tt."row.names"=r."row.names" AND tt.table_orig='botanica_registros_arborea'
+LEFT JOIN main.event e USING (cd_event)
+ORDER BY e.event_id
+RETURNING cd_event, cds_recorded_by, date_time, cd_tax, cd_morfo, cds_identified_by, qt_int,remarks, occurrence_id, organism_id
+```
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_registros_arborea ADD COLUMN cd_reg int REFERENCES main.registros(cd_reg);
+UPDATE raw_dwc.botanica_registros_arborea AS ar
+SET cd_reg=r.cd_reg
+FROM main.registros r
+WHERE ar.cd_event=r.cd_event AND ar.occurrence_id=r.occurrence_id;
+
+-- Check cd_reg are unique in the source table
+SELECT cd_reg,count(*) FROM  raw_dwc.botanica_registros_arborea GROUP BY cd_reg HAVING count(*)>1;
+```
+
+
+### Registros epifitas vasculares
+
+
+```{sql}
+SELECT occurrence_id, count(*)
+FROM raw_dwc.botanica_registros_epi_vas
+GROUP BY occurrence_id
+HAVING count(*)>1;
+```
+
+
+```{sql}
+SELECT e.occurrence_id, e.event_date-- r.event_date, e.event_time, r.event_time
+FROM raw_dwc.botanica_registros_epi_vas r
+LEFT JOIN raw_dwc.botanica_event e USING(cd_event)
+
+```
+
+
+
+```{sql}
+INSERT INTO main.registros(cd_event, cds_recorded_by, date_time, cd_tax, cd_morfo, date_ident, cds_identified_by, qt_double,remarks, occurrence_id, organism_id)
+SELECT
+ cd_event,
+ cds_recorded_by,
+ NULL date_time,
+ tt.cd_tax,
+ tt.cd_morfo,
+ TO_DATE(date_identified,'YYYY-MM-DD') date_ident,
+ cds_identified_by,
+ organism_quantity::double precision qt_double,
+ NULL remarks,
+ r.occurrence_id,
+ SPLIT_PART(occurrence_id,':',7) organism_id
+ --ROW_NUMBER() OVER (ORDER BY (e.date_time_begin::date||' '||event_time)::timestamp)
+ --NULL AS organism_id,
+ -- organism_id::text
+ --ST_SetSRID(ST_Transform(ST_SetSRID(ST_MakePoint(measurement_value__longitud_,measurement_value__latitud_), 4326),  (SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116)
+FROM raw_dwc.botanica_registros_epi_vas r
+LEFT JOIN raw_dwc.taxonomy_total tt ON tt."row.names"=r."row.names" AND tt.table_orig='botanica_registros_epi_vas'
+LEFT JOIN main.event e USING (cd_event)
+WHERE cd_event IS NOT NULL
+ORDER BY e.event_id
+RETURNING cd_event, cds_recorded_by, date_time, cd_tax, cd_morfo, cds_identified_by, qt_double,remarks, occurrence_id, organism_id
+```
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_registros_epi_vas ADD COLUMN cd_reg int REFERENCES main.registros(cd_reg);
+UPDATE raw_dwc.botanica_registros_epi_vas AS ar
+SET cd_reg=r.cd_reg
+FROM main.registros r
+WHERE ar.cd_event=r.cd_event AND ar.occurrence_id=r.occurrence_id;
+
+-- Check cd_reg are unique in the source table
+SELECT cd_reg,count(*) FROM  raw_dwc.botanica_registros_epi_vas GROUP BY cd_reg HAVING count(*)>1;
+```
+
+### epifitas no vasculares
+
+
+
+```{sql}
+SELECT occurrence_id, count(*)
+FROM raw_dwc.botanica_registros_epi_novas
+GROUP BY occurrence_id
+HAVING count(*)>1;
+```
+
+
+```{sql}
+SELECT e.occurrence_id, e.event_date-- r.event_date, e.event_time, r.event_time
+FROM raw_dwc.botanica_registros_epi_novas r
+LEFT JOIN raw_dwc.botanica_event e USING(cd_event)
+--ORDER BY r.event_date::date, r.event_time::time
+
+```
+
+*********************
+
+**Note**: no integro en los registros todos las filas que tienen una de las condiciones siguientes:
+
+* No tienen cd_event (probablemente porque no tenían numero de forofito o no tenían numero de malla
+* No tienen phylum (las cortezas y termiteros se anotaron como Plantae en Kingdom, pero si phylum)
+* Tienen '-' como cobertura (no idea de lo que es
+
+********************
+
+
+```{sql}
+INSERT INTO main.registros(cd_event, cds_recorded_by, date_time, cd_tax, cd_morfo, date_ident, cds_identified_by, qt_double,remarks, occurrence_id, organism_id)
+SELECT
+ cd_event,
+ cds_recorded_by,
+ NULL date_time,
+ tt.cd_tax,
+ tt.cd_morfo,
+ TO_DATE(date_identified,'YYYY-MM-DD') date_ident,
+ cds_identified_by,
+ organism_quantity::double precision qt_double,
+ occurrence_remarks remarks,
+ r.occurrence_id,
+ SPLIT_PART(occurrence_id,':',7) organism_id
+ --ROW_NUMBER() OVER (ORDER BY (e.date_time_begin::date||' '||event_time)::timestamp)
+ --NULL AS organism_id,
+ --organism_id::text
+ --ST_SetSRID(ST_Transform(ST_SetSRID(ST_MakePoint(measurement_value__longitud_,measurement_value__latitud_), 4326),  (SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116)
+FROM raw_dwc.botanica_registros_epi_novas r
+LEFT JOIN raw_dwc.taxonomy_total tt ON tt."row.names"=r."row.names" AND tt.table_orig='botanica_registros_epi_novas'
+LEFT JOIN main.event e USING (cd_event)
+WHERE cd_event IS NOT NULL AND r.phylum IS NOT NULL AND organism_quantity <> '-'
+ORDER BY e.event_id
+RETURNING cd_event, cds_recorded_by, date_time, cd_tax, cd_morfo, cds_identified_by, qt_double,remarks, occurrence_id, organism_id
+```
+
+```{sql}
+ALTER TABLE raw_dwc.botanica_registros_epi_novas ADD COLUMN cd_reg int REFERENCES main.registros(cd_reg);
+UPDATE raw_dwc.botanica_registros_epi_novas AS ar
+SET cd_reg=r.cd_reg
+FROM main.registros r
+WHERE ar.cd_event=r.cd_event AND ar.occurrence_id=r.occurrence_id;
+
+-- Check cd_reg are unique in the source table
+SELECT cd_reg,count(*) FROM  raw_dwc.botanica_registros_epi_novas GROUP BY cd_reg HAVING count(*)>1;
+```
 
 
 # Correcciones
@@ -7672,6 +8479,34 @@ FROM b
 WHERE r.cd_reg=b.cd_reg
 RETURNING r.cd_reg, qt_double
 ```
+
+## Añadir los "waterbody" de todos los eventos de muestreo acuatico
+
+```{sql}
+INSERT INTO main.def_var_event_extra(var_event_extra,type_var,var_event_extra_spa,var_event_extra_comment)
+VALUES('waterbody_name', 'free text', 'Nombre del cuerpo de agua','Verbatim from the original DwC file'
+);
+
+INSERT INTO main.event_extra (cd_event,cd_var_event_extra,value_text)
+WITH a AS(
+(
+SELECT water_body, cd_event
+FROM raw_dwc.peces_event
+)
+UNION ALL
+(
+SELECT water_body, cd_event
+FROM raw_dwc.hidrobiologico_event
+)
+)
+SELECT DISTINCT ON (cd_event) cd_event,(SELECT cd_var_event_extra FROM main.def_var_event_extra WHERE var_event_extra='waterbody_name'), water_body
+FROM a
+RETURNING cd_event, cd_var_event_extra,value_text
+;
+
+```
+
+
 
 ```{r}
 dbDisconnect(fracking_db)

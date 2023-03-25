@@ -3363,6 +3363,9 @@ ORDER BY
 
 ### Redes de niebla
 
+**Nota: en lugar de exportar todos los mamiferos, pucé una regla acá para exportar unicamente los Chiroptera (sino, se exporta tambien *Marmosa robinsoni* que pertenece al orden Didelphimorphia)
+
+
 ```{sql, result='hide'}
 CREATE OR REPLACE VIEW mami_mist_nets_matrix AS(
 SELECT 
@@ -3382,13 +3385,13 @@ LEFT JOIN main.def_protocol USING (cd_protocol)
 LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'SP')=t.cd_tax
 LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
 LEFT JOIN main.taxo tm ON mt.cd_tax=tm.cd_tax
-LEFT JOIN main.taxo tcl ON find_higher_id(r.cd_tax,'CL')=tcl.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
 WHERE 
   ge.cd_gp_biol='mami' 
   AND protocol='Mist nets'
   AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP')--ensure we got the species or morphospecies
   AND num_anh IS NOT NULL
-  AND tcl.name_tax='Mammalia'
+  AND tor.name_tax='Chiroptera'
 GROUP BY 
   name_pt_ref,
   taxon,
@@ -3581,9 +3584,9 @@ SELECT
    WHEN mt.pseudo_rank='SP' THEN verbatim_taxon
    ELSE t.name_tax
   END 
-  ) FILTER (WHERE (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP') AND tcl.name_tax='Mammalia') richness,
+  ) FILTER (WHERE (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP') AND tor.name_tax='Chiroptera') richness,
   SUM(qt_int) FILTER (WHERE tcl.name_tax='Mammalia') total_abundance_without_taxo_filter,
-  SUM(qt_int) FILTER (WHERE tcl.name_tax='Mammalia' AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP') ) total_abundance,
+  SUM(qt_int) FILTER (WHERE tor.name_tax='Chiroptera' AND (t.name_tax IS NOT NULL OR mt.pseudo_rank='SP') ) total_abundance,
   ST_X(ST_Centroid(ST_COLLECT(DISTINCT pt_geom))) x_coord_centroid,
   ST_Y(ST_Centroid(ST_COLLECT(DISTINCT pt_geom))) y_coord_centroid
 FROM main.registros r
@@ -3600,6 +3603,7 @@ LEFT JOIN punto_ref_platform prf USING (cd_pt_ref,name_pt_ref)
 LEFT JOIN main.taxo t ON find_higher_id(r.cd_tax,'GN')=t.cd_tax
 LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
 LEFT JOIN main.taxo tcl ON find_higher_id(r.cd_tax,'CL')=tcl.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
 LEFT JOIN se ON se.anh_tempo=name_pt_ref||'_'||cd_tempo
 --LEFT JOIN gel ON gel.anh_tempo=name_pt_ref||'_'||cd_tempo
 WHERE 
@@ -3892,7 +3896,7 @@ SELECT
   name_pt_ref||'_'||cd_tempo anh_tempo,
 --  description_replicate,
   CASE
-   WHEN mt.pseudo_rank='SP' THEN tm.name_tax||' ('||name_morfo||')'
+   WHEN mt.pseudo_rank='SP' THEN tm.name_tax||' '||name_morfo
    ELSE t.name_tax
   END taxon,
   SUM(qt_int) abundance
@@ -4028,7 +4032,7 @@ SELECT
   name_pt_ref||'_'||cd_tempo anh_tempo,
 --  description_replicate,
   CASE
-   WHEN mt.pseudo_rank='SP' THEN tm.name_tax||' ('||name_morfo||')'
+   WHEN mt.pseudo_rank='SP' THEN tm.name_tax||' '||name_morfo
    ELSE t.name_tax
   END taxon,
   SUM(qt_int) abundance

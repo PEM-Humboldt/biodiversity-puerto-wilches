@@ -132,7 +132,7 @@ CREATE TABLE main.def_protocol
     samp_eff_1_implicit boolean,
     cd_var_samp_eff_2 smallint REFERENCES main.def_var_samp_eff(cd_var_samp_eff),
     samp_eff_2_implicit boolean,
-    cd_var_ind_qt smallint REFERENCES main.def_var_ind_qt(cd_var_ind_qt),
+    cd_var_ind_qt smallint REFERENCES main.def_var_ind_qt(cd_var_ind_qt) NOT NULL,
     description_spa text,
     description text
 );
@@ -432,6 +432,7 @@ CREATE TABLE main.individual_tag
     cd_gp_biol char(4) REFERENCES main.def_gp_biol(cd_gp_biol),
     cd_pt_ref smallint REFERENCES main.punto_referencia(cd_pt_ref),
     tag text,
+    individual bigint,--in the case the tag might be the mean to define the individual: in case of trees, often the ramifications are given tags, but the individual may be recognised from the tag because the tag is in two parts: the first part is the number of the individual and the second part is the ramification.
     UNIQUE (cd_gp_biol, cd_pt_ref, tag)
 );
 CREATE TABLE main.assign_individual_tag
@@ -647,7 +648,7 @@ CREATE TABLE main.phy_chi_hidro_aguas
 
 CREATE TABLE main.phy_chi_hidro_sedi
 (
-   cd_event_phy_chi smallint PRIMARY KEY REFERENCES main.phy_chi_hidro_sedi,
+   cd_event_phy_chi smallint PRIMARY KEY REFERENCES main.phy_chi_hidro_event,
    sand_per double precision,
    clay_per double precision,
    silt_per double precision,

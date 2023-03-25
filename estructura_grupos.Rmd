@@ -355,7 +355,7 @@ ORDER BY anh_num, tempo, metodo
 
 
 Event_id que no siguen el formato general:
-```{sql}
+```sql
 WITH a AS(
 SELECT event_id,sampling_protocol,event_id !~ '^ANH_[0-9]{1,3}_M_[RS][0-9]{1,3}(_T2)?$' regex_f
 FROM raw_dwc.mamiferos_event
@@ -368,7 +368,7 @@ GROUP BY sampling_protocol, regex_f
 
 
 Event_id que no siguen el formato general:
-```{sql}
+```sql
 
 SELECT event_id,sampling_protocol,event_id !~ '^ANH_[0-9]{1,3}_M_[RS][0-9]{1,3}(_T2)?$' regex_f
 FROM raw_dwc.mamiferos_event
@@ -377,7 +377,7 @@ WHERE event_id !~ '^ANH_[0-9]{1,3}_M_[RS][0-9]{1,3}(_T2)?$'
 ```
 
 
-```{sql}
+```sql
 WITH A as(
 SELECT event_id, sampling_protocol,
   REGEXP_REPLACE(event_id, '^ANH_([0-9]{1,3})_M_([RS])([0-9]{1,3})(_T2)?$', '\1')::int anh_num,
@@ -397,7 +397,7 @@ ORDER BY metodo, sampling_protocol
 ;
 ```
 
-```{sql}
+```sql
 WITH A as(
 SELECT event_id,
   REGEXP_REPLACE(event_id, '^ANH_([0-9]{1,3})_M_([RS])([0-9]{1,3})(_T2)?$', '\1')::int anh_num,
@@ -423,7 +423,7 @@ ORDER BY anh_num
 
 \tiny 
 
-```{sql}
+```sql
 WITH A as(
 SELECT event_id,
   REGEXP_REPLACE(event_id, '^ANH_([0-9]{1,3})_M_([RS])([0-9]{1,3})(_T2)?$', '\1')::int anh_num,
@@ -449,7 +449,7 @@ ORDER BY anh_num, tempo, metodo
 
 \normalsize
 
-```{sql}
+```sql
 WITH A as(
 SELECT event_id,
   REGEXP_REPLACE(event_id, '^ANH_([0-9]{1,3})_M_([RS])([0-9]{1,3})(_T2)?$', '\1')::int anh_num,
@@ -472,3 +472,112 @@ GROUP BY anh_num, tempo, metodo
 ORDER BY anh_num, tempo, metodo
 ;
 ```
+
+
+
+
+# Botanica
+
+Prueba de la regex para los event_id (occurrence_id)
+
+```{sql}
+
+SELECT occurrence_id,sampling_protocol,occurrence_id !~ '^ANH_[0-9]{1,3}_[0-9]{1,2}(_F)?$' regex_f
+FROM raw_dwc.botanica_event
+WHERE occurrence_id !~ '^ANH_[0-9]{1,3}_[0-9]{1,2}(_F)?$'
+;
+```
+
+
+```{sql}
+SELECT occurrence_id, 
+  CASE
+    WHEN sampling_protocol ~ 'arbórea' THEN 'arborea'
+    WHEN sampling_protocol ~ 'epifita no vascular' THEN 'epi_no_vas'
+    WHEN sampling_protocol ~ 'hierbas' THEN 'herbacea'
+    ELSE NULL
+  END AS metodo,
+  REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\1')::int anh_num,
+  REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\2')::int repli,
+  CASE
+    WHEN REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\3')='_F' THEN true
+    ELSE false
+  END AS marked_f,
+  EXTRACT (YEAR FROM event_date::date),
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_arborea) AS in_reg_arbo,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_col) AS in_reg_col,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_epi_novas) AS in_reg_epi_no_vas,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_epi_vas) AS in_reg_epi_vas
+  
+FROM raw_dwc.botanica_event
+```
+
+\clearpage
+
+\tiny
+
+```{sql}
+WITH a AS(
+  SELECT occurrence_id, 
+  CASE
+    WHEN sampling_protocol ~ 'arbórea' THEN 'arborea'
+    WHEN sampling_protocol ~ 'epifita no vascular' THEN 'epi_no_vas'
+    WHEN sampling_protocol ~ 'hierbas' THEN 'herbacea'
+    ELSE NULL
+  END AS metodo,
+  REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\1')::int anh_num,
+  REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\2')::int repli,
+  CASE
+    WHEN REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\3')='_F' THEN true
+    ELSE false
+  END AS marked_f,
+  EXTRACT (YEAR FROM event_date::date),
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_arborea) AS in_reg_arbo,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_col) AS in_reg_col,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_epi_novas) AS in_reg_epi_no_vas,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_epi_vas) AS in_reg_epi_vas
+  
+FROM raw_dwc.botanica_event
+)
+SELECT anh_num,
+  ARRAY_AGG(DISTINCT repli) all_repli,
+  ARRAY_AGG(DISTINCT repli) FILTER (WHERE metodo='arborea') repli_arborea,
+  ARRAY_AGG(DISTINCT repli) FILTER (WHERE metodo='epi_no_vas') repli_epi_no_vas,
+  ARRAY_AGG(DISTINCT repli) FILTER (WHERE metodo='herbacea') repli_herb,
+  ARRAY_AGG(DISTINCT repli) FILTER (WHERE in_reg_arbo) in_arbo,
+  ARRAY_AGG(DISTINCT repli) FILTER (WHERE in_reg_col) in_col,
+  ARRAY_AGG(DISTINCT repli) FILTER (WHERE in_reg_epi_no_vas) in_epi_no_vas,
+  ARRAY_AGG(DISTINCT repli) FILTER (WHERE in_reg_epi_vas) in_epi_vas
+FROM a
+GROUP BY anh_num
+```
+
+```{sql}
+WITH a AS(
+  SELECT occurrence_id, 
+  CASE
+    WHEN sampling_protocol ~ 'arbórea' THEN 'arborea'
+    WHEN sampling_protocol ~ 'epifita no vascular' THEN 'epi_no_vas'
+    WHEN sampling_protocol ~ 'hierbas' THEN 'herbacea'
+    ELSE NULL
+  END AS metodo,
+  REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\1')::int anh_num,
+  REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\2')::int repli,
+  CASE
+    WHEN REGEXP_REPLACE(occurrence_id, '^ANH_([0-9]{1,3})_([0-9]{1,2})(_F)?$', '\3')='_F' THEN true
+    ELSE false
+  END AS marked_f,
+  EXTRACT (YEAR FROM event_date::date),
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_arborea) AS in_reg_arbo,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_col) AS in_reg_col,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_epi_novas) AS in_reg_epi_no_vas,
+  occurrence_id IN (SELECT event_id FROM raw_dwc.botanica_registros_epi_vas) AS in_reg_epi_vas
+  
+FROM raw_dwc.botanica_event
+)
+SELECT occurrence_id,count(*)
+FROM a
+GROUP BY occurrence_id
+HAVING count(*)>1
+```
+

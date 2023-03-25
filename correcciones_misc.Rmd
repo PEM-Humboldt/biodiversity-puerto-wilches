@@ -279,6 +279,159 @@ WHERE event_id ~ 'ANH18-P-[ABC]-Bajas'
 RETURNING event_id, date_time_begin
 ```
 
+
+# Cambio coordenadas herpetos
+
+**Mensajes de Francisco**:
+
+Hola Marius te envio los cambios que te indicaba adri en el grupo de
+herpetos quedo atento a cualquier inquietud de tu parte , te envio las
+coordenadas del punto a cambiar y el shape de coberturas
+
+
+Coordenadas
+Punto ANH_155_Herp_T1_D y ANH_155_Herp_T1_N
+Latitud 7,384132
+Longitud -73,8468238
+Punto ANH_155_Herp_T2_D y ANH_155_Herp_T2_N
+Latitud 7,385501
+Longitud -73,847092
+
+te envió las coordenadas faltantes:
+Coordenadas
+Punto ANH_155_Herp_T1_D y ANH_155_Herp_T1_N
+Latitud Inicial  7,384603 y Latitud Final 7,384
+Longitud Inicial -73,846838 y Longitud Final -73,847
+Punto ANH_155_Herp_T2_D y ANH_155_Herp_T2_N
+Latitud Inicial 7,385203 y Latitud Final 7,3869
+Longitud Inicial -73,846838 y Longitud Final -73,84709
+
+```{sql}
+SELECT *
+FROM main.event WHERE event_id IN('ANH_155_Herp_T1_D','ANH_155_Herp_T1_N','ANH_155_Herp_T2_D','ANH_155_Herp_T2_N')
+```
+
+
+```{sql}
+WITH a AS(
+SELECT
+ ST_SetSRID(ST_transform(
+   ST_MakeLine(ARRAY[
+     ST_SetSRID(ST_MakePoint(-73.846838, 7.385203),4326),
+     ST_SetSRID(ST_MakePoint(-73.847092, 7.385501),4326),
+     ST_SetSRID(ST_MakePoint(-73.84709,7.3869),4326)
+   ])
+ , (SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) line
+)
+
+UPDATE main.event AS e
+SET li_geom=a.line
+FROM a
+WHERE e.event_id IN ('ANH_155_Herp_T1_D','ANH_155_Herp_T1_N');
+
+WITH a AS(
+SELECT
+ ST_SetSRID(ST_transform(
+   ST_MakeLine(ARRAY[
+     ST_SetSRID(ST_MakePoint(-73.846838, 7.384603),4326),
+     ST_SetSRID(ST_MakePoint(-73.8468238, 7.384132),4326),
+     ST_SetSRID(ST_MakePoint(-73.847,7.384),4326)
+   ])
+ , (SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) line
+)
+
+UPDATE main.event AS e
+SET li_geom=a.line
+FROM a
+WHERE e.event_id IN ('ANH_155_Herp_T2_D','ANH_155_Herp_T2_N')
+RETURNING ST_Length(li_geom);
+```
+
+# Cambiar coordenadas de mariposas
+
+
+
+```{r}
+file <- "../Data_Documents/ExtraData/Mariposas2023.xlsx"
+corr <- read.xlsx(file)
+colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
+dbWriteTable(fracking_db,c("raw_dwc","corr_coord_mari"),corr,overwrite=T)
+```
+Averiguar que los event_id correspondan:
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_mari c
+LEFT JOIN main.event e ON c.event_id=e.event_id
+GROUP BY c.event_id
+```
+
+
+```{sql}
+WITH a AS(
+SELECT 
+event_id event_id,
+ST_SetSrid(ST_transform(
+     ST_SetSrid(ST_MakePoint(decimal_lon,decimal_lat),4326)
+,(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.corr_coord_mari
+)
+UPDATE main.event AS e
+SET pt_geom=a.geom
+FROM a
+WHERE a.event_id=e.event_id
+RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
+```
+
+
+# Cambiar coordenadas de Aves
+
+```{r}
+file <- "../Data_Documents/ExtraData/Coordenada Aves.xlsx"
+corr <- read.xlsx(file)
+colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
+dbWriteTable(fracking_db,c("raw_dwc","corr_coord_ave"),corr,overwrite=T)
+```
+Aves de la anh 375 van a 404
+
+```{sql}
+UPDATE raw_dwc.corr_coord_ave
+SET event_id=REGEXP_REPLACE(event_id,'^ANH_375','ANH_404')
+WHERE event_id ~ '^ANH_375'
+```
+
+
+
+Averiguar que los event_id correspondan:
+
+```{sql}
+SELECT c.event_id,ARRAY_AGG(e.cd_event)
+FROM raw_dwc.corr_coord_ave c
+LEFT JOIN main.event e ON 'aves_'||c.event_id=e.event_id
+GROUP BY c.event_id
+```
+
+
+```{sql}
+WITH a AS(
+SELECT 
+'aves_'||event_id event_id,
+ST_SetSrid(ST_transform(
+     ST_SetSrid(ST_MakePoint(decimal_lon,decimal_lat),4326)
+,(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.corr_coord_ave
+)
+UPDATE main.event AS e
+SET pt_geom=a.geom
+FROM a
+WHERE a.event_id=e.event_id
+RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
+```
+
+
+
+
+
 ```{r}
 dbDisconnect(fracking_db)
 ```

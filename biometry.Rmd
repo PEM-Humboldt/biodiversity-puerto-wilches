@@ -1,0 +1,143 @@
+---
+title: "Integración de los datos suplementarios de los grupos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+       latex_engine: xelatex
+---
+
+
+************************
+
+Se trata en este documento de añadir los datos de biometría que se anotaron para cada uno de los grupos
+
+
+```{r setup}
+require(openxlsx)
+require(RPostgreSQL)
+fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+```
+
+
+# Mamiferos
+
+**Anotar**: Para la integración de los DwC de mamiferos, todos los campos de los 2 DwC han sido concatenados en las tablas raw_dwc.mamiferos_tot_event y raw_dwc.mamiferos_tot_registros.
+Es importante averiquar que las referencias (cd_event, cd_gp_event etc.) funcionan con esos archivos, y que siempre utilicemos esos archivos para añadir variables en la base de datos.
+
+##  Definición de las variables, unidades etc.
+
+```{r}
+cn_units <- dbGetQuery(fracking_db,"SELECT column_name FROM information_schema.columns WHERE column_name ~ 'measurement_unit' AND table_name = 'mamiferos_tot_registros';")$column_name
+unitsTab<-dbGetQuery(fracking_db,paste0("SELECT ", paste(cn_units,collapse=", ")," FROM raw_dwc.mamiferos_tot_registros"))
+lapply(unitsTab,unique)
+```
+
+```{sql}
+INSERT INTO main.def_measurement_type(measurement_type)
+VALUES ('weight'),('sound pressure');
+
+INSERT INTO main.def_unit (cd_measurement_type,unit, unit_spa, abbv_unit, factor)
+VALUES (
+  (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='distance'),
+  'Millimeters',
+  'Milimetros',
+  'mm',
+  0.001
+),(
+  (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='distance'),
+  'Centimeters',
+  'Centimetros',
+  'cm',
+  0.01
+),(
+  (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='weight'),
+  'Grams',
+  'Gramos',
+  'g',
+  1
+),(
+  (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='weight'),
+  'Kilograms',
+  'Kilogramos',
+  'kg',
+  1000
+),(
+  (SELECT cd_measurement_type FROM main.def_measurement_type WHERE measurement_type='sound pressure'),
+  'Decibels',
+  'Decibelio',
+  'dB',
+  1
+);
+
+INSERT INTO main.def_organ(organ, organ_spa)
+VALUES
+('tail', 'cola'),
+('ear', 'oreja'),
+('leg', 'pata'),
+('forearm', 'antebrazo')
+;
+
+INSERT INTO main.def_var_biometry(var_biometry,cd_unit,cd_organ,comp_ind,var_biometry_comment)
+VALUES
+(
+  'Total weight',
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Grams'),
+  NULL,
+  true,
+  NULL
+),
+(
+  'Wingspan',
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  NULL,
+  true,
+  NULL
+),
+(
+  'Total length',
+  (SELECT cd_unit FROM main.def_unit WHERE unit = 'Millimeters'),
+  NULL,
+  true,
+  NULL
+),
+(
+  'Tail length',
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  (SELECT cd_organ FROM main.def_organ WHERE organ='tail'),
+  false,
+  NULL
+),
+(
+  'Ear length',
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  (SELECT cd_organ FROM main.def_organ WHERE organ='ear'),
+  false,
+  NULL
+),
+(
+  'Leg length',
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  (SELECT cd_organ FROM main.def_organ WHERE organ='leg'),
+  false,
+  NULL
+),
+(
+  'Forearm length',
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  (SELECT cd_organ FROM main.def_organ WHERE organ='forearm'),
+  false,
+  NULL
+);
+
+```
+

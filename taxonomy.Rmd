@@ -2199,6 +2199,13 @@ GROUP BY cd_tax,scientific_name,identification_qualifier,cd_rank
 RETURNING cd_tax
 ```
 
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE tt.table_orig='botanica_registros_epi_vas' AND tt.cd_tax=m.cd_tax AND tt.identification_qualifier=m.name_morfo
+RETURNING tt.cd_morfo
+```
 
 ## Epifitas no vasculares
 
@@ -3300,6 +3307,91 @@ GROUP BY cd_rank,rank_level
 ORDER BY rank_level DESC
 ```
 
+## Herpetos (reptiles)
+
+```{sql}
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN scientific_name IN ('Atractus','Lepidoblepharis','Mabuya') THEN scientific_name||' sp.'
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN identification_qualifier='Gen. nov. et sp. nov.' THEN 'SP'
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+  identification_remarks,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='reptiles_registros'
+  AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL OR (scientific_name IN ('Atractus','Lepidoblepharis','Mabuya'))) 
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+```
+
+```{sql}
+INSERT INTO main.morfo_taxo (cd_gp_biol,cd_tax,name_morfo,verbatim_taxon,pseudo_rank)
+WITH a AS (
+SELECT cd_tax,scientific_name,
+  identification_qualifier,
+  CASE 
+    WHEN scientific_name IN ('Atractus','Lepidoblepharis','Mabuya') THEN 'sp.'
+    ELSE NULL
+  END name_morfo,
+  cd_rank,
+  CASE
+    WHEN identification_qualifier='Gen. nov. et sp. nov.' THEN 'SP'
+    WHEN cd_rank='GN' THEN 'SP'
+    WHEN cd_rank='TR' THEN 'GN'
+    WHEN cd_rank='SFAM' THEN 'GN'
+    WHEN cd_rank='FAM' THEN 'GN'
+    WHEN cd_rank='SOR' THEN 'FAM'
+    WHEN cd_rank='OR' THEN 'FAM'
+    WHEN cd_rank='CL' THEN 'OR'
+    WHEN cd_rank='PHY' THEN 'CL'
+    WHEN cd_rank='KG' THEN 'PHY'
+    ELSE 'ERROR_RANK'
+  END pseudo_rank,
+  identification_remarks,
+count(*)
+FROM raw_dwc.taxonomy_total
+LEFT JOIN main.taxo USING (cd_tax)
+LEFT JOIN main.def_tax_rank USING (cd_rank)
+WHERE /*rank_level>10 AND */table_orig='reptiles_registros'
+  AND (identification_qualifier IS NOT NULL OR identification_remarks IS NOT NULL OR (scientific_name IN ('Atractus','Lepidoblepharis','Mabuya'))) 
+GROUP BY cd_tax,cd_rank,scientific_name,identification_qualifier,identification_remarks
+ORDER BY cd_tax,identification_qualifier
+)
+SELECT 'herp',cd_tax, name_morfo, scientific_name||' '||name_morfo,pseudo_rank
+FROM a
+RETURNING cd_morfo,name_morfo,verbatim_taxon,pseudo_rank
+```
+
+```{sql}
+UPDATE raw_dwc.taxonomy_total AS tt
+SET cd_morfo=m.cd_morfo
+FROM main.morfo_taxo m
+WHERE m.cd_gp_biol='herp' AND tt.table_orig='reptiles_registros' 
+  AND tt.cd_tax=m.cd_tax
+  AND (
+   CASE 
+      WHEN scientific_name IN ('Atractus','Lepidoblepharis','Mabuya') THEN 'sp.'
+      ELSE NULL
+    END = m.name_morfo)
+RETURNING tt."row.names", tt.cd_morfo
+```
 
 
 # CREATING sql taxonomic function
@@ -3439,6 +3531,18 @@ CREATE INDEX registros_subfamily_idx ON main.registros USING BTREE(find_higher_i
 SELECT True ;
 ```
 
+En casos particulares, y eso solo hasta que la base de datos esté consolidada para todos los grupos, puede ser util tambien implementar los INDEX sobre la tabla taxonomy_total tambien:
+```{sql, results='hide'}
+CREATE INDEX taxonomy_genus_idx ON raw_dwc.taxonomy_total USING BTREE(find_higher_id(cd_tax,'GN'));
+CREATE INDEX taxonomy_family_idx ON raw_dwc.taxonomy_total USING BTREE(find_higher_id(cd_tax,'FAM'));
+CREATE INDEX taxonomy_order_idx ON raw_dwc.taxonomy_total USING BTREE(find_higher_id(cd_tax,'OR'));
+CREATE INDEX taxonomy_class_idx ON raw_dwc.taxonomy_total USING BTREE(find_higher_id(cd_tax,'CL'));
+CREATE INDEX taxonomy_phylum_idx ON raw_dwc.taxonomy_total USING BTREE(find_higher_id(cd_tax,'PHY'));
+CREATE INDEX taxonomy_kingdom_idx ON raw_dwc.taxonomy_total USING BTREE(find_higher_id(cd_tax,'KG'));
+CREATE INDEX taxonomy_subfamily_idx ON raw_dwc.taxonomy_total USING BTREE(find_higher_id(cd_tax,'SFAM'));
+SELECT True ;
+
+```
 
 
 ```{r}
