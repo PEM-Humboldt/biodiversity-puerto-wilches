@@ -499,7 +499,7 @@ rango_abundancia<-list()
 ## Matrix total
 
 ```{r rangoAbundanciaTotal, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado las abundancias en cada temporada."}
-rango_abundancia$total_tempo <- rankAbundance(herp_matrix,type="abundance",extraLines = tempo,extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(10,6.5,1,8),posNameSp = -.1, byTICK = 250, byLABELS = 500,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$total_tempo <- rankAbundance(herp_matrix,type="abundance",extraLines = tempo,extraPch = colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(10,6.5,1,8),posNameSp = -.1, byTICK = 50, byLABELS = 100,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
@@ -509,7 +509,7 @@ rango_abundancia$total_tempo <- rankAbundance(herp_matrix,type="abundance",extra
 ## Mostrando las zonas
 
 ```{r rangoAbundanciaTotal_zona, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las zona. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado las abundancias en cada zona."}
-rango_abundancia$total_zona <- rankAbundance(herp_matrix,type="abundance",extraLines = zona,extraPch = colList$zonas$pch, extraCol = colList$zonas$color,legendTitle = "Zona",legendOut = T, MARG=c(10,6.5,1,8),posNameSp = -.1,byTICK = 250,byLABELS = 500,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$total_zona <- rankAbundance(herp_matrix,type="abundance",extraLines = zona,extraPch = colList$zonas$pch, extraCol = colList$zonas$color,legendTitle = "Zona",legendOut = T, MARG=c(10,6.5,1,8),posNameSp = -.1,byTICK = 50,byLABELS = 100,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
@@ -517,7 +517,7 @@ rango_abundancia$total_zona <- rankAbundance(herp_matrix,type="abundance",extraL
 ## Mostrando las coberturas
 
 ```{r rangoAbundanciaTotal_cobertura, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las coberturas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada cobertura."}
-rango_abundancia$total_cobertura <- rankAbundance(herp_matrix,type="abundance",extraLines = landcov, extraCol = colList$landcover$color,legendTitle = "Cobertura",legendOut = T, MARG=c(10,4.5,1,8),posNameSp = -.1,byTICK = 250, byLABELS = 500)
+rango_abundancia$total_cobertura <- rankAbundance(herp_matrix,type="abundance",extraLines = landcov, extraCol = colList$landcover$color,legendTitle = "Cobertura",legendOut = T, MARG=c(10,4.5,1,8),posNameSp = -.1,byTICK =50, byLABELS = 100)
 ```
 
 \clearpage
@@ -529,7 +529,7 @@ rango_abundancia$total_cobertura <- rankAbundance(herp_matrix,type="abundance",e
 ```{r rangoAbundanciaTotal_bosque_ripario, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los bosques riparios, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Bosque Ripario",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$bosqueRipario_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Ripario"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9,4.5,1,8),posNameSp = -.1,byTICK = 100,byLABELS = 200,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$bosqueRipario_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Ripario"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9,4.5,1,8),posNameSp = -.1,byTICK = 50,byLABELS = 100,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 \clearpage
 
@@ -541,7 +541,7 @@ rango_abundancia$bosqueRipario_tempo <- rankAbundance(mat, type="abundance",extr
 ```{r rangoAbundanciaTotal_Bosque_Abierto, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en las bosque abiertos, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Bosque Abierto",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$bosque_abierto_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Abierto"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.5,4.5,1,8),posNameSp = -.05,byTICK =  10, byLABELS = 20,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$bosque_abierto_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Abierto"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.5,4.5,1,8),posNameSp = -.05,byTICK =  1, byLABELS = 1,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
@@ -551,7 +551,7 @@ rango_abundancia$bosque_abierto_tempo <- rankAbundance(mat, type="abundance",ext
 ```{r rangoAbundanciaTotal_Bosque_Denso, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en las bosque densos, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Bosque Denso",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$bosque_denso_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Denso"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9,6.5,1,8),byTICK = 10, byLABELS = 10,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$bosque_denso_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Denso"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9,6.5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
@@ -561,7 +561,7 @@ rango_abundancia$bosque_denso_tempo <- rankAbundance(mat, type="abundance",extra
 ```{r rangoAbundanciaTotal_Herbazales, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los herbazales, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Herbazales",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$herbazales_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Herbazales"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.1,4.5,1,8),byTICK = 50, byLABELS = 100,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$herbazales_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Herbazales"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.1,4.5,1,8),byTICK = 10, byLABELS = 20,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
@@ -576,15 +576,6 @@ rango_abundancia$pastos_tempo <- rankAbundance(mat, type="abundance",extraLines 
 
 \clearpage
 
-### Palma
-
-```{r rangoAbundanciaTotal_Palma, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en las palmas, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
-mat<-herp_matrix[landcov=="Palma",]
-mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$palma_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Palma"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(10,5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
-```
-
-\clearpage
 
 ### Vía
 
@@ -596,12 +587,22 @@ rango_abundancia$vía_tempo <- rankAbundance(mat, type="abundance",extraLines = 
 
 \clearpage
 
+### Cuerpos de agua
+
+```{r rangoAbundanciaTotal_agua, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los cuerpos de aguas, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
+mat<-herp_matrix[landcov=="Cuerpos Agua",]
+mat<-mat[,as.logical(colSums(mat))]
+rango_abundancia$vía_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Cuerpos Agua"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.2,4.5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
+```
+
+\clearpage
+
 
 ## Exportar los datos de los graficos
 
 ```{r}
 rango_abundancia<-lapply(rango_abundancia,function(x)as.data.frame(t(x)))
-save_in_excel("anfibios_dataRangoAbundancia.xlsx",rango_abundancia)
+save_in_excel("reptiles_dataRangoAbundancia.xlsx",rango_abundancia)
 ```
 
 

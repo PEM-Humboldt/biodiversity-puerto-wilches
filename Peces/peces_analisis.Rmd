@@ -27,6 +27,7 @@ header-includes:
 
 Se trata en este documento de presentar los análisis realizados sobre los datos de peces, organizados en la base de datos
 
+Anotar: Para los análisis en este documento, las ANH 296 y 299 estarán consideradas como perteneciendo a la zona "Caracterización", aúnque estén en la zona Kalé en la base de datos
 
 *************
 
@@ -100,6 +101,12 @@ import_pece[grep("matrix",listTable)] <- lapply(import_pece[grep("matrix",listTa
     o_checklist <- !as.logical(length(col_content))
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
   })
+
+import_pece$pece_info_sampling_total$zone[gsub("^ANH_(.+)_T[12]$", "\\1", import_pece$pece_info_sampling_total$anh_tempo) %in% c("296", "299")] <- "Caracterización"
+import_pece$pece_info_sampling_castnet$zone[gsub("^ANH_(.+)_T[12]$", "\\1", import_pece$pece_info_sampling_castnet$anh_tempo) %in% c("296", "299")] <- "Caracterización"
+import_pece$pece_info_sampling_dragnet$zone[gsub("^ANH_(.+)_T[12]$", "\\1", import_pece$pece_info_sampling_dragnet$anh_tempo) %in% c("296", "299")] <- "Caracterización"
+import_pece$pece_info_sampling_electric$zone[gsub("^ANH_(.+)_T[12]$", "\\1", import_pece$pece_info_sampling_electric$anh_tempo) %in% c("296", "299")] <- "Caracterización"
+import_pece$pece_info_sampling_gillnet$zone[gsub("^ANH_(.+)_T[12]$", "\\1", import_pece$pece_info_sampling_gillnet$anh_tempo) %in% c("296", "299")] <- "Caracterización"
 
 ```
 

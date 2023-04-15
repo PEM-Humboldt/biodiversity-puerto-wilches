@@ -27,6 +27,7 @@ header-includes:
 
 Se trata en este documento de presentar los análisis realizados sobre las variables ambientales (BioEnv y RDA) y las comunidades 
 
+Anotar: Para los análisis en este documento, las ANH 296 y 299 estarán consideradas como perteneciendo a la zona "Caracterización", aúnque estén en la zona Kalé en la base de datos
 
 *************
 
@@ -54,21 +55,19 @@ eval(parse(text=readLines("../dbTab2mat.R")))
 
 
 # Importación de los datos de la base de datos
-
 La base de datos contiene todos los datos de macroinvertebrados en VIEWS del schema "public", se pueden importar así:
 
 ```{r cache=F}
 (listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^minv'")$table_name)
 import_minv <- lapply(listTable,dbReadTable,conn=fracking_db)
 names(import_minv) <- listTable
-import_minv <- c(import_minv,lapply(import_minv[grep("matrix",listTable)],function(x)
+import_minv[grep("matrix",listTable)] <- lapply(import_minv[grep("matrix",listTable)],function(x)
   {
-    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
-    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
-  }))
-names(import_minv)[grepl("matrix",names(import_minv)) & !sapply(lapply(import_minv,class),function(x) "matrix"%in% x)]<- 
-	paste(names(import_minv)[grepl("matrix",names(import_minv)) & !sapply(lapply(import_minv,class),function(x) "matrix"%in% x)],"_raw",sep="" )
-import_minv$minv_ab_abs_matrix<-dbTab2mat(import_minv$minv_matrix_raw, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = "abs_abundance")
+    col_content <- c("abundance","density","incidence")[c("abundance","density","incidence") %in% colnames(x)]
+    o_checklist <- !as.logical(length(col_content))
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
+  })
+
 ```
 
 
@@ -85,56 +84,215 @@ colList$zonas<-colList$zonas[order(colList$zonas$platform),]
 colList$aquatic_habitats <- colList$aquatic_habitats[order(colList$aquatic_habitats$habitat_spa),]
 ```
 
-# Análisis de redundancia
 
-## Preparar los datos ambientales
 
-```{r prepEnvir}
-minv_matrix <- import_minv$minv_matrix
-stopifnot(import_minv$minv_envir_water$anh_tempo==import_minv$minv_envir_sedim$anh_tempo)
-sedim <- import_minv$minv_envir_sedim
-colnames(sedim) <- paste("sed",colnames(sedim),sep=".")
-water <- import_minv$minv_envir_water
-colnames(water) <- paste("wat",colnames(water),sep=".")
-envir<-cbind(sedim[sapply(sedim,mode)=="numeric"],water[sapply(water,mode)=="numeric"])
-rownames(envir)<-sedim$sed.anh_tempo
-# Manejar los valores faltantes
-## Primero suprimamos las variables que contienen más de 6 valores faltantes
-(nbNa<-sapply(envir,function(x)sum(is.na(x))))
-envir <- envir[sapply(envir,function(x)sum(is.na(x)))<6]
-## Segundo suprimamos las filas que contienen todavía valores faltantes
-envir <- na.omit(envir)
-dim(envir)
-# guardemos solo los datos completos en las 2 matrices
-(toKeep<-intersect(rownames(envir),rownames(minv_matrix)))
-minv_matrix <- minv_matrix[toKeep,]
-envir <- envir[toKeep,]
-```
+# Análisis bioEnv
 
-## Aplicar el análisis bioenv para buscar el ensamblaje de variables ambientales optimal
+Con el objetivo de obtener un set de datos ambientales optimo, aplicamos un análisis *BioEnv*.
+El objetivo de este análisis es buscar el set de variables ambientales que tiene las correlaciones más fuertes con la composición de las comunidades.
+Así funciona:
 
-```r 
-bioenv, dependson="prepEnvir"
-require(vegan)
-bioEnv <- bioenv(minv_matrix,envir,parallel=3,trace=T)
-save(bioEnv,file="bioEnv_minv.RData")
-```
+1. Transformamos la matriz de densidad (metodo de hellinger)
+2. Calculamos una matriz de distancia de la comunidades (acá distancia euclidiana sobre la matriz de densidad tranformada)
+3. Extraemos todas las combinaciones posibles de variables ambientales (de 1 a n variables ambientales)
+3. Calculamos las correlaciones non parametricas de Spearman entre la matriz de distancia de las comunidades y la distancia euclidiana de las variables ambientales, con todas las combinaciones posibles.
+4. Guardamos el set de variables ambientales que obtiene las correlaciones más fuertes
+
+Este análisis es relativamente exigente en terminos de recursos informaticos, así que se realizó en un servidor de calculos de la universidad de los Andes, gracias a un convenio entre Juan Sebastian Ulloa para el equipo de sonidos del proyecto ANH y la universidad de los Andes (los scripts y resultados de los análisis están disponibles en la carpeta *bioenv*).
+
+## Cargar los datos y resultados
 
 ```{r}
-load("bioEnv_minv.RData")
-varBest <- names(envir)[bioEnv$models[[bioEnv$whichbest]][[1]]]
+load("../bioenv/tabBioEnvPlan.RData")
+lapply(paste("../bioenv",dir("../bioenv/",pattern="minv.*RData"),sep="/"),load,envir=.GlobalEnv)
+```
+## Resultados
+
+Aqui están los resultados del análisis bioEnv:
+
+```{r}
+bioenvRes
+varBest <- names(envir)[bioenvRes$models[[bioenvRes$whichbest]]$best]
 ```
 
 
-# RDA
-```{r, fig.width=10, fig.height=10}
+La correlación más alta fue obtenida con un modelo de `r length(varBest)` variables (`r paste(varBest,collapse=", ")`), y una correlación de Spearman
+de `r round(bioenvRes$models[[bioenvRes$whichbest]]$est,2)`
+
+```{r barplot_bioenv,fig.width=10, fig.heigth=6}
+A<-barplot(sapply(bioenvRes$models,function(x)x$est),names.arg = 1:length(bioenvRes$models),xlab="Número de variables",ylab="Mejor correlación de Spearman")
+par(xpd=T)
+text(A[length(varBest)],bioenvRes$models[[length(varBest)]]$est+0.02 ,"*",cex=2)
+```
+
+Los set de variables obtenidos según los números de variables son los siguientes:
+
+
+```{r}
+A<-lapply(bioenvRes$models,function(x,m)factor(x$best,levels=1:m),m=ncol(envir))
+matResVar <- matrix("",nrow=length(bioenvRes$models),ncol=ncol(envir),dimnames=list(1:length(bioenvRes$models),colnames(envir)))
+for(i in 1:length(A)){
+  matResVar[i,A[[i]]]<-"X"
+}
+t(matResVar)%>%
+  as.data.frame()%>%
+  kable(row.names = T,booktabs=T,align = rep('c',nrow(matResVar)+1),caption = "Tabla de variables haciendo parte del mejor set de variables en función del número de variables")%>%
+  kable_styling(font_size=8)%>%
+  column_spec(length(varBest)+1,background="yellow")%>%
+  column_spec(1,width="1cm")
+```
+
+
+
+
+#  RDA
+
+
+
+```{r}
 require(vegan)
-minv_hellinger <- decostand(minv_matrix,method = "hellinger")
-(RDA_minv <- rda(minv_hellinger,envir[,varBest]))
-RsquareAdj(RDA_minv)
-plot(RDA_minv)
-#plot(RDA,display="lc")
-#text(RDA,display="species")
+(RDA_minv <- rda(formula=transf~.,data=envir[varBest]))
+scoreRda<-scores(RDA_minv)
+```
+## Notas generales y calidad de representación
+
+Una "RDA" es un análisis canonico.
+Consiste en:
+
+1. Realizar una PCA (Análisis en Componentes Principales) sobre la matriz transformada (hellinger) de las comunidades. La distancia entre los sitios está representada con una distancia euclidiana (la transformación de Hellinger permite evitar los problemas con la distancia euclidiana) y las relaciones entre taxones está calculada desde sus covariancias
+2. Se realiza una regresión múltiple de las coordenadas de la PCA desde las variables ambientales.
+3. Los parámetros de está regresión se entran en una Análisis en componentes principales que permite representar las relaciones entre sitios gracias a un espacio euclidiano y la relaciones entre variables de las tablas gracias a representaciones de las correlaciones
+4. Los residuos de la regresión múltiple entran tambien en una PCA para poder representar el resto de la variación ("unconstrained variation")
+
+Eso quiere decir:
+
+1. que la representación de los sitios y variables ambientales es muy parecida a una PCA
+2. que lo que se representa en los ejes "constrained" es el resultado de una regresión, no la variación total del juego de datos (aunque constrained + unconstrained corresponda a la variación total)
+
+```{r}
+eig <- c(RDA_minv$CCA$eig,RDA_minv$CA$eig)
+rsq <- RsquareAdj(RDA_minv)$adj.r.squared
+```
+
+La RDA está basada sobre una regresión múltiple, entonces podemos calcular un $R^2$ ajustado que representa la proporción de variación de las diferencia entre las comunidades que puede ser explicada por las variables ambientales elegidas en el análisis BioEnv.
+
+Acá este $R^2$ ajustado vale: **`r round(rsq,4)`** (corresponde, con matices parecidos a los de las regresión múltiples a un `r round(rsq*100,2)` \% de variación explicada por las variables ambientales)
+
+### Valores propios de los ejes
+r, RDA_valoresProp, fig.width=7,fig.height=4, fig.cap="Representación de los valores propios (inercia) de los ejes de la  RDA. La inercia representa la variancia multivariada del juego de datos, es decir que este grafico representa la variancia explicada por cada uno de los ejes."}
+par(mar=c(1.5,4.1,1,1))
+barplot(eig,col=c(rep("red",length(RDA_minv$CCA$eig)),rep("grey",length(RDA_minv$CA$eig))),names.arg = NA, xlab=NA,ylab="Valores propios")
+legend("topright",fill=c("red","grey"),legend=c("constrained","unconstrained"))
+par(xpd=T)
+text(length(RDA_minv$CA$eig)/2,-0.004,"Ejes")
+```
+
+Proporción de inercia de los ejes "constrained":
+
+```{r}
+(p_EC <- RDA_minv$CCA$eig/sum(eig))
+pc_EC <- round(p_EC*100,2)
+```
+
+## Representaciones de la RDA
+
+
+### Categorías
+
+```{r}
+info_todo <- import_minv$minv_info_sampling
+m_site<-match(rownames(scoreRda$sites),table=info_todo$anh_tempo)
+anh<-factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(scoreRda$sites)))
+info_todo$tipo_cuerp_agua <- factor(info_todo$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
+tipCuerAg<-info_todo$tipo_cuerp_agua[m_site]
+info_todo$zone <- factor(info_todo$zone,colList$zonas$platform)
+zonas<-info_todo$zone[m_site]
+zonas[anh %in% c(296,299)]<-"Caracterización"
+tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(scoreRda$sites)),levels=colList$tempo$cd_tempo,labels=colList$tempo$temporada)
+```
+
+### Triplot general
+
+```{r triplot_gen, fig.height=10,fig.width=8, fig.cap="\'triplot\' de la  RDA aplicada sobre la matriz de densidad de macroinvertebrados. Las unidades de muestreo están mostradas gracias a simbolos que representan los tipos de cuerpo de agua y las temporadas. Las variables ambientales están representadas por flechas que muestran  (ángulos) las correlaciones entre ellas y con los ejes, así como la influencia de esas relaciones (longitud). Finalmente los taxones están figuradas por cruzes rojas."}
+PCH <- colList$tempo$pch[tempo]
+COL <- colList$aquatic_habitats$color[info_todo$tipo_cuerp_agua[m_site]]
+plot(RDA_minv,display=c("species","sites","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""))
+points(RDA_minv,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
+legend("bottomright",pch=colList$tempo$pch,legend=colList$tempo$temporada,title="Temporada",bty="n")
+legend("topleft",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title="Tipo de cuerpo de agua",bty="n")
+```
+
+\clearpage
+
+### Especies y variables
+
+
+```{r RDA_sp_var_zoom, fig.width=9,fig.height=9, fig.cap="Representación de los taxones y de las variables ambientales en el espacio de la RDA. Para poder leer los nombres de los taxones, no se representan las flechas de los taxones."}
+plot(RDA_minv,display=c("species"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+points(RDA_minv,display="cn",col="blue")
+text(RDA_minv,display="cn",col="blue")
+text(RDA_minv,display="species",cex=.5)
+```
+
+\clearpage
+
+
+
+
+### Unidades de muestreo
+
+```{r RDA_anh_tempo_var, fig.width=9,fig.height=9, fig.cap="Representacion de los nombres de ANH/temporadas en el espacio de la  RDA."}
+plot(RDA_minv,display=c("sites","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+points(RDA_minv,display="cn",col="blue")
+text(RDA_minv,display="cn",col="blue")
+text(RDA_minv,display="sites",cex=.5)
+```
+
+### Tipos de cuerpo de agua
+
+```{r RDA_cuerpAg, fig.height=10,fig.width=10, fig.cap="Representación de los cuerpos de agua en el espacio de la  RDA. Las elipses corresponden a los intervalos de confiancia (95\\%) bivariados de las posiciones  de las unidades de muestreos de los diferentes tipos de cuerpo de agua. Los intervalos de confiancia están computados gracias a una distribución de $\\chi^2$ a 2 grados de libertad."}
+ordiplot(RDA_minv,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+ordiellipse(RDA_minv,tipCuerAg,kind="sd",conf=0.95,col=colList$aquatic_habitats$color)
+ordiellipse(RDA_minv,tipCuerAg,kind="sd",conf=0.95,col=colList$aquatic_habitats$color,draw="polygon",alpha=50,border=NA)
+ordispider(RDA_minv,tipCuerAg,col=colList$aquatic_habitats$color,lty=3)
+points(RDA_minv,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
+points(RDA_minv,display="cn",col="red",head.arrow = .1)
+text(RDA_minv,display="cn",col="red")
+legend("topleft",fill=colList$aquatic_habitats$color,title="Tipo de cuerpo de agua",legend=colList$aquatic_habitats$habitat_spa)
+```
+\clearpage
+
+### Zona
+
+```{r RDA_zona, fig.height=10,fig.width=10, fig.cap="Representación de los zonas de muestreo en el espacio de la  RDA. Las elipses corresponden a los intervalos de confiancia (95\\%) bivariados de las posiciones  de las unidades de muestreos de las diferentes zonas. Los intervalos de confiancia están computados gracias a una distribución de $\\chi^2$ a 2 grados de libertad."}
+PCH <- colList$zonas$pch[zonas]
+COL <- colList$zonas$color[zonas]
+ordiplot(RDA_minv,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+ordiellipse(RDA_minv,zonas,kind="sd",conf=0.95,col=colList$zonas$color)
+ordiellipse(RDA_minv,zonas,kind="sd",conf=0.95,col=colList$zonas$color,draw="polygon",alpha=50,border=NA)
+ordispider(RDA_minv,zonas,col=colList$zonas$color,lty=3)
+points(RDA_minv,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
+points(RDA_minv,display="cn",col="red",head.arrow = .1)
+text(RDA_minv,display="cn",col="red")
+legend("topleft",fill=colList$zonas$color,title="Zonas",legend=colList$zonas$platform)
+```
+
+\clearpage
+
+### Temporadas
+
+
+```{r RDA_tempo, fig.height=10,fig.width=10, fig.cap = "Representación de los temporadas en el espacio de la  RDA. Las elipses corresponden a los intervalos de confiancia (95\\%) bivariados de las posiciones  de las unidades de muestreos de ambas temporadas. Los intervalos de confiancia están computados gracias a una distribución de $\\chi^2$ a 2 grados de libertad."}
+PCH <- colList$tempo$pch[tempo]
+COL <- colList$tempo$color[tempo]
+ordiplot(RDA_minv,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+ordiellipse(RDA_minv,tempo,kind="sd",conf=0.95,col=colList$tempo$color)
+ordiellipse(RDA_minv,tempo,kind="sd",conf=0.95,col=colList$tempo$color,draw="polygon",alpha=50,border=NA)
+ordispider(RDA_minv,tempo,col=colList$tempo$color,lty=3)
+points(RDA_minv,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
+points(RDA_minv,display="cn",col="black",head.arrow = .1)
+text(RDA_minv,display="cn",col="black")
+legend("topleft",fill=colList$tempo$color,title="Temporada",legend=colList$tempo$temporada)
 ```
 
 

@@ -1,5 +1,5 @@
 ---
-title: "Análisis Bio-Env y RDA sobre fitoplancton"
+title: "Análisis Bio-Env y RDA sobre perifiton"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 lang: "es"
@@ -37,7 +37,7 @@ require(RPostgreSQL)
 require(sp)
 require(sqldf)
 require(kableExtra)
-knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/fipl_",echo=T)
+knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/peri_",echo=T)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
@@ -55,13 +55,13 @@ eval(parse(text=readLines("../dbTab2mat.R")))
 
 
 # Importación de los datos de la base de datos
-La base de datos contiene todos los datos de fitoplancton en VIEWS del schema "public", se pueden importar así:
+La base de datos contiene todos los datos de perifiton en VIEWS del schema "public", se pueden importar así:
 
 ```{r cache=F}
-(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^fipl'")$table_name)
-import_fipl <- lapply(listTable,dbReadTable,conn=fracking_db)
-names(import_fipl) <- listTable
-import_fipl[grep("matrix",listTable)] <- lapply(import_fipl[grep("matrix",listTable)],function(x)
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^peri'")$table_name)
+import_peri <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(import_peri) <- listTable
+import_peri[grep("matrix",listTable)] <- lapply(import_peri[grep("matrix",listTable)],function(x)
   {
     col_content <- c("abundance","density","incidence")[c("abundance","density","incidence") %in% colnames(x)]
     o_checklist <- !as.logical(length(col_content))
@@ -104,7 +104,7 @@ Este análisis es relativamente exigente en terminos de recursos informaticos, a
 
 ```{r}
 load("../bioenv/tabBioEnvPlan.RData")
-lapply(paste("../bioenv",dir("../bioenv/",pattern="fipl.*RData"),sep="/"),load,envir=.GlobalEnv)
+lapply(paste("../bioenv",dir("../bioenv/",pattern="peri.*RData"),sep="/"),load,envir=.GlobalEnv)
 ```
 ## Resultados
 
@@ -151,8 +151,8 @@ t(matResVar)%>%
 
 ```{r}
 require(vegan)
-(RDA_fipl <- rda(formula=transf~.,data=envir[varBest]))
-scoreRda<-scores(RDA_fipl)
+(RDA_peri <- rda(formula=transf~.,data=envir[varBest]))
+scoreRda<-scores(RDA_peri)
 ```
 ## Notas generales y calidad de representación
 
@@ -170,8 +170,8 @@ Eso quiere decir:
 2. que lo que se representa en los ejes "constrained" es el resultado de una regresión, no la variación total del juego de datos (aunque constrained + unconstrained corresponda a la variación total)
 
 ```{r}
-eig <- c(RDA_fipl$CCA$eig,RDA_fipl$CA$eig)
-rsq <- RsquareAdj(RDA_fipl)$adj.r.squared
+eig <- c(RDA_peri$CCA$eig,RDA_peri$CA$eig)
+rsq <- RsquareAdj(RDA_peri)$adj.r.squared
 ```
 
 La RDA está basada sobre una regresión múltiple, entonces podemos calcular un $R^2$ ajustado que representa la proporción de variación de las diferencia entre las comunidades que puede ser explicada por las variables ambientales elegidas en el análisis BioEnv.
@@ -181,16 +181,16 @@ Acá este $R^2$ ajustado vale: **`r round(rsq,4)`** (corresponde, con matices pa
 ### Valores propios de los ejes
 ```{r, RDA_valoresProp, fig.width=7,fig.height=4, fig.cap="Representación de los valores propios (inercia) de los ejes de la  RDA. La inercia representa la variancia multivariada del juego de datos, es decir que este grafico representa la variancia explicada por cada uno de los ejes."}
 par(mar=c(1.5,4.1,1,1))
-barplot(eig,col=c(rep("red",length(RDA_fipl$CCA$eig)),rep("grey",length(RDA_fipl$CA$eig))),names.arg = NA, xlab=NA,ylab="Valores propios")
+barplot(eig,col=c(rep("red",length(RDA_peri$CCA$eig)),rep("grey",length(RDA_peri$CA$eig))),names.arg = NA, xlab=NA,ylab="Valores propios")
 legend("topright",fill=c("red","grey"),legend=c("constrained","unconstrained"))
 par(xpd=T)
-text(length(RDA_fipl$CA$eig)/2,-0.004,"Ejes")
+text(length(RDA_peri$CA$eig)/2,-0.004,"Ejes")
 ```
 
 Proporción de inercia de los ejes "constrained":
 
 ```{r}
-(p_EC <- RDA_fipl$CCA$eig/sum(eig))
+(p_EC <- RDA_peri$CCA$eig/sum(eig))
 pc_EC <- round(p_EC*100,2)
 ```
 
@@ -200,7 +200,7 @@ pc_EC <- round(p_EC*100,2)
 ### Categorías
 
 ```{r}
-info_todo <- import_fipl$fipl_info_sampling
+info_todo <- import_peri$peri_info_sampling
 m_site<-match(rownames(scoreRda$sites),table=info_todo$anh_tempo)
 anh<-factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(scoreRda$sites)))
 info_todo$tipo_cuerp_agua <- factor(info_todo$tipo_cuerp_agua,colList$aquatic_habitats$habitat_spa)
@@ -213,15 +213,15 @@ tempo<-factor(gsub("ANH_[0-9]{1,3}_(T[12])","\\1",rownames(scoreRda$sites)),leve
 
 ### Triplot general
 
-```{r triplot_gen, fig.height=10,fig.width=8, fig.cap="\'triplot\' de la  RDA aplicada sobre la matriz de densidad de fitoplancton. Las unidades de muestreo están mostradas gracias a simbolos que representan los tipos de cuerpo de agua y las temporadas. Las variables ambientales están representadas por flechas que muestran  (ángulos) las correlaciones entre ellas y con los ejes, así como la influencia de esas relaciones (longitud). Finalmente los taxones están figuradas por cruzes rojas."}
+```{r triplot_gen, fig.height=10,fig.width=8, fig.cap="\'triplot\' de la  RDA aplicada sobre la matriz de densidad de perifiton. Las unidades de muestreo están mostradas gracias a simbolos que representan los tipos de cuerpo de agua y las temporadas. Las variables ambientales están representadas por flechas que muestran  (ángulos) las correlaciones entre ellas y con los ejes, así como la influencia de esas relaciones (longitud). Finalmente los taxones están figuradas por cruzes rojas."}
 PCH <- colList$tempo$pch[tempo]
 COL <- colList$aquatic_habitats$color[info_todo$tipo_cuerp_agua[m_site]]
-plot(RDA_fipl,display=c("species","sites","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),type="p")
-points(RDA_fipl,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
+plot(RDA_peri,display=c("species","sites","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),type="p")
+points(RDA_peri,display="sites",col=COL,bg=COL,pch=PCH,cex=2)
 legend("bottomright",pch=colList$tempo$pch,legend=colList$tempo$temporada,title="Temporada",bty="n")
 legend("topleft",fill=colList$aquatic_habitats$color,legend=colList$aquatic_habitats$habitat_spa,title="Tipo de cuerpo de agua",bty="n")
-points(RDA_fipl,display="cn",col="blue")
-text(RDA_fipl,display="cn",col="blue")
+points(RDA_peri,display="cn",col="blue")
+text(RDA_peri,display="cn",col="blue")
 ```
 
 \clearpage
@@ -230,10 +230,10 @@ text(RDA_fipl,display="cn",col="blue")
 
 
 ```{r RDA_sp_var_zoom, fig.width=9,fig.height=9, fig.cap="Representación de los taxones y de las variables ambientales en el espacio de la RDA. Para poder leer los nombres de los taxones, no se representan las flechas de los taxones."}
-plot(RDA_fipl,display=c("species"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
-points(RDA_fipl,display="cn",col="blue")
-text(RDA_fipl,display="cn",col="blue")
-text(RDA_fipl,display="species",cex=.5)
+plot(RDA_peri,display=c("species"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+points(RDA_peri,display="cn",col="blue")
+text(RDA_peri,display="cn",col="blue")
+text(RDA_peri,display="species",cex=.5)
 ```
 
 \clearpage
@@ -244,22 +244,22 @@ text(RDA_fipl,display="species",cex=.5)
 ### Unidades de muestreo
 
 ```{r RDA_anh_tempo_var, fig.width=9,fig.height=9, fig.cap="Representacion de los nombres de ANH/temporadas en el espacio de la  RDA."}
-plot(RDA_fipl,display=c("sites","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
-points(RDA_fipl,display="cn",col="blue")
-text(RDA_fipl,display="cn",col="blue")
-text(RDA_fipl,display="sites",cex=.5)
+plot(RDA_peri,display=c("sites","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+points(RDA_peri,display="cn",col="blue")
+text(RDA_peri,display="cn",col="blue")
+text(RDA_peri,display="sites",cex=.5)
 ```
 
 ### Tipos de cuerpo de agua
 
 ```{r RDA_cuerpAg, fig.height=10,fig.width=10, fig.cap="Representación de los cuerpos de agua en el espacio de la  RDA. Las elipses corresponden a los intervalos de confiancia (95\\%) bivariados de las posiciones  de las unidades de muestreos de los diferentes tipos de cuerpo de agua. Los intervalos de confiancia están computados gracias a una distribución de $\\chi^2$ a 2 grados de libertad."}
-ordiplot(RDA_fipl,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
-ordiellipse(RDA_fipl,tipCuerAg,kind="sd",conf=0.95,col=colList$aquatic_habitats$color)
-ordiellipse(RDA_fipl,tipCuerAg,kind="sd",conf=0.95,col=colList$aquatic_habitats$color,draw="polygon",alpha=50,border=NA)
-ordispider(RDA_fipl,tipCuerAg,col=colList$aquatic_habitats$color,lty=3)
-points(RDA_fipl,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
-points(RDA_fipl,display="cn",col="red",head.arrow = .1)
-text(RDA_fipl,display="cn",col="red")
+ordiplot(RDA_peri,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+ordiellipse(RDA_peri,tipCuerAg,kind="sd",conf=0.95,col=colList$aquatic_habitats$color)
+ordiellipse(RDA_peri,tipCuerAg,kind="sd",conf=0.95,col=colList$aquatic_habitats$color,draw="polygon",alpha=50,border=NA)
+ordispider(RDA_peri,tipCuerAg,col=colList$aquatic_habitats$color,lty=3)
+points(RDA_peri,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
+points(RDA_peri,display="cn",col="red",head.arrow = .1)
+text(RDA_peri,display="cn",col="red")
 legend("topleft",fill=colList$aquatic_habitats$color,title="Tipo de cuerpo de agua",legend=colList$aquatic_habitats$habitat_spa)
 ```
 \clearpage
@@ -269,13 +269,13 @@ legend("topleft",fill=colList$aquatic_habitats$color,title="Tipo de cuerpo de ag
 ```{r RDA_zona, fig.height=10,fig.width=10, fig.cap="Representación de los zonas de muestreo en el espacio de la  RDA. Las elipses corresponden a los intervalos de confiancia (95\\%) bivariados de las posiciones  de las unidades de muestreos de las diferentes zonas. Los intervalos de confiancia están computados gracias a una distribución de $\\chi^2$ a 2 grados de libertad."}
 PCH <- colList$zonas$pch[zonas]
 COL <- colList$zonas$color[zonas]
-ordiplot(RDA_fipl,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
-ordiellipse(RDA_fipl,zonas,kind="sd",conf=0.95,col=colList$zonas$color)
-ordiellipse(RDA_fipl,zonas,kind="sd",conf=0.95,col=colList$zonas$color,draw="polygon",alpha=50,border=NA)
-ordispider(RDA_fipl,zonas,col=colList$zonas$color,lty=3)
-points(RDA_fipl,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
-points(RDA_fipl,display="cn",col="red",head.arrow = .1)
-text(RDA_fipl,display="cn",col="red")
+ordiplot(RDA_peri,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+ordiellipse(RDA_peri,zonas,kind="sd",conf=0.95,col=colList$zonas$color)
+ordiellipse(RDA_peri,zonas,kind="sd",conf=0.95,col=colList$zonas$color,draw="polygon",alpha=50,border=NA)
+ordispider(RDA_peri,zonas,col=colList$zonas$color,lty=3)
+points(RDA_peri,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
+points(RDA_peri,display="cn",col="red",head.arrow = .1)
+text(RDA_peri,display="cn",col="red")
 legend("topleft",fill=colList$zonas$color,title="Zonas",legend=colList$zonas$platform)
 ```
 
@@ -287,13 +287,13 @@ legend("topleft",fill=colList$zonas$color,title="Zonas",legend=colList$zonas$pla
 ```{r RDA_tempo, fig.height=10,fig.width=10, fig.cap = "Representación de los temporadas en el espacio de la  RDA. Las elipses corresponden a los intervalos de confiancia (95\\%) bivariados de las posiciones  de las unidades de muestreos de ambas temporadas. Los intervalos de confiancia están computados gracias a una distribución de $\\chi^2$ a 2 grados de libertad."}
 PCH <- colList$tempo$pch[tempo]
 COL <- colList$tempo$color[tempo]
-ordiplot(RDA_fipl,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
-ordiellipse(RDA_fipl,tempo,kind="sd",conf=0.95,col=colList$tempo$color)
-ordiellipse(RDA_fipl,tempo,kind="sd",conf=0.95,col=colList$tempo$color,draw="polygon",alpha=50,border=NA)
-ordispider(RDA_fipl,tempo,col=colList$tempo$color,lty=3)
-points(RDA_fipl,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
-points(RDA_fipl,display="cn",col="black",head.arrow = .1)
-text(RDA_fipl,display="cn",col="black")
+ordiplot(RDA_peri,display=c("sites","species","cn"),xlab=paste("RDA1 (",pc_EC[1],"%)",sep=""),ylab=paste("RDA2 (",pc_EC[2],"%)",sep=""),pch=NA,type="n")
+ordiellipse(RDA_peri,tempo,kind="sd",conf=0.95,col=colList$tempo$color)
+ordiellipse(RDA_peri,tempo,kind="sd",conf=0.95,col=colList$tempo$color,draw="polygon",alpha=50,border=NA)
+ordispider(RDA_peri,tempo,col=colList$tempo$color,lty=3)
+points(RDA_peri,display="sites",col=COL,bg=COL,pch=PCH,cex=.8)
+points(RDA_peri,display="cn",col="black",head.arrow = .1)
+text(RDA_peri,display="cn",col="black")
 legend("topleft",fill=colList$tempo$color,title="Temporada",legend=colList$tempo$temporada)
 ```
 

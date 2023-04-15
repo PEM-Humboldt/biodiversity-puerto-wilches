@@ -27,6 +27,7 @@ header-includes:
 
 Se trata en este documento de presentar los análisis realizados sobre los datos de macroinvertebrados, organizados en la base de datos
 
+Anotar: Para los análisis en este documento, las ANH 296 y 299 estarán consideradas como perteneciendo a la zona "Caracterización", aúnque estén en la zona Kalé en la base de datos
 
 *************
 
@@ -167,6 +168,7 @@ anh <- as.numeric(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(minv_matrix)))
 tempo <- factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\2",rownames(minv_matrix)),levels = colList$tempo$cd_tempo, labels = colList$tempo$temporada)
 table(tempo)
 zona <- factor(infoTot$zone[m],levels=colList$zonas$platform)
+zona[anh %in% c(296,299)]<-"Caracterización"
 table(zona,tempo)
 tipCuerAg <- factor(infoTot$tipo_cuerp_agua[m],levels = colList$aquatic_habitats$habitat_spa)
 table(tipCuerAg,tempo)

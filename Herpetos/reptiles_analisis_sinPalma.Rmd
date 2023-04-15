@@ -1,5 +1,5 @@
 ---
-title: "Análisis de los datos de anfibios"
+title: "Análisis de los datos de reptiles"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 lang: "es"
@@ -25,7 +25,7 @@ header-includes:
 
 ************************
 
-Se trata en este documento de presentar los análisis realizados sobre los datos de anfibios, organizados en la base de datos
+Se trata en este documento de presentar los análisis realizados sobre los datos de reptiles, organizados en la base de datos. En este documento, sacamos los datos que corresponden a Palma en el mapa de coberturas.
 
 
 *************
@@ -38,7 +38,7 @@ require(sqldf)
 require(kableExtra)
 require(iNEXT)
 require(ggplot2)
-knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/anfibios_",echo=T)
+knitr::opts_chunk$set(cache=T,tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path="./Fig/reptiles_sinPal_",echo=T)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
@@ -46,10 +46,7 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 })
 options(knitr.kable.NA = "---")
 fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
-source("../ggplot_iNEXT.R")# Themes ggplot in order to get the same plot types than Vladimir
-set.seed(9835)
 ```
-
 
 # Definición de las funciones
 ## Función para formatear las matrices
@@ -88,7 +85,7 @@ eval(parse(text=readLines("../ggplot_iNEXT.R")))
 
 # Importación de los datos de la base de datos
 
-La base de datos contiene todos los datos de anfibios en VIEWS del schema "public", se pueden importar así:
+La base de datos contiene todos los datos de reptiles en VIEWS del schema "public", se pueden importar así:
 
 ```{r cache=F}
 (listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^herp'")$table_name)
@@ -128,11 +125,12 @@ landcov<-pgGetGeom(fracking_db,query="SELECT cd_landcov,landcov,landcov_spa,the_
 plot(zonas,col=NA)
 plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
 plot(zonas,col=NA,border="black",add=T)
-infoTot<-import_herp$herp_info_sampling_amphibians
+infoTot<-import_herp$herp_info_sampling_reptiles
 coordinates(infoTot) <- ~ x_coord_centroid + y_coord_centroid
-plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
+plot(infoTot[infoTot$landcov_spa!="Palma",], bg = colList$landcover$color[match(infoTot$landcov_spa[infoTot$landcov_spa!="Palma"], table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
 legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
 ```
+
 
 ### Con los números de ANH
 
@@ -151,23 +149,27 @@ pt_ref_labels <- pgGetGeom(fracking_db,query = SQL)
 plot(zonas,col=NA)
 plot(landcov,col=colList$landcover$color[match(landcov@data$cd_landcov,table = colList$landcover$cd_landcov)],border=NA,add=T)
 plot(zonas,col=NA,border="black",add=T)
-plot(infoTot, bg = colList$landcover$color[match(infoTot$landcov_spa, table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
+plot(infoTot[infoTot$landcov_spa!="Palma",], bg = colList$landcover$color[match(infoTot$landcov_spa[infoTot$landcov_spa!="Palma"], table= colList$landcover$landcov_spa)],cex=2,pch=22,add=T)
 text(pt_ref_labels,pt_ref_labels$num_anh,col="black",halo=T,cex=.7,pos=3)
 legend("topright",fill=colList$landcover$color,legend=colList$landcover$landcov_spa,title = "Cobertura",border=NA, bty="n")
 ```
 
+
 # Definición de las categorias
 
 ```{r cache=F}
-herp_matrix <- import_herp$herp_amphibian_matrix
-infoTot <- import_herp$herp_info_sampling_amphibians
+herp_matrix <- import_herp$herp_reptiles_matrix
+infoTot <- import_herp$herp_info_sampling_reptiles
 m <- match(rownames(herp_matrix), table = infoTot$anh_tempo)
+landcov <- factor(infoTot$landcov_spa[m],levels = colList$landcover$landcov_spa)
+herp_matrix<-herp_matrix[landcov!="Palma",]
+m<-m[landcov!="Palma"]
+landcov<-landcov[landcov!="Palma"]
 anh <- as.numeric(gsub("ANH_([0-9]{1,3})_(T[12])","\\1",rownames(herp_matrix)))
 tempo <- factor(gsub("ANH_([0-9]{1,3})_(T[12])","\\2",rownames(herp_matrix)),levels = colList$tempo$cd_tempo, labels = colList$tempo$temporada)
 table(tempo)
 zona <- factor(infoTot$zone[m],levels=colList$zonas$platform)
 table(zona,tempo)
-landcov <- factor(infoTot$landcov_spa[m],levels = colList$landcover$landcov_spa)
 table(landcov,tempo)
 table(landcov,zona)
 
@@ -232,7 +234,7 @@ iNEXT_landcov <- iNEXT(apply(mat_landcov,1,function(x)x[x>0]),datatype = "abunda
 ```
 
 
-```{r CurvaRiqueza_landcov_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de anfibios colectados , calculos basados en la abundancia de las especies colectadas."}
+```{r CurvaRiqueza_landcov_raw, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de reptiles colectados , calculos basados en la abundancia de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov], labY='Riqueza', title="Coberturas")
 A 
@@ -262,13 +264,13 @@ iNEXT_landcov_t2 <- iNEXT(apply(mat_landcov_t2,1,function(x)x[x>0]),datatype = "
 ```
 
 
-```{r curvaRiqueza_landcov_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de anfibios colectada en la temporada de aguas altas, calculos basados en la abundancia total de las especies colectadas."}
+```{r curvaRiqueza_landcov_t1, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de reptiles colectada en la temporada de aguas altas, calculos basados en la abundancia total de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t1,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t1],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t1], labY='Riqueza', title="Coberturas, temporada de aguas altas")
 A
 ```
 
-```{r curvaRiqueza_landcov_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de anfibios colectada en la temporada de aguas bajas, calculos basados en la abundancia total de las especies colectadas."}
+```{r curvaRiqueza_landcov_t2, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de reptiles colectada en la temporada de aguas bajas, calculos basados en la abundancia total de las especies colectadas."}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_landcov_t2,type=1,col=colList$landcover$color[colList$landcover$landcov_spa %in% landcov_t2],orderAssemblage = colList$landcover$landcov_spa[colList$landcover$landcov_spa %in% landcov_t2], labY='Riqueza', title="Coberturas, temporada de aguas bajas")
 A
@@ -300,7 +302,7 @@ sqldf(
   ",drv="SQLite"
 )
 )
-tabEst_landcov$eventos<- tapply(infoTot$nb_event[m],landcov,sum)[!is.na(tapply(infoTot$nb_event,landcov,sum))]
+tabEst_landcov$eventos<- tapply(infoTot$nb_event[m],landcov,sum)[!is.na(tapply(infoTot$nb_event[m],landcov,sum))]
 tabEst_landcov$completude<-(tabEst_landcov$riq_observado/tabEst_landcov$riq_estimado)*100
 tabEst_landcov$coverage <- iNEXT_landcov$DataInfo$SC[order(iNEXT_landcov$DataInfo$Assemblage)]
 
@@ -416,7 +418,7 @@ data.frame(
 
 
 
-### Zonas
+## Zonas
 
 ```{r iNEXT_zona, warning=FALSE}
 (nbSU<-tapply(infoTot$nb_event[m],zona,sum))
@@ -426,7 +428,7 @@ rownames(matrix_zona) <- names(sum_abu)[sapply(sum_abu,length)>0]
 iNEXT_zona <- iNEXT(apply(matrix_zona,1,function(x)x[x>0]),datatype = "abundance")
 ```
 
-```{r CurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de anfibios colectada, calculos basados en la abundancia de las especies colectadas. Representación de las zonas"}
+```{r CurvaRiqueza_zona, fig.width=7, fig.height=5,fig.cap="Curvas de rarefacción/extrapolación de la riqueza de reptiles colectada, calculos basados en la abundancia de las especies colectadas. Representación de las zonas"}
  ## especificaciones de ggplot
 A<-iNEXT_ggplot_optimizado(iNEXT_zona,type=1,col=colList$zonas$color[colList$zonas$platform %in% zona],orderAssemblage = colList$zonas$platform[colList$zonas$platform %in% zona], labY='Riqueza', labX='Número de individuos')
 A
@@ -475,9 +477,10 @@ data.frame(
   sim_estimado=paste(tabEst_zona$sim_estimado,tabEst_zona$sim_estimado_se,sep=" ± ")
  )%>%
   kable(booktabs=T, longtable=T,col.names = c("Zona","eventos","coverage","Riqueza colectada","observado","estimado","observado","estimado","observado","estimado"),caption="Estimaciones de diversidad por zonas desde la matriz de abundancia")%>%
-  column_spec(4,width='1.5cm')%>%
+  column_spec(4,width="1.5cm")%>%
   add_header_above(c(" "=4, "q0 (riqueza)" = 2,"q1 (Shannon)"=2,"q2 (Simpson)"=2))
 ```
+
 
 # Perfiles de números efectivos de especies
 
@@ -491,7 +494,6 @@ effectiveTaxNbProfile(iNEXT_tot, iNEXT_categ = iNEXT_landcov, colCateg = colList
 # Curvas de rango Abundancia
 
 ```{r}
-herp_matrix<-import_herp$herp_amphibian_matrix
 rango_abundancia<-list()
 ```
 
@@ -517,7 +519,7 @@ rango_abundancia$total_zona <- rankAbundance(herp_matrix,type="abundance",extraL
 ## Mostrando las coberturas
 
 ```{r rangoAbundanciaTotal_cobertura, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, mostrando las coberturas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada cobertura."}
-rango_abundancia$total_cobertura <- rankAbundance(herp_matrix,type="abundance",extraLines = landcov, extraCol = colList$landcover$color,legendTitle = "Cobertura",legendOut = T, MARG=c(10,6.5,1,8),posNameSp = -.1,byTICK = 250, byLABELS = 500)
+rango_abundancia$total_cobertura <- rankAbundance(herp_matrix,type="abundance",extraLines = landcov, extraCol = colList$landcover$color,legendTitle = "Cobertura",legendOut = T, MARG=c(10,4.5,1,8),posNameSp = -.1,byTICK = 250, byLABELS = 500)
 ```
 
 \clearpage
@@ -529,7 +531,7 @@ rango_abundancia$total_cobertura <- rankAbundance(herp_matrix,type="abundance",e
 ```{r rangoAbundanciaTotal_bosque_ripario, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los bosques riparios, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Bosque Ripario",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$bosqueRipario_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Ripario"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9,6.5,1,8),posNameSp = -.1,byTICK = 100,byLABELS = 200,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$bosqueRipario_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Ripario"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9,4.5,1,8),posNameSp = -.1,byTICK = 100,byLABELS = 200,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 \clearpage
 
@@ -541,7 +543,7 @@ rango_abundancia$bosqueRipario_tempo <- rankAbundance(mat, type="abundance",extr
 ```{r rangoAbundanciaTotal_Bosque_Abierto, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en las bosque abiertos, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Bosque Abierto",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$bosque_abierto_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Abierto"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.5,8,1,8),posNameSp = -.05,byTICK =  10, byLABELS = 20,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$bosque_abierto_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Bosque Abierto"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.5,4.5,1,8),posNameSp = -.05,byTICK =  10, byLABELS = 20,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
@@ -561,7 +563,7 @@ rango_abundancia$bosque_denso_tempo <- rankAbundance(mat, type="abundance",extra
 ```{r rangoAbundanciaTotal_Herbazales, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los herbazales, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Herbazales",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$herbazales_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Herbazales"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.1,7.5,1,8),byTICK = 50, byLABELS = 100,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$herbazales_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Herbazales"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.1,4.5,1,8),byTICK = 50, byLABELS = 100,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
@@ -571,7 +573,7 @@ rango_abundancia$herbazales_tempo <- rankAbundance(mat, type="abundance",extraLi
 ```{r rangoAbundanciaTotal_Pastos, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los pastos, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Pastos",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$pastos_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Pastos"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(8,5.5,1,8),byTICK = 1, byLABELS = 1,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$pastos_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Pastos"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(8,6.6,1,8),byTICK = 1, byLABELS = 1,posNameSp = -0,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
@@ -581,36 +583,39 @@ rango_abundancia$pastos_tempo <- rankAbundance(mat, type="abundance",extraLines 
 ```{r rangoAbundanciaTotal_Vía, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en las vías, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
 mat<-herp_matrix[landcov=="Vias",]
 mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$vía_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Vias"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.2,8.5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
+rango_abundancia$vía_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Vias"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.2,4.5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
 ```
 
 \clearpage
-
-### Cuerpos de agua
-
-```{r rangoAbundanciaTotal_agua, fig.height=5, fig.width=8, fig.cap="Grafica Rango-Abundancia, orden según las abundancias totales, en los cuerpos de aguas, mostrando las temporadas. El subgrafico \"Perfiles\" incluye todas las especies y está ordenado según las abundancias en cada temporada."}
-mat<-herp_matrix[landcov=="Cuerpos Agua",]
-mat<-mat[,as.logical(colSums(mat))]
-rango_abundancia$vía_tempo <- rankAbundance(mat, type="abundance",extraLines = tempo[landcov=="Cuerpos Agua"], extraPch= colList$tempo$pch, extraCol = colList$tempo$color,legendTitle = "Temporada",legendOut = T, MARG=c(9.2,4.5,1,8),byTICK = 5, byLABELS = 10,posNameSp = -.1,profilesOutFig = c(.8,.99,0.4,0.65))
-```
-
-\clearpage
-
 
 
 ## Exportar los datos de los graficos
 
-```{r, cache=F}
+```{r}
 rango_abundancia<-lapply(rango_abundancia,function(x)as.data.frame(t(x)))
-save_in_excel("anfibios_dataRangoAbundancia.xlsx",rango_abundancia)
+save_in_excel("reptiles_dataRangoAbundancia_sinPal.xlsx",rango_abundancia)
 ```
 
 
 # Diversidad beta (NMDS)
 
+```{r}
+herp_matrix["ANH_109_T2",herp_matrix["ANH_109_T2",]>0]
+colSums(herp_matrix[,c("Micrurus dumerilii","Oxyrhopus petolarius")])
+```
+
+En la ANH_109_T2, solo hay 2 individuos muestreados, esta unidad de muestreo no puede estar integrada en los análisis, porque 50% de su abundancia (*Oxyrhopus petolarius*) está solo presente en este sitio
+
 ```{r nmds_tot_}
-set.seed(198)# in order to be able to obtain the same results in two different runs
+set.seed(12)# in order to be able to obtain the same results in two different runs
 require(vegan)
+anh <- anh[-which(rownames(herp_matrix)=="ANH_109_T2")]
+landcov <- landcov[-which(rownames(herp_matrix)=="ANH_109_T2")]
+zona <- zona[-which(rownames(herp_matrix)=="ANH_109_T2")]
+tempo <- tempo[-which(rownames(herp_matrix)=="ANH_109_T2")]
+herp_matrix <- herp_matrix[-which(rownames(herp_matrix)=="ANH_109_T2"),]
+herp_matrix <- herp_matrix[,as.logical(colSums(herp_matrix))]
+
 (nmds_tot <- metaMDS(herp_matrix,distance='bray',trymax = 1000,trace=F,k=2))
 nmds_tot_scores<-scores(nmds_tot)
 ```
@@ -624,7 +629,7 @@ A <- stressplot(nmds_tot)
 
 **Nota sobre la calidad de representación de la NMDS**
 
-En la figura \ref{ndms_tot_stressplot}, se muestra el "estrés" del método aplicado sobre la matriz de abundancia de anfibios.
+En la figura \ref{ndms_tot_stressplot}, se muestra el "estrés" del método aplicado sobre la matriz de abundancia de reptiles.
 Las NMDS no tienen una homogeneización de las normas del espacio, es decir, una distancia de 2 cm en un lado del espacio no tiene obligatoriamente  el mismo sentido que una distancia de 2cm en otro lado del espacio.
 Lo que intenta optimizar la NMDS es el orden de las distancias entre los puntos en la matriz de distancia entre composiciones (acá matriz de distancia de Bray-Curtis) y las distancias en el espacio del análisis.
 El gráfico de la figura \ref{ndms_tot_stressplot} muestra el resultado de este esfuerzo de optimización.
