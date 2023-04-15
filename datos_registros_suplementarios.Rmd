@@ -272,6 +272,20 @@ GROUP BY value_int;
 ```
 
 
+# Mamiferos
+
+## Individual characteristics
+
+Tenemos un problema, si damos una caracteristica individual en una fila del DwC de registros, la fila debería debería contener un solo individuos...
+Con el ejemplo de los sexos, condición reproductiva y etapa de vida:
+
+```{sql}
+SELECT cd_reg,table_orig,"row.names",organism_quantity, sex, life_stage, reproductive_condition 
+FROM raw_dwc.mamiferos_tot_registros 
+WHERE (sex IS NOT NULL OR life_stage IS NOT NULL OR reproductive_condition IS NOT NULL) AND organism_quantity::int>1
+```
+
+
 ```{r}
 dbDisconnect(fracking_db)
 ```
