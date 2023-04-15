@@ -56,5 +56,5 @@ devDocs/*.tex
 *.RData
 *.png
 Vladimir/*
-.Rout
+*.Rout
 
