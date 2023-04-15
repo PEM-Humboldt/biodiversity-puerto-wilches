@@ -1,0 +1,167 @@
+**General**:
+
+* a veces el mismo ANH está anotado como caracterización y una de las plataformas
+    + sé que es algo que ya hemos hablado y entiendo las razones
+    + *mi solución*: no poner la zona como variable "dura" en la base de datos: se puede asignar dinamicamente
+
+->  ver con francisco como areglar geografia ANH
+
+
+* varios grupos utilizan "occurrenceID" en las pestañas de eventos para los eventID, yo creo que es una muy mala idea si queremos enviar los datos en bases internacionales
+    + cambiarlo ahora me obligaría a cambiar mucho de mi codigo... y ya no es un problema porque lo pusé en la variable event_id de la base
+
+* creo que hay algo como una confusion entre camapañas de campo, estaciones, y año de muestreo...
+    + podríamos hacer una tabla que permite definir los periodos climaticos: fecha de principio, fecha de fin, nombre de la estación, simplificaría mucho! Así cruzar con las fechas de campo nos permite tener una categorización clara
+->junio2021->2022 aguas altas
+->enero2022->agosto 2022-> aguas bajas
+
+* yo pienso que cuando hay registros que pasan de un grupo a otro, no debería estar así: se debería anotar en el grupo que hizo el muestreo, con todas las variables, y manejarlo despues con filtros taxonomicos... pero no creo que tengamos la información suficiente. Podemos intentar, que piensan?
+-> no es urgente
+
+**Herpetos**
+
+* yo utilicé el anh+año para agrupar los eventos, está bien?
+-> OK
+* ya se corrigió el problema de coordenadas: super!
+-> no existe la coordenada registro en herpetos: a averiguar
+* hay un taxon sin taxonomía resuelta
+   + voy a manejarlo
+* había anotado un problema de formato en las fechas/tiempo
+   + pero ya todo parece bien!
+
+**Atropellamientos**
+
+* codifiqué CARAC y KAPLA como puntos de referencia (usualmente los ANH son los puntos de referencia)
+
+
+**Mariposas**
+
+* Acá tambien utilicé los años para definir los grupos de eventos
+* tuvé que suprimir espacios en las horas
+* a veces no existe la hora inicial en los eventos: pusé la hora promedia... pero no está bien!
+* cuando la hora final no existe, pusé hora inicial + 48 horas
+
+
+**Hormigas**
+
+* Horas faltantes para algunos eventos de winklers
+   + mis variables date_time_begin y date_time_end (timestamp) quedan vacías y la fecha está en una variable suplementaria: pesado...
+-> averiguar
+
+
+**Escarabajos**
+
+* conflictos de eventID con hormigas en casos de capturas manuales
+  + añadí "esca_" al principio de event_id
+* falta mucha información temporal
+  + utilicé un sistema de variable extra para las fechas sin horas
+* A veces las horas de registro no están en el rango de fechas/horas de eventos, al menos, tenemos que hacer el trabajo de cruzarlos para entender las relaciones, pero es un trabajo tremendo (ver tabla 62)
+* no entiendo porque hay rangos de horas en los registros (que aporta al rango de horas de los eventos?)
+-> pedir que significa informacion temporal
+
+
+**Colembolos**
+
+* parece que la hora en registros es la hora inicial de eventos (tendría más sentido la hora final, no?)
+* la hora final en eventos corresponde exactamente a hora inicial + 6 días... imagino que no se anoto la hora real?
+
+**Aves**
+
+* occurrenceID en lugar de eventID (ver general)
+* un evento sin ANH (ver tabla 80)
+* averiguar los "recorridos" y "accidental", ha sido un trabajo tremendo separar y codificar esos
+-> borrar AT_Crotophaga
+* parece que los samplingEffort no corresponden a las fechas/horas iniciales/finales... Eso es verdad tanto para las redes de niebla que para los recorridos. Es muy posible que en el caso de las redes de niebla, sea un calculo un poco complejo en funcion del numero de trampas
+-> ver si se puede recuperar la informacion
+* Parece que acá tambien la hora inicial de eventos está utilizada para los registros, en algunos casos la hora es faltante
+-> preguntar
+* Aves has sampl*ing* while the others have sampl*e* in the name of the columns
+  + cambiarlo ahora me destruye el codigo...
+
+
+**Mamiferos**
+
+* Que hacemos con el event sin punto de referencia (ANH_M_CM_4_T2)?
+   + lo pusé sin punto de referencia en la base de datos, pero ha necesitado un cambio estructural de la base, y causa baja de eficiencia. Ahora bien, si es así es así y es menos grave que perder datos... una buena solución sería afectarle un ANH o punto de referencia, incluso si el evento está solo en este punto, pero necesito más información
+-> Atropellamiento (quitar)
+* Existen 3 eventos de pitfall en los mamiferos, pero la información sobre esos eventos es minima,
+no entiendo si vienen de pitfall de otros grupos (en aquellos casos se anota ‘accidental’ en la
+base de datos. Si se tratan de trampa pitfall especificas entonces se debe añadir el protocolo
+especifico en la base de datos.
+
+* No hay Sherman en 2022, averiguar que está bien
+
+* Averiguar que entendí bien lo que son los metodos menos representado:
+  + Captura manual son eventos puntuales que puedo categorizar como accidental en el sentido que no
+hacen parte de un plan de muestreo a larga escala
+  + Pitfall vienen de planes de muestreo de otros grupos
+  + Busqueda por encuentros visuales vienen de herpetos
+  + Existen accidentales que vienen de las redes de niebla de los aves (‘Redes de niebla’ en lugar de ‘Red niebla’
+  + Un evento ‘Encuentro’ corresponde a un encuentro accidental
+  + Parece que hay grabaciones que no son de ultrasonidos, pero se describe en las variables extra de las grabaciones
+->ver como excluir de los analisis los que tienen sampling effort muy diferentes
+  + No separo las grabaciones en varios metodos (tal vez se justifica? automatico o no? us o no, etc.)
+* 'Hotel' no es un ANH, pero lo pusé como punto de referencia
+*  en las trampas Sherman, solo está la hora 7:00, pero imagino que se instalarón a las 6 de la noche porque el tiempo está anotado en numero de noches
+  + Acá voy a reemplazar la hora inicial de los Sherman por 18:00:00 en lugar de 07:00:00 porque me parece que las trampas funcionan durante la noche, me parece que la hora indicada es la hora final
+*  Existen rangos de horas que utilizan ‘-’ como separador en lugar de ‘/’ (ver tabla 103)
+* En las grabaciones del hotel una fecha no tiene el milenario (‘2022-03-19/22-04-08’)
+* faltan muchas horas en eventos
+* problemas de formatos en horas de las redes de nieblas en registros
+* en mamiferos (no sonidos) Parece que hay una codificación de los organism_id, pero hay repeticiones y organism_id faltantes, en sonidos no existe orgasnismID
+-> recaptura ORGANIZAR cuando no este, hace parte de accidental
+   + lo que hicé :
+      + extraer el id del occurrence_id para poner un occurrence_id cuando no haya
+      + contar las replicationes de occurrence_id iguales y poner _rep[0-9] a las repeticiones
+      + guardar los occurrence_id que no presentan problemas
+* en registros: eventRemarks esta pensado como el event_id, pero a veces no corresponden (es importante averiguar que el verdadero eventID no es lo que está escrito en event_remarks!) (ver tabla 109)
+
+**Peces**
+
+* occurrenceID en lugar de eventID (ver general)
+* En peces usualmente no se anota el tiempo final, pero el tiempo inicial y el sampling effort
+ stán muy limpios entonces es relativamente facil calcularlos
+* Hay un error raro y es que en caso de electropesca, sampling_size_unit da 1 minuto cuando sampling effort pueda ser muy differente, voy a utilizar sampling effort
+* Not sure about the vocabulary in english, particularly the difference between dragnet and trawlnets and what would better translate redes de arrastre in a continental set (es que tengo casí todo en ingles y español en la base de datos, para poder hacer las exportaciones)
+-> vamos a preguntar
+* Peces (como aves) has sampling while the others have sample in the name of the columns
+* los eventos no tienen hora final... voy a considerar que la hora + tiempo da la hora final
+* los comentarios sobre los eventos son muy largos, para guardar una lisibilidad de la tabla, se van a poner en la tabla extra
+
+
+**hidrobiologico**
+
+* Ya tenía entendido que las campañas de 2022 correspondían al periodo de aguas bajas, pero parece que hay 3 eventos de 2021 en aguas bajas (tabla 127)
+* los metodos no eran muy limpios, pero parece que lo logramos entender con Adriana (ver p.161-169 y p. 175-180)
+* Los event_remarks son muy largos, voy a ponerlos en event_extra
+* Anotar: en sample_size_value hay un espacio que hace que el campo esta considerado como texto
+* ver tabla 144 para sampling effort
+* Commas intempestivos en el campo de organism_quantity
+* En la mayoría de los casos no corresponden las cifras de abundancias (ver tabla 148)
+
+TODO:
+* suprimir la modificación de los orgasnism_id en herpetos, y ver si funciona!
+* problema de afectación de las personas
+* unificar las descripciones de repeticiones
+No es urgente
+* averiguar tt.table_orig para la afectación de taxones en los codigos
+
+* añadir variable para filtro de alados en hormigas
+->urgente
+* intentar una integración de botanica para ver cuales podrían ser las dificultades
+-> medio
+* averiguar correspondancia entre samplingEffort y differencias entre date_time_begin y date_time_end
+-> medio
+* poner las variables suplementarias en escarabajos (caracteristicas de individuos) para poder hacer los filtros
+-> urgente
+* añadir variables ambientales para acuaticos
+-> urgente
+* arreglar las cuestiones de taxonomía / pseudo-taxonomía según lo hablado en las reuniones de grupo...
+-> urgente
+
+TODO (largo plazo):
+
+* cambiar las definiciones de sampling effort, unidades etc.: funciona pero no es optimal ni flexible
+
+
+Electrofishing, cast net, gillnets, fishing net

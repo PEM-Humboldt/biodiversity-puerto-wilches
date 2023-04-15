@@ -1,0 +1,131 @@
+---
+title: "Miscellaneous exports and petitions"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+---
+
+
+```{r setup}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+require(openxlsx)
+require(RPostgreSQL)
+
+```
+
+```{r}
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+```
+
+
+# Recapitulative ANH, event_id coordinates and habitat
+
+See Francisco's mail (27/02/2023 09:49).
+
+## Coordinates of each event
+
+For events with line geometries, the second point of the line is extracted!
+All coordinates in SRID 3116 (<https://spatialreference.org/ref/epsg/magna-sirgas-colombia-bogota-zone/>).
+
+```{sql, output.var="coord_events"}
+WITH e_lines AS(
+SELECT event_id, name_pt_ref, biol_gp, aquatic,(ST_dumpPoints(li_geom)).*
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol dgp USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE li_geom IS NOT NULL
+)
+SELECT a.* 
+FROM 
+((
+SELECT event_id, name_pt_ref, biol_gp, aquatic,
+    ST_X(e.pt_geom) x_coord_3116, ST_Y(pt_geom) y_coord_3116
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol dgp USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE pt_geom IS NOT NULL
+)
+UNION
+(
+SELECT event_id, name_pt_ref, biol_gp, aquatic,
+    ST_X(geom), ST_Y(geom)
+FROM e_lines
+WHERE path=ARRAY[2]
+)) a
+LEFT JOIN main.punto_referencia pr USING (name_pt_ref)
+ORDER BY num_anh,biol_gp
+```
+
+## Recap by anh number
+
+```{sql output.var="anh_recap"}
+SELECT name_pt_ref, ARRAY_AGG(DISTINCT biol_gp) biol_gps, ARRAY_AGG(DISTINCT event_id) event_ids
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol dgp USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+GROUP BY name_pt_ref, num_anh
+ORDER BY num_anh
+```
+
+## Habitats/landcover
+
+* landcov_from_event_coord is the landcover from the intersection between landcover map and coordinates
+* landcov_db_event is the landcover from the database at the event level
+* landcov_db_gp_event is the landcover from the database at the gp_event (ANH + gp_biol + Method) level
+
+
+```{sql output.var="habitat_landcover"}
+WITH e_lines AS(
+SELECT event_id, name_pt_ref, biol_gp, aquatic, cd_gp_event, cd_event, (ST_dumpPoints(li_geom)).*
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol dgp USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE li_geom IS NOT NULL AND NOT aquatic
+)
+SELECT a.event_id, a.biol_gp, dl.landcov landcov_from_event_coord, he.habitat landcov_db_event, lget.landcov landcov_db_gp_event
+FROM 
+((
+SELECT event_id, name_pt_ref, biol_gp, aquatic,cd_gp_event,cd_event,
+    pt_geom
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol dgp USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+WHERE pt_geom IS NOT NULL AND NOT aquatic
+)
+UNION
+(
+SELECT event_id, name_pt_ref, biol_gp, aquatic,cd_gp_event,cd_event,
+    geom
+FROM e_lines
+WHERE path=ARRAY[2]
+)) a
+LEFT JOIN main.punto_referencia pr USING (name_pt_ref)
+LEFT JOIN landcov_gp_event_terrestrial lget USING(cd_gp_event)
+LEFT JOIN habitat_event he USING (cd_event)
+LEFT JOIN spat.landcov l ON ST_intersects(a.pt_geom,l.the_geom)
+LEFT JOIN spat.def_landcov dl ON l.cd_landcov=dl.cd_landcov
+--WHERE dl.landcov<>he.habitat OR dl.landcov<>lget.landcov OR he.habitat<>lget.landcov
+ORDER BY num_anh,biol_gp
+```
+
+## Exporting
+
+```{r}
+source("saveInExcel.R")
+save_in_excel("recapCoordLandcovAnh.xlsx",list(habitat_landcover=habitat_landcover,anh_recap=anh_recap,coord_events=coord_events))
+```
+

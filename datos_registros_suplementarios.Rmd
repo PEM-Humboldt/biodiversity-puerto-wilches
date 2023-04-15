@@ -1,0 +1,292 @@
+---
+title: "Integración de los datos suplementarios de los grupos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+       latex_engine: xelatex
+---
+
+
+************************
+
+Se trata en este documento de añadir los datos que no hacen parte de las variables principales de la estructura general de la base de datos, por ejemplo:
+
+* variables ambientales
+* caracteristicas individuales de los individuos muestreados (formas de vida, sexo, edad etc)
+* etc.
+
+
+```{r setup}
+require(openxlsx)
+require(RPostgreSQL)
+fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+```
+
+
+# Hormigas
+
+## Individual characteristics
+Es muy importante añadir las caracteristicas individuales de las hormigas en la base de datos, porque eso hace parte de los filtros para las exportaciones de los datos (alados se excluyen)
+Esas están en la variable occurrence_remarks que contiene esas categorias:
+
+
+
+```{sql}
+SELECT occurrence_remarks, count(*)
+FROM raw_dwc.hormigas_registros
+GROUP BY occurrence_remarks;
+```
+
+**Anotar: eso complica mucho el tratamiento de este campo, una categoria como Obreras y huevos impide totalmente la codificación clara de los individuos: debería haber una fila para los adultos, y otra para los huevos...**
+
+Lo que voy a hacer es no considerar los huevos y cocones... y transformar en 2 variables: caste y sexo
+
+```{sql}
+INSERT INTO main.def_var_ind_charac(var_ind_char, type_var, var_ind_char_spa)
+VALUES
+ ('Ant caste','categorial', 'Casta de hormiga'),
+ ('Sex', 'categorial', 'Sexo')
+RETURNING cd_var_ind_char,var_ind_char, type_var, var_ind_char_spa
+;
+```
+
+```{sql}
+INSERT INTO main.def_ind_charac_categ(categ,cd_var_ind_char,categ_spa)
+VALUES
+('Worker',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Ant caste'),'Obrera'),
+ ('Alate',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Ant caste'),'Alado'),
+ ('Queen',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Ant caste'),'Reina'),
+ ('Male',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Sex'),'Macho'),
+ ('Female',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Sex'),'Hembra'),
+ ('Sterile',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Sex'),'Estéril')
+RETURNING cd_categ,categ,cd_var_ind_char,categ_spa
+```
+
+```{sql}
+INSERT INTO main.individual_characteristics AS ic (cd_reg,cd_categ,cd_var_ind_char)
+WITH a AS(
+SELECT  
+ cd_reg,
+  CASE
+    WHEN occurrence_remarks ~ '[Rr]eina' THEN 'Queen'
+    WHEN occurrence_remarks ~ '[Aa]lado' THEN 'Alate'
+    WHEN occurrence_remarks ~ '[Oo]brera' THEN 'Worker'
+  END caste
+FROM raw_dwc.hormigas_registros
+)
+SELECT a.cd_reg, dc.cd_categ, dc.cd_var_ind_char
+FROM a
+JOIN main.def_ind_charac_categ dc ON caste=categ AND dc.cd_var_ind_char=(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Ant caste')
+RETURNING ic.cd_reg, ic.cd_categ, ic.cd_var_ind_char
+```
+
+```{sql}
+INSERT INTO main.individual_characteristics AS ic (cd_reg,cd_categ,cd_var_ind_char)
+WITH a AS(
+SELECT  
+ cd_reg,
+  CASE
+    WHEN occurrence_remarks ~ '[Rr]eina' OR occurrence_remarks ~ '[Hh]embra' THEN 'Female'
+    WHEN occurrence_remarks ~ '[Mmacho]' THEN 'Male'
+    WHEN occurrence_remarks ~ '[Oo]brera' THEN 'Sterile'
+  END sex
+FROM raw_dwc.hormigas_registros
+)
+SELECT a.cd_reg, dc.cd_categ, dc.cd_var_ind_char
+FROM a
+JOIN main.def_ind_charac_categ dc ON sex=categ AND dc.cd_var_ind_char=(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Sex')
+RETURNING ic.cd_reg, ic.cd_categ, ic.cd_var_ind_char
+```
+
+**Pusé como nulo el sexo de los cocones y huevos, así como sus castas, pero no sé si es la mejor opción**
+
+
+# Escarabajos
+
+## Individual characteristics
+
+
+
+Es muy importante añadir las caracteristicas individuales de los escarabajos en la base de datos, porque eso hace parte de los filtros para las exportaciones de los datos (larvas/coprofagos)
+Esas están en la variable life_stage que contiene esas categorias:
+
+
+
+```{sql}
+SELECT life_stage, count(*)
+FROM raw_dwc.escarabajos_registros
+GROUP BY life_stage;
+```
+
+```{sql}
+INSERT INTO main.def_var_ind_charac(var_ind_char, type_var, var_ind_char_spa)
+VALUES
+ ('Life stage','categorial', 'Estado de vida')
+RETURNING cd_var_ind_char,var_ind_char, type_var, var_ind_char_spa
+;
+```
+
+```{sql}
+INSERT INTO main.def_ind_charac_categ(categ,cd_var_ind_char,categ_spa)
+VALUES
+ ('Larva',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage'),'Larva'),
+ ('Adult',(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage'),'Adulto')
+RETURNING cd_categ,categ,cd_var_ind_char,categ_spa
+```
+
+```{sql}
+INSERT INTO main.individual_characteristics AS ic (cd_reg,cd_categ,cd_var_ind_char)
+WITH a AS(
+SELECT  
+ cd_reg,
+  CASE
+    WHEN life_stage ~ '[Ll]arva' THEN 'Larva'
+    WHEN life_stage ~ '[Aa]dulto' THEN 'Adult'
+  END lifestage
+FROM raw_dwc.escarabajos_registros
+)
+SELECT a.cd_reg, dc.cd_categ, dc.cd_var_ind_char
+FROM a
+JOIN main.def_ind_charac_categ dc ON lifestage=categ AND dc.cd_var_ind_char=(SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage')
+RETURNING ic.cd_reg, ic.cd_categ, ic.cd_var_ind_char
+```
+
+```{sql}
+WITH a AS(
+SELECT dicc.categ life_stage, find_higher_id(cd_tax, 'SFAM') cd_tax, protocol,qt_int
+FROM main.registros r 
+LEFT JOIN main.individual_characteristics ic USING(cd_reg)
+LEFT JOIN main.def_ind_charac_categ dicc ON dicc.cd_var_ind_char= (SELECT cd_var_ind_char FROM main.def_var_ind_charac WHERE var_ind_char='Life stage') AND ic.cd_categ=dicc.cd_categ
+LEFT JOIN main.event USING (cd_event) 
+LEFT JOIN main.gp_event ge USING (cd_gp_event) 
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE ge.cd_gp_biol='esca'
+)
+SELECT life_stage, name_tax subfamily, protocol,count(*) occurrences, sum(qt_int) total_abundance
+FROM a
+LEFT JOIN main.taxo USING (cd_tax)
+GROUP BY life_stage, name_tax, protocol
+;
+```
+
+# Hidrobiologicos
+## Cantidades que permiten pasar de la abundancia contada a las densidades
+
+
+```{sql}
+SELECT hr.event_id,sample_size_value, he.sampling_effort, measurement_value__volumen_filtrado_,measurement_value__área_total_muestreada_por_estación_,measurement_value__área_total_raspada_por_muestra_, e.samp_effort_1, e.samp_effort_2
+FROM raw_dwc.hidrobiologico_registros hr
+LEFT JOIN raw_dwc.hidrobiologico_event he USING (event_id)
+LEFT JOIN main.event e ON hr.cd_event=e.cd_event
+ORDER BY he.sampling_protocol,event_id
+```
+
+
+```{sql}
+SELECT qt_int/samp_effort_1, qt_double
+FROM main.registros --USING (cd_reg)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='fipl'
+```
+```{sql}
+SELECT event_id,protocol_spa,qt_int/samp_effort_1, qt_double
+FROM main.registros --USING (cd_reg)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE cd_gp_biol='minv'
+```
+
+```{sql}
+SELECT qt_int/samp_effort_1, qt_double
+FROM main.registros --USING (cd_reg)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='zopl'
+```
+
+```{sql}
+SELECT qt_int/samp_effort_1, qt_double
+FROM main.registros --USING (cd_reg)
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='peri'
+```
+
+
+# Filtro de 30 minutos para considerar registros como independientes en cameras trampas
+
+
+```{sql}
+INSERT INTO main.def_var_registros_extra(var_registros_extra,type_var,var_registros_extra_spa,var_registros_extra_comment)
+VALUES('30 minutes period','reference','periodo de 30 minutos','los grupos están definidos sobre un periodo de 30 minutos desde la primera fotografía y contienen todos los registros que tienen la misma especie en este periodo, dentro de un mismo evento'
+);
+BEGIN TRANSACTION;
+CREATE TEMPORARY TABLE period_30min
+(
+  id serial PRIMARY KEY,
+  cd_event int NOT NULL,
+  cd_tax int NOT NULL,
+  date_time_range tsrange NOT NULL
+)
+ON COMMIT DROP;
+DO 
+$$
+DECLARE r record;
+        curid int;
+BEGIN
+  FOR r IN SELECT cd_reg,cd_tax,cd_event,date_time FROM main.registros LEFT JOIN main.event USING (cd_event) LEFT JOIN main.gp_event USING (cd_gp_event) WHERE cd_gp_biol='catr' ORDER BY cd_event,date_time
+  LOOP
+   SELECT id INTO curid FROM period_30min p WHERE r.cd_tax=p.cd_tax AND r.cd_event=p.cd_event AND r.date_time <@ p.date_time_range;
+   IF curid IS NULL AND r.date_time IS NOT NULL THEN
+    INSERT INTO period_30min(cd_event,cd_tax,date_time_range)
+      VALUES(
+        r.cd_event,r.cd_tax,(SELECT tsrange(r.date_time,r.date_time + '30 min','[]'))
+      );
+   END IF;
+  END LOOP;
+END$$; 
+INSERT INTO main.registros_extra(cd_reg,cd_var_registros_extra,value_int)
+SELECT cd_reg,(SELECT cd_var_registros_extra FROM main.def_var_registros_extra WHERE var_registros_extra='30 minutes period'),id
+FROM main.registros reg
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN period_30min p ON p.cd_event=reg.cd_event AND p.cd_tax=reg.cd_tax AND reg.date_time <@ p.date_time_range
+WHERE cd_gp_biol='catr' AND id IS NOT NULL;
+COMMIT;
+SELECT value_int,COUNT(DISTINCT cd_reg)
+FROM main.registros_extra
+WHERE cd_var_registros_extra=(SELECT cd_var_registros_extra FROM main.def_var_registros_extra WHERE var_registros_extra='30 minutes period')
+GROUP BY value_int;
+```
+
+
+# Mamiferos
+
+## Individual characteristics
+
+Tenemos un problema, si damos una caracteristica individual en una fila del DwC de registros, la fila debería debería contener un solo individuos...
+Con el ejemplo de los sexos, condición reproductiva y etapa de vida:
+
+```{sql}
+SELECT cd_reg,table_orig,"row.names",organism_quantity, sex, life_stage, reproductive_condition 
+FROM raw_dwc.mamiferos_tot_registros 
+WHERE (sex IS NOT NULL OR life_stage IS NOT NULL OR reproductive_condition IS NOT NULL) AND organism_quantity::int>1
+```
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
+

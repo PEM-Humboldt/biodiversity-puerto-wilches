@@ -1,0 +1,845 @@
+---
+title: "Integración de los datos suplementarios de los grupos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+       latex_engine: xelatex
+---
+
+
+************************
+
+En este documento, se trata de añadir las coberturas y los datos de habitat acuatico, así como de analisar los datos espaciales a nivel de los puntos de referencia ("ANH"), cuando sea posible...
+
+```{r setup}
+require(openxlsx)
+require(RPostgreSQL)
+fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+```
+
+# Habitats acuaticos
+
+## Datos generales:
+
+**PECES**
+
+```{sql}
+SELECT habitat, water_body, REGEXP_REPLACE(water_body,'^([A-Z]\w+\M)(.*)','\1'), REGEXP_REPLACE(water_body,'^([A-Z]\w+\M)(.*)','\2'), count(*)
+FROM raw_dwc.peces_event
+GROUP BY habitat, water_body
+```
+
+**OTROS**
+
+```{sql}
+SELECT habitat, water_body, clasificación_cuerpo_de_agua, count(*) 
+FROM raw_dwc.hidrobiologico_event
+GROUP BY habitat, water_body, clasificación_cuerpo_de_agua
+```
+
+**Orden Red hídrica**
+
+```{sql}
+SELECT measurement_value__orden__ , count(*)
+FROM raw_dwc.peces_event
+GROUP BY measurement_value__orden__
+ORDER BY measurement_value__orden__
+```
+
+**Note: Existen las Cíenaga El Salado y el caño El Salado, averiguar que no sea un error**
+
+**Note: no existe el dato de orden de red hidrica en los hidrobiologicos otros que peces?**
+
+## En que nivel se definen la variables de habitat acuatico
+
+### Habitat lentico/lotico
+
+```{sql}
+WITH a AS(
+(
+SELECT habitat, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.peces_event
+)
+UNION ALL
+(
+SELECT habitat, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.hidrobiologico_event
+)
+)
+SELECT cd_pt_ref,ARRAY_AGG(DISTINCT habitat) habitats, count(*)
+FROM a
+GROUP BY cd_pt_ref
+HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT habitat),1)>1
+```
+Un solo cd_pt_ref corresponde a 2 habitats diferentes (probablemente se trata de un error).
+
+```{sql}
+WITH a AS(
+(
+SELECT habitat, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.peces_event
+)
+UNION ALL
+(
+SELECT habitat, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.peces_event
+)
+)
+SELECT name_pt_ref, a.habitat, ge.cd_gp_biol, ge.campaign_nb, protocol_spa
+FROM a
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE a.cd_pt_ref=341
+```
+**Parece que lo que pasó es que este ANH, en peces ha sido considerado léntico en la primera temporada de muestreo y lótico en la segunda campaña de muestreo.**
+
+
+### Clasificación cuerpo de agua
+
+```{sql}
+WITH a AS(
+(
+SELECT REGEXP_REPLACE(water_body,'^([A-Z]\w+\M)(.*)','\1') clas_cuer_agua, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.peces_event
+)
+UNION ALL
+(
+SELECT clasificación_cuerpo_de_agua, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.hidrobiologico_event
+)
+)
+SELECT cd_pt_ref, ARRAY_AGG(DISTINCT clas_cuer_agua)
+FROM a
+GROUP BY cd_pt_ref
+HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT clas_cuer_agua),1)>1
+```
+
+Parece que la mayoría de las diferencias son errores ortograficos...
+Excepto en lo que concierne los puntos 324, 342, 345, 346
+
+```{sql}
+WITH a AS(
+(
+SELECT REGEXP_REPLACE(water_body,'^([A-Z]\w+\M)(.*)','\1') clas_cuer_agua, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.peces_event
+)
+UNION ALL
+(
+SELECT clasificación_cuerpo_de_agua, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.hidrobiologico_event
+)
+)
+SELECT name_pt_ref, a.clas_cuer_agua, ARRAY_AGG(DISTINCT ge.cd_gp_biol) gps_biol, ARRAY_AGG(DISTINCT ge.campaign_nb) campaigns, ARRAY_AGG(DISTINCT protocol_spa) protocols
+FROM a
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE a.cd_pt_ref IN (324, 342, 345, 346)
+GROUP BY name_pt_ref, a.clas_cuer_agua,num_anh 
+ORDER BY num_anh
+```
+
+Parece que la definición del tipo de cuerpo de agua depende de si concierne peces o otros organismos acuáticos...
+
+Antes de poder tratar eso, **necesito saber si debemos unificar entre grupos biologicos, o sí los consideramos a la escala de los grupos biologicos**
+
+### Orden Red hídrica
+
+```{sql}
+SELECT pe.cd_pt_ref, ARRAY_AGG(DISTINCT measurement_value__orden__)
+FROM raw_dwc.peces_event pe
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+GROUP BY pe.cd_pt_ref
+--HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT measurement_value__orden__),1) > 1 
+```
+Parece que los ordenes de red hidrica, sí son definidos a la escala de la ANH, sin excepción
+
+# Integrando los habitats acúaticos
+## Lentico Lotico
+
+Creación de la variable:
+
+```{sql}
+INSERT INTO main.def_var_habitat(var_habitat,type_var,var_habitat_spa,var_habitat_comment)
+VALUES('Freshwater ecosystem type',
+   'categorial',
+   'Tipo de ecosistema acuático',
+   NULL
+)
+RETURNING cd_var_habitat,var_habitat,var_habitat_spa;
+```
+
+Creación de las categorías
+```{sql}
+INSERT INTO main.def_categ_habitat(categ,cd_var_habitat,categ_spa)
+VALUES
+  (
+   'Lentic',
+   (SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Freshwater ecosystem type'),
+   'Léntico'
+  ),
+  (
+   'Lotic',
+   (SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Freshwater ecosystem type'),
+   'Lótico'
+  )
+RETURNING cd_categ, categ, categ_spa;
+```
+
+Atribución de los habitat a los ANH:
+
+```{sql}
+INSERT INTO main.habitat(cd_pt_ref,cd_var_habitat,cd_categ)
+WITH a AS(
+(
+SELECT habitat, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.peces_event
+)
+UNION ALL
+(
+SELECT habitat, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.hidrobiologico_event
+)
+)
+SELECT DISTINCT ON (cd_pt_ref) cd_pt_ref,(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Freshwater ecosystem type'),cd_categ--,count(*)
+FROM a
+LEFT JOIN main.def_categ_habitat ON habitat=categ_spa AND cd_var_habitat=(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Freshwater ecosystem type')
+GROUP BY cd_pt_ref,cd_categ
+ORDER BY cd_pt_ref,count(*) DESC
+RETURNING cd_habitat,cd_pt_ref,cd_categ
+```
+
+## Tipo de cuerpo de agua
+
+Creación de la variable:
+
+```{sql}
+INSERT INTO main.def_var_habitat(var_habitat,type_var,var_habitat_spa,var_habitat_comment)
+VALUES('Waterbody type',
+   'categorial',
+   'Tipo de cuerpo de agua',
+   NULL
+)
+RETURNING cd_var_habitat,var_habitat,var_habitat_spa;
+```
+
+Creación de las categorías
+```{sql}
+INSERT INTO main.def_categ_habitat(categ,cd_var_habitat,categ_spa)
+VALUES
+  (
+   'River',
+   (SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type'),
+   'Río'
+  ),
+  (
+   'Stream',
+   (SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type'),
+   'Quebrada'
+  ),
+  (
+   'Swamp',
+   (SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type'),
+   'Ciénaga'
+  ),
+  (
+   'Creek',
+   (SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type'),
+   'Caño'
+  )
+RETURNING cd_categ, categ, categ_spa;
+```
+
+Atribución de los habitat a los ANH:
+
+```{sql}
+INSERT INTO main.habitat(cd_pt_ref,cd_var_habitat,cd_categ)
+WITH a AS(
+(
+SELECT REGEXP_REPLACE(water_body,'^([A-Z]\w+\M)(.*)','\1') clas_cuer_agua, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.peces_event
+)
+UNION ALL
+(
+SELECT clasificación_cuerpo_de_agua, cd_event, cd_gp_event, cd_pt_ref
+FROM raw_dwc.hidrobiologico_event
+)
+),b AS(
+SELECT /*DISTINCT ON (cd_pt_ref)*/ a.cd_pt_ref, cd_gp_biol, CASE WHEN cd_gp_biol = 'pece' THEN 0 ELSE 1 END priority_gp_biol,
+  CASE
+    WHEN clas_cuer_agua ~ '^C[íi][eé]naga$' THEN 'Swamp'
+    WHEN clas_cuer_agua ~ 'R[íi]o' THEN 'River'
+    WHEN clas_cuer_agua ~ '^Que' THEN 'Stream'
+    WHEN clas_cuer_agua ~ 'Ca[ñn]o' THEN 'Creek'
+    WHEN clas_cuer_agua='Poza' THEN 'Swamp'
+  END categ
+    
+    --,count(*)
+FROM a
+LEFT JOIN main.gp_event USING (cd_gp_event)
+)
+SELECT DISTINCT ON (cd_pt_ref) cd_pt_ref,(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type'), cd_categ
+FROM b
+LEFT JOIN main.def_categ_habitat dch ON b.categ=dch.categ AND cd_var_habitat=(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type')
+GROUP BY cd_pt_ref,priority_gp_biol,cd_categ
+ORDER BY cd_pt_ref,priority_gp_biol
+RETURNING cd_habitat,cd_pt_ref,cd_categ
+```
+
+
+
+# Integrating landcovers
+
+
+```{r}
+wb <- loadWorkbook("../Data_Documents/ExtraData/Coberturas_MB.xlsx")
+cob_def<-read.xlsx(wb,sheet = "N3 Cobertura")
+hab_def<-read.xlsx(wb,sheet = "Cob Homologada")
+colnames(hab_def) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(hab_def),perl = T)))
+unique(cob_def[2:3])
+dbWriteTable(fracking_db, name = c("raw_geom","cob_def"),value = cob_def, overwrite=T)
+dbWriteTable(fracking_db, name = c("raw_geom","homolog_def"),value = hab_def, overwrite=T)
+
+```
+
+```{sql}
+INSERT INTO spat.def_landcov(landcov_spa, landcov)
+SELECT DISTINCT "Cobertura", landcover
+FROM raw_geom.cob_def
+RETURNING cd_landcov, landcov, landcov_spa
+```
+
+```{sql}
+SELECT "Cobertura",count(*)
+FROM raw_geom.cobertura rc
+LEFT JOIN raw_geom.cob_def rcd ON rc.n3_cobert=rcd."N3_COBERT"
+LEFT JOIN spat.def_landcov sdl ON rcd."Cobertura"=sdl.landcov_spa
+GROUP BY "Cobertura"
+```
+
+```{sql}
+INSERT INTO spat.landcov(cd_landcov,the_geom)
+SELECT sdl.cd_landcov, ST_transform((ST_Dump(wkb_geometry)).geom,(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)) the_geom
+FROM raw_geom.cobertura rc
+LEFT JOIN raw_geom.cob_def rcd ON rc.n3_cobert=rcd."N3_COBERT"
+LEFT JOIN spat.def_landcov sdl ON rcd."Cobertura"=sdl.landcov_spa
+RETURNING gid,cd_landcov
+```
+
+Corregir los habitats homologados:
+
+```{sql}
+SELECT DISTINCT cobert_xhabitat_aves,
+  CASE
+   WHEN cobert_xhabitat_aves IN ('Pastos limpios','Pastos enmalezados') THEN 'Pastos'
+   WHEN cobert_xhabitat_aves = 'Pastos arbolados' THEN 'Pastos'
+   WHEN cobert_xhabitat_aves = 'Ciénaga' THEN 'Cuerpos Agua'
+   WHEN cobert_xhabitat_aves = 'Herbazal' THEN 'Herbazales'
+   WHEN cobert_xhabitat_aves = 'Bosque denso' THEN 'Bosque Denso'
+   WHEN cobert_xhabitat_aves = 'Bosque abierto' THEN 'Bosque Abierto'
+   WHEN cobert_xhabitat_aves = 'Vías' THEN 'Vias'
+   ELSE cobert_xhabitat_aves
+  END landcov_spa
+FROM raw_geom.homolog_def
+ORDER BY landcov_spa, cobert_xhabitat_aves
+```
+
+```{sql}
+ALTER TABLE raw_geom.homolog_def ADD COLUMN landcov_spa varchar(50) REFERENCES spat.def_landcov(landcov_spa);
+UPDATE raw_geom.homolog_def
+SET landcov_spa=
+  CASE
+   WHEN cobert_xhabitat_aves IN ('Pastos limpios','Pastos enmalezados') THEN 'Pastos'
+   WHEN cobert_xhabitat_aves = 'Pastos arbolados' THEN 'Pastos'
+   WHEN cobert_xhabitat_aves = 'Ciénaga' THEN 'Cuerpos Agua'
+   WHEN cobert_xhabitat_aves = 'Herbazal' THEN 'Herbazales'
+   WHEN cobert_xhabitat_aves = 'Bosque denso' THEN 'Bosque Denso'
+   WHEN cobert_xhabitat_aves = 'Bosque abierto' THEN 'Bosque Abierto'
+   WHEN cobert_xhabitat_aves = 'Vías' THEN 'Vias'
+   ELSE cobert_xhabitat_aves
+  END
+RETURNING cobert_xhabitat_aves,landcov_spa
+;
+```
+
+
+# Asignar las coberturas homologadas de aves 
+
+**NOTA: metodología cambiada, lo guardamos acá solo por información!**
+
+```{sql}
+SELECT grupo_biolo,count(*)
+FROM raw_geom.homolog_def
+GROUP BY grupo_biolo
+```
+
+Elegir la cobertura de la primera temporada de muestreo cuando la cobertura cambio entre las temporadas:
+
+```{sql}
+SELECT *
+FROM raw_geom.homolog_def
+WHERE grupo_biolo='Aves'
+  AND parent_even !~ 'ANH_[0-9]{1,3}$'
+```
+
+```{sql}
+UPDATE raw_geom.homolog_def
+SET parent_even='ANH_282'
+WHERE parent_even='ANH_282 T1'
+RETURNING "row.names", parent_even
+```
+
+```{sql}
+DELETE FROM raw_geom.homolog_def
+WHERE parent_even='ANH_282 T2'
+RETURNING "row.names"
+```
+
+# Diferencia entre ANH de la base de datos y ANH de la lista homologada
+
+```{sql}
+SELECT a.name_pt_ref,hd.parent_even
+FROM (SELECT parent_even FROM raw_geom.homolog_def WHERE grupo_biolo='Aves') hd
+FULL OUTER JOIN 
+ (SELECT DISTINCT cd_gp_biol,name_pt_ref FROM main.gp_event LEFT JOIN main.punto_referencia USING (cd_pt_ref) WHERE cd_gp_biol='aves' AND name_pt_ref IS NOT NULL) a 
+   ON a.name_pt_ref=hd.parent_even
+WHERE a.name_pt_ref IS NULL OR hd.parent_even IS NULL
+```
+
+
+**Faltan 3 ANH en el archivo de Francisco que tienen ANH para Aves en la base de datos**
+
+
+# Small problems...
+
+Homologadas
+
+```{sql}
+SELECT parent_even, ARRAY_AGG(grupo_biolo), ARRAY_AGG(cobert_xhabitat_aves)
+FROM raw_geom.homolog_def
+GROUP BY parent_even
+HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT cobert_xhabitat_aves),1)>1
+
+```
+
+
+Esas coberturas no están definidas:
+
+```{r}
+require(rpostgis)&require(sp)
+zonas<-pgGetGeom(fracking_db,c("main","platform"),geom='zona_geom')
+undefined_LC<-pgGetGeom(fracking_db,query=
+            "SELECT gid, the_geom AS geom 
+          FROM spat.landcov
+          LEFT JOIN spat.def_landcov USING (cd_landcov)
+          WHERE landcov IS NULL OR landcov = 'Other'")
+plot(undefined_LC,col="red",border=NA)
+plot(zonas,add=T)
+```
+
+**TODO: decidir lo que hacemos con los poligonos que no tienen cobertura N3 y que hacer con los poligonos que tienen una cobertura "Otro".**
+
+
+# Coberturas y ANH
+
+Los unicos registros que tienen una coordenada geográfica son los registros de atropellamientos:
+
+```{sql}
+SELECT cd_gp_biol, count(*)
+FROM main.registros r
+LEFT JOIN main.event USING (cd_event)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE r.the_geom IS NOT NULL
+GROUP BY cd_gp_biol
+```
+
+Los eventos que corresponden a puntos son:
+
+```{sql}
+SELECT cd_gp_biol, count(*)
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+WHERE e.pt_geom IS NOT NULL
+GROUP BY cd_gp_biol
+```
+
+Los eventos que corresponden a lineas son:
+
+```{sql}
+SELECT cd_gp_biol, count(*)
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+WHERE e.li_geom IS NOT NULL
+GROUP BY cd_gp_biol
+```
+
+```{sql}
+SELECT name_pt_ref, num_anh, dlpt.landcov_spa, ARRAY_AGG(DISTINCT cd_gp_biol), count(*)
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN spat.landcov lpt ON ST_Intersects(e.pt_geom,lpt.the_geom)
+LEFT JOIN spat.def_landcov dlpt ON lpt.cd_landcov=dlpt.cd_landcov
+LEFT JOIN spat.landcov lli ON ST_Intersects(e.li_geom,lli.the_geom)
+LEFT JOIN spat.def_landcov dlli ON lli.cd_landcov=dlli.cd_landcov
+WHERE cd_gp_biol NOT IN ('aves','pece','herp','mafi','minv','fipl','zopl','peri','atro')
+GROUP BY name_pt_ref, num_anh, dlpt.landcov_spa
+ORDER BY num_anh, count(*) DESC
+```
+
+
+### Convex hulls of ANH
+
+```{sql, results='hide'}
+CREATE MATERIALIZED VIEW spat.anh_info AS(
+WITH a AS(
+SELECT cd_pt_ref,name_pt_ref, cd_gp_biol, event_id, num_anh, pt_geom
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN spat.landcov lpt ON ST_Intersects(e.pt_geom,lpt.the_geom)
+LEFT JOIN spat.def_landcov dlpt ON lpt.cd_landcov=dlpt.cd_landcov
+LEFT JOIN spat.landcov lli ON ST_Intersects(e.li_geom,lli.the_geom)
+LEFT JOIN spat.def_landcov dlli ON lli.cd_landcov=dlli.cd_landcov
+WHERE num_anh IS NOT NULL AND pt_geom IS NOT NULL
+/*GROUP BY name_pt_ref, num_anh, dlpt.landcov_spa
+ORDER BY num_anh, count(*) DESC
+*/
+UNION ALL
+SELECT cd_pt_ref,name_pt_ref, cd_gp_biol, event_id, num_anh, (ST_DumpPoints(li_geom)).geom
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN spat.landcov lpt ON ST_Intersects(e.pt_geom,lpt.the_geom)
+LEFT JOIN spat.def_landcov dlpt ON lpt.cd_landcov=dlpt.cd_landcov
+LEFT JOIN spat.landcov lli ON ST_Intersects(e.li_geom,lli.the_geom)
+LEFT JOIN spat.def_landcov dlli ON lli.cd_landcov=dlli.cd_landcov
+WHERE num_anh IS NOT NULL AND li_geom IS NOT NULL
+)
+SELECT cd_pt_ref, name_pt_ref, num_anh,ARRAY_AGG(DISTINCT cd_gp_biol) cds_gp_biol, ARRAY_AGG(DISTINCT event_id) event_ids, ST_ConvexHull(ST_Collect(pt_geom)) ch_geom, ST_Centroid(ST_Multi(ST_collect(pt_geom))) ct_geom
+FROM a
+GROUP BY cd_pt_ref,name_pt_ref, num_anh
+HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT pt_geom),1)>2
+)
+```
+
+
+# cd_gp_event y landcover
+
+## Acuaticos o terrestros
+La primera cosa que averiguar si hay puntos de referencia que pueden estar mezclados entre organismos acuaticos y terrestres
+
+```{sql}
+SELECT name_pt_ref, ARRAY_AGG(DISTINCT CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END) aqu_ter
+FROM main.gp_event
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+GROUP BY name_pt_ref
+HAVING ARRAY_LENGTH(ARRAY_AGG(DISTINCT CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END),1)>1
+```
+
+Existe una ANH que tiene los 2 tipos de organismos!
+Las demás están especificas...
+
+Para lo siguiente entonces vamos a utilizar este codigo:
+
+```{sql}
+SELECT DISTINCT name_pt_ref, CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END aqu_ter
+FROM main.gp_event
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+```
+
+## Integrar las coberturas y habitats acuaticos
+
+Para afectar un habitat a la escala del evento:
+
+1. si el habitat es acuatico se afecta el habitat escrito en las variables de habitat acuatico (definido a escala del punto de referencia ANH)
+2. si el metodo es de punto fijo de aves, se afecta el habitat homologado para este metodo
+<!--3. si el grupo biologico es herpetos se afecta el habitat que corresponde a la longitud más larga del transecto-->
+3. si el grupo biologico es herpetos se afecta el habitat que corresponde al punto intermedio del transecto
+4. sino, el habitat corresponde al punto del evento
+5. si el punto del evento corresponde a "NULL" o "Otro" en la capa de cobertura se afecta el habitat que corresponde a la mayoría de los habitat homologados para este ANH
+
+Para afectar el habitat final (al grupo de eventos) se afecta el habitat mayoritario en los eventos del grupo de evento
+
+## cobertura a escala del evento
+
+
+**Version anterior**:
+
+```sql
+CREATE MATERIALIZED VIEW habitat_event AS(
+WITH a AS(
+SELECT --DISTINCT ON (pr.cd_pt_ref,ge.cd_gp_event,e.cd_event)
+   pr.cd_pt_ref,
+   pr.name_pt_ref,
+   hd2.parent_even,
+   ge.cd_gp_event,
+   e.cd_event,
+   ge.cd_gp_biol,
+   event_id,
+   l1.cd_landcov, dl1.landcov landcov_pt,
+   l2.cd_landcov,dl2.landcov landcov_herp,ST_Length(ST_intersection(e.li_geom,l2.the_geom)) length_herp,
+   CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END AS aqu_ter,
+   hc1.categ aqu_eco_type,
+   hc2.categ aqu_wat_bod,
+   hdlc.landcov aves_homol,
+   hdlc2.landcov landcov_homol_mayoritario,
+   count(*) nb
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia pr USING (cd_pt_ref)
+LEFT JOIN spat.landcov l1 ON ST_intersects(e.pt_geom,l1.the_geom)
+LEFT JOIN spat.def_landcov dl1 ON l1.cd_landcov=dl1.cd_landcov
+LEFT JOIN spat.landcov l2 ON ST_intersects(e.li_geom,l2.the_geom)
+LEFT JOIN spat.def_landcov dl2 ON l2.cd_landcov=dl2.cd_landcov
+--variable Freshwater ecosystem type
+LEFT JOIN main.habitat h1 ON pr.cd_pt_ref=h1.cd_pt_ref AND h1.cd_var_habitat=(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Freshwater ecosystem type')
+--variable Waterbody type
+LEFT JOIN main.def_categ_habitat hc1 ON h1.cd_categ=hc1.cd_categ
+LEFT JOIN main.habitat h2 ON pr.cd_pt_ref=h2.cd_pt_ref AND h2.cd_var_habitat=(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type')
+LEFT JOIN main.def_categ_habitat hc2 ON h2.cd_categ=hc2.cd_categ
+LEFT JOIN raw_geom.homolog_def hd ON ge.cd_protocol=(SELECT cd_protocol FROM main.def_protocol WHERE protocol='Bird point count') AND hd.grupo_biolo='Aves' AND hd.parent_even=pr.name_pt_ref
+LEFT JOIN spat.def_landcov hdlc ON hdlc.landcov_spa=hd.landcov_spa
+LEFT JOIN raw_geom.homolog_def hd2 ON hd2.parent_even=pr.name_pt_ref
+LEFT JOIN spat.def_landcov hdlc2 ON hdlc2.landcov_spa=hd2.landcov_spa
+WHERE cd_gp_biol != 'atro'
+--WHERE cd_gp_biol='herp'
+GROUP BY pr.cd_pt_ref,
+   ge.cd_gp_event,
+   e.cd_event,
+   event_id,
+   l1.cd_landcov, dl1.landcov,
+   l2.cd_landcov,dl2.landcov,ST_Length(ST_intersection(e.li_geom,l2.the_geom)),
+   CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END,
+   hc2.categ ,
+   hc1.categ ,
+   hdlc.landcov,
+   hdlc2.landcov,
+   ge.cd_gp_biol,
+   hd2.parent_even,
+   pr.name_pt_ref
+),b AS(
+SELECT *, ROW_NUMBER() OVER (PARTITION BY cd_pt_ref,cd_gp_event,cd_event ORDER BY length_herp, nb) priority
+FROM a
+)
+SELECT 
+  cd_gp_event,
+  cd_event,
+  aqu_ter,
+  CASE
+    WHEN aqu_ter='aquatic' THEN aqu_wat_bod
+    WHEN aves_homol IS NOT NULL THEN aves_homol
+    WHEN cd_gp_biol='herp' THEN landcov_herp
+    WHEN landcov_pt IS NOT NULL AND landcov_pt !='Other' THEN landcov_pt
+    WHEN landcov_pt IS NULL OR landcov_pt = 'Other' THEN landcov_homol_mayoritario
+  END habitat,
+  CASE 
+    WHEN aqu_ter='aquatic' THEN aqu_eco_type
+  END aqu_eco_type
+FROM b
+WHERE priority=1 
+)
+;
+```
+
+```{sql}
+CREATE MATERIALIZED VIEW habitat_event AS(
+WITH herp AS (
+SELECT e.cd_event,(ST_DumpPoints(li_geom)).*
+FROM main.event e
+), a AS(
+SELECT --DISTINCT ON (pr.cd_pt_ref,ge.cd_gp_event,e.cd_event)
+   pr.cd_pt_ref,
+   pr.name_pt_ref,
+   hd2.parent_even,
+   ge.cd_gp_event,
+   e.cd_event,
+   ge.cd_gp_biol,
+   event_id,
+   l1.cd_landcov, dl1.landcov landcov_pt,
+   CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END AS aqu_ter,
+   hc1.categ aqu_eco_type,
+   hc2.categ aqu_wat_bod,
+   hdlc.landcov aves_homol,
+   hdlc2.landcov landcov_homol_mayoritario,
+   count(*) nb
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia pr USING (cd_pt_ref)
+LEFT JOIN herp h ON ARRAY[2]=path AND e.cd_event=h.cd_event
+LEFT JOIN spat.landcov l1 ON ST_intersects(COALESCE(h.geom,e.pt_geom),l1.the_geom)
+LEFT JOIN spat.def_landcov dl1 ON l1.cd_landcov=dl1.cd_landcov
+--variable Freshwater ecosystem type
+LEFT JOIN main.habitat h1 ON pr.cd_pt_ref=h1.cd_pt_ref AND h1.cd_var_habitat=(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Freshwater ecosystem type')
+--variable Waterbody type
+LEFT JOIN main.def_categ_habitat hc1 ON h1.cd_categ=hc1.cd_categ
+LEFT JOIN main.habitat h2 ON pr.cd_pt_ref=h2.cd_pt_ref AND h2.cd_var_habitat=(SELECT cd_var_habitat FROM main.def_var_habitat WHERE var_habitat='Waterbody type')
+LEFT JOIN main.def_categ_habitat hc2 ON h2.cd_categ=hc2.cd_categ
+LEFT JOIN raw_geom.homolog_def hd ON ge.cd_protocol=(SELECT cd_protocol FROM main.def_protocol WHERE protocol='Bird point count') AND hd.grupo_biolo='Aves' AND hd.parent_even=pr.name_pt_ref
+LEFT JOIN spat.def_landcov hdlc ON hdlc.landcov_spa=hd.landcov_spa
+LEFT JOIN raw_geom.homolog_def hd2 ON hd2.parent_even=pr.name_pt_ref
+LEFT JOIN spat.def_landcov hdlc2 ON hdlc2.landcov_spa=hd2.landcov_spa
+WHERE cd_gp_biol != 'atro'
+--WHERE cd_gp_biol='herp'
+GROUP BY pr.cd_pt_ref,
+   ge.cd_gp_event,
+   e.cd_event,
+   event_id,
+   l1.cd_landcov, dl1.landcov,
+   CASE WHEN aquatic THEN 'aquatic' ELSE 'terrestrial' END,
+   hc2.categ ,
+   hc1.categ ,
+   hdlc.landcov,
+   hdlc2.landcov,
+   ge.cd_gp_biol,
+   hd2.parent_even,
+   pr.name_pt_ref
+),b AS(
+SELECT *, ROW_NUMBER() OVER (PARTITION BY cd_pt_ref,cd_gp_event,cd_event ORDER BY nb DESC) priority
+FROM a
+)
+SELECT 
+  cd_gp_event,
+  cd_event,
+  aqu_ter,
+  CASE
+    WHEN aqu_ter='aquatic' THEN aqu_wat_bod
+    WHEN aves_homol IS NOT NULL THEN aves_homol
+    WHEN landcov_pt IS NOT NULL AND landcov_pt !='Other' THEN landcov_pt
+    WHEN landcov_pt IS NULL OR landcov_pt = 'Other' THEN landcov_homol_mayoritario
+  END habitat,
+  CASE 
+    WHEN aqu_ter='aquatic' THEN aqu_eco_type
+  END aqu_eco_type
+FROM b
+WHERE priority=1 
+)
+;
+```
+
+## A escala del grupo de eventos
+```{sql}
+CREATE OR REPLACE VIEW landcov_gp_event_terrestrial AS
+(
+  SELECT DISTINCT ON (cd_gp_event) cd_gp_event,cd_landcov, landcov, landcov_spa
+  FROM habitat_event
+  LEFT JOIN spat.def_landcov dl ON habitat=landcov
+  WHERE aqu_ter='terrestrial'
+  GROUP BY cd_gp_event,cd_landcov,landcov,landcov_spa
+  ORDER BY cd_gp_event, count(*) DESC
+);
+```
+
+```{sql}
+CREATE OR REPLACE VIEW habitat_gp_event_aquatic AS
+(
+  SELECT DISTINCT ON (cd_gp_event) cd_gp_event,ch1.categ wat_body_type, ch1.categ_spa tipo_cuerp_agua, ch2.categ eco_type, ch2.categ_spa tipo_ecos
+  FROM habitat_event he
+  LEFT JOIN main.def_categ_habitat ch1 ON ch1.categ=he.habitat
+  LEFT JOIN main.def_categ_habitat ch2 ON ch2.categ=he.aqu_eco_type
+  WHERE aqu_ter='aquatic'
+  GROUP BY cd_gp_event,ch1.categ, ch1.categ_spa, ch2.categ, ch2.categ_spa
+  ORDER BY cd_gp_event, count(*) DESC
+);
+```
+
+## Numbers
+
+```{sql}
+SELECT biol_gp,protocol,landcov,count(*)
+FROM main.gp_event
+LEFT JOIN landcov_gp_event_terrestrial USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+WHERE NOT aquatic
+GROUP BY biol_gp,protocol,landcov
+ORDER BY biol_gp,protocol,count(*) DESC
+```
+
+```{sql}
+SELECT biol_gp,protocol,wat_body_type,tipo_cuerp_agua,eco_type, tipo_ecos ,count(*)
+FROM main.gp_event
+LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+WHERE aquatic
+GROUP BY biol_gp,protocol,wat_body_type,tipo_cuerp_agua,eco_type, tipo_ecos
+ORDER BY biol_gp,protocol,count(*) DESC
+```
+
+
+```{sql}
+SELECT cd_gp_biol, cd_protocol,h1.cd_categ
+FROM main.gp_event
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+LEFT JOIN main.punto_referencia pr USING (cd_pt_ref)
+LEFT JOIN main.habitat h1 ON h1.cd_pt_ref=pr.cd_pt_ref AND cd_var_habitat=2
+WHERE aquatic
+```
+
+# Problema: puntos fuera de las zonas de plataformas
+
+Existen puntos de muestreo que están fuera de las zonas asociadas a las plataformas, tambien existen ANH que están entre 2 plataformas.
+Para evitar esos problemas, lo que voy a hacer es afectar cada punto de referencia a la plataforma que tiene más sentido.
+
+```{sql}
+CREATE VIEW punto_ref_platform AS(
+WITH a AS(
+SELECT cd_pt_ref,name_pt_ref, ge.cd_gp_event, e.cd_event,  p1.platform platform_reg, p2.platform platform_pt, p3.platform platform_li, ST_Length(ST_intersection(li_geom,p3.zona_geom)) length_in_plat,count(*) nb_register
+FROM main.punto_referencia pr 
+LEFT JOIN main.gp_event ge USING (cd_pt_ref)
+LEFT JOIN main.event e USING (cd_gp_event) 
+LEFT JOIN  main.registros r ON r.cd_event=e.cd_event AND r.the_geom IS NOT NULL
+LEFT JOIN main.platform p1 ON ST_intersects(p1.zona_geom,r.the_geom) 
+LEFT JOIN main.platform p2 ON ST_Intersects(p2.zona_geom,e.pt_geom) 
+LEFT JOIN main.platform p3 ON ST_intersects(p3.zona_geom,e.li_geom)
+GROUP BY cd_pt_ref,name_pt_ref, ge.cd_gp_event, e.cd_event, p1.platform,p2.platform,p3.platform,p3.zona_geom
+),b AS(--calculate the majoritary platform por event
+SELECT cd_pt_ref,name_pt_ref,cd_event,platform_reg, platform_pt, platform_li, ROW_NUMBER() OVER (PARTITION BY  cd_event ORDER BY nb_register DESC, length_in_plat DESC) priority
+FROM a
+ORDER BY cd_pt_ref,name_pt_ref,cd_event
+),c AS(
+SELECT DISTINCT ON (cd_pt_ref,name_pt_ref) cd_pt_ref,name_pt_ref,COALESCE(platform_reg,platform_li,platform_pt) platform
+FROM b
+WHERE priority=1
+GROUP BY cd_pt_ref,name_pt_ref,COALESCE(platform_reg,platform_li,platform_pt)
+ORDER BY cd_pt_ref,name_pt_ref,count(*) DESC
+)
+(
+SELECT cd_pt_ref, name_pt_ref, platform
+FROM c
+WHERE platform IS NOT NULL
+)
+UNION ALL
+(
+SELECT DISTINCT ON (pr.cd_pt_ref) pr.cd_pt_ref,pr.name_pt_ref,p.platform
+FROM c
+JOIN main.punto_referencia pr ON c.platform IS NULL AND c.cd_pt_ref=pr.cd_pt_ref
+JOIN main.gp_event ge ON pr.cd_pt_ref=ge.cd_pt_ref
+JOIN main.event e ON e.cd_gp_event=ge.cd_gp_event
+JOIN main.platform p ON ST_DWithin(pt_geom,p.zona_geom,1500)
+)
+)
+;
+```
+
+
+```{r}
+dbDisconnect(fracking_db)
+```

@@ -1,0 +1,57 @@
+---
+title: "Representaciones espaciales de los puntos de referencia (ANH)"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+   html_document:
+     toc: true
+---
+
+
+************************
+
+# Preparation
+
+```{r setup}
+require(openxlsx)
+require(RPostgreSQL)
+require(rpostgis)
+require(leaflet)
+require(sp)
+fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+```
+
+
+```{r, message=F}
+require(htmltools)
+landcover<-pgGetGeom(fracking_db,query="SELECT landcov,ST_SetSrid(ST_transform(the_geom, (SELECT proj4text FROM spatial_ref_sys WHERE SRID=3116),(SELECT proj4text FROM spatial_ref_sys WHERE SRID=4326)),4326) geom FROM spat.landcov LEFT JOIN spat.def_landcov USING(cd_landcov)")
+anh <- dbGetQuery(fracking_db,"SELECT name_pt_ref FROM main.punto_referencia WHERE num_anh IS NOT NULL ORDER BY num_anh ")$name_pt_ref
+maps<-list()
+for (i in 1:length(anh))
+{
+  #cat("# ", anh[i],"\n\n")
+  if(nrow(dbGetQuery(fracking_db,paste("SELECT name_pt_ref FROM spat.anh_info WHERE name_pt_ref='",anh[i],"'",collapse="",sep="")))>0){
+  ch <- pgGetGeom(fracking_db,query = paste("SELECT ST_SetSrid(ST_transform(ch_geom, (SELECT proj4text FROM spatial_ref_sys WHERE SRID=3116),(SELECT proj4text FROM spatial_ref_sys WHERE SRID=4326)),4326) geom FROM spat.anh_info WHERE name_pt_ref='",anh[i],"'",collapse="",sep=""))
+  maps[[length(maps)+1]]<-
+    leaflet(ch)%>%
+     addProviderTiles('Esri.WorldImagery',group="satellite")%>%
+     addPolygons(data=landcover,group="landcover")%>%
+     addPolygons(data=ch,group="Convex Hull")%>%
+     addLayersControl(overlayGroups = c("satellite","landcover","Convex Hull"))
+  }
+}
+```
+
+```{r}
+tagList(maps)
+```
+
+```{r}
+dbDisconnect(fracking_db)
+```

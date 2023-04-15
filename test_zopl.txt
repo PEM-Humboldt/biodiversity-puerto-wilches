@@ -1,0 +1,156 @@
+# zooplancton
+
+## Niveles taxonomicos
+
+```{sql}
+SELECT dtr.cd_rank, pseudo_rank,  count(*)
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.def_tax_rank dtr USING (cd_rank)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+WHERE ge.cd_gp_biol='zopl'
+GROUP BY dtr.cd_rank,dtr.rank_level,pseudo_rank
+ORDER BY rank_level DESC
+```
+
+Viendo esos resultados, lo más lógico es trabajar al nivel del genero
+
+## Matriz
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW zopl_matrix AS(
+WITH search_tax AS(
+SELECT DISTINCT r.cd_tax, r.cd_morfo, find_higher_id(r.cd_tax,'GN') cd_gn,mt.pseudo_rank, t.cd_rank, dtrt.rank_level level_tax, dtrm.rank_level pseudo_level, mt.verbatim_taxon,t.name_tax
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtrt ON t.cd_rank=dtrt.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+WHERE ge.cd_gp_biol='zopl'
+ AND COALESCE(dtrm.rank_level,dtrt.rank_level) <= (SELECT rank_level FROM main.def_tax_rank WHERE cd_rank='GN')
+)
+, resolve_tax AS(
+SELECT a.cd_tax, a.cd_morfo,
+  CASE
+    WHEN level_tax=(SELECT rank_level FROM main.def_tax_rank WHERE cd_rank='GN') THEN a.name_tax
+    WHEN pseudo_level=(SELECT rank_level FROM main.def_tax_rank WHERE cd_rank='GN') THEN a.verbatim_taxon
+    ELSE tg.name_tax
+  END taxon
+FROM search_tax a
+LEFT JOIN main.taxo tg ON a.cd_gn=tg.cd_tax
+)
+SELECT
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo anh_tempo,
+  --r.cd_tax,
+  taxon,
+  SUM(qt_double)/3 density/*,
+  find_higher_id(r.cd_tax,'SFAM') cd_sfam,
+  protocol*/
+FROM main.registros r
+JOIN resolve_tax rt ON r.cd_tax=rt.cd_tax AND ((r.cd_morfo IS NULL AND rt.cd_morfo IS NULL) OR r.cd_morfo=rt.cd_morfo)
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE
+  ge.cd_gp_biol='zopl'
+GROUP BY
+  ge.cd_gp_event,
+  name_pt_ref,
+  taxon,
+  cd_tempo
+ORDER BY
+  ge.cd_gp_event,
+  name_pt_ref||'_'||cd_tempo,
+  SUM(qt_double)/3 DESC
+);
+```
+
+
+
+## Listas
+
+### Lista completa
+
+* occurrence number es el numero de registros que tienen la especie (si la tabla es limpia, corresponde al numero de evento que contienen el taxon)
+* **Note: la zona está atribuida según las coordenadas de los eventos (hay eventos fuera de la zona definida)**
+
+```{sql, result='hide'}
+CREATE OR REPLACE VIEW zopl_list_tot AS(
+WITH a AS(
+SELECT count(DISTINCT cd_event) nb_event
+FROM main.event
+LEFT JOIN main.gp_event USING (cd_gp_event)
+WHERE cd_gp_biol='zopl'
+)
+SELECT
+   tfam.name_tax "family",
+   tor.name_tax "orden",
+   COALESCE(verbatim_taxon||' ('||name_morfo||')', t.name_tax) taxon,
+   dtr.tax_rank tax_rank,
+   dtrm.tax_rank pseudo_rank,
+   --ARRAY_AGG(DISTINCT protocol) protocols,
+   ARRAY_AGG(DISTINCT cd_tempo) temporadas,
+   ARRAY_AGG(DISTINCT name_pt_ref) anh,
+   ARRAY_AGG(DISTINCT platform) zonas,
+   ARRAY_AGG(DISTINCT tipo_cuerp_agua) tipos_cuerp_agua,
+   count(*) "occurrence number",
+   SUM(qt_double)/nb_event "mean abundance (ind/L)"
+FROM main.registros r
+CROSS JOIN a
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.def_season s ON COALESCE(r.date_time,e.date_time_begin) <@ s.date_range
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+LEFT JOIN main.taxo t USING (cd_tax)
+LEFT JOIN main.taxo tfam ON find_higher_id(r.cd_tax,'FAM')=tfam.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.morfo_taxo mt USING(cd_morfo)
+LEFT JOIN main.def_tax_rank dtr ON t.cd_rank=dtr.cd_rank
+LEFT JOIN main.def_tax_rank dtrm ON mt.pseudo_rank=dtrm.cd_rank
+LEFT JOIN habitat_gp_event_aquatic USING (cd_gp_event)
+LEFT JOIN main.platform pt ON ST_intersects(e.pt_geom,pt.zona_geom)
+WHERE
+  ge.cd_gp_biol='zopl'
+GROUP BY
+   tfam.name_tax,
+   tor.name_tax,
+   COALESCE(verbatim_taxon, t.name_tax),
+   dtr.tax_rank,
+   dtrm.tax_rank,
+   nb_event
+ORDER BY SUM(qt_double)/nb_event DESC
+)
+;
+```
+
+### Lista por temporada
+TODO
+### Lista por zona y temporada
+TODO
+### Lista por habitat
+TODO
+
+## Exportar: R y Excel
+
+Extraer en R y exportar en excel
+```{r}
+(listTable<-dbGetQuery(fracking_db, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ~ '^zopl'")$table_name)
+export_zopl <- lapply(listTable,dbReadTable,conn=fracking_db)
+names(export_zopl) <- listTable
+export_zopl[grep("matrix",listTable)] <- lapply(export_zopl[grep("matrix",listTable)],function(x)
+  {
+    col_content <- c("abundance","density")[c("abundance","density") %in% colnames(x)]
+    dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
+  })
+export_zopl <- lapply(export_zopl, as.data.frame)
+save_in_excel(file = "zopl_export.xslx", lVar = export_zopl)
+```
+

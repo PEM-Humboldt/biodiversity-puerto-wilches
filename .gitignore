@@ -1,0 +1,61 @@
+# History files
+.Rhistory
+.Rapp.history
+
+# Session Data files
+.RData
+
+# User-specific files
+.Ruserdata
+
+# Example code in package build process
+*-Ex.R
+
+# Output files from R CMD build
+/*.tar.gz
+
+# Output files from R CMD check
+/*.Rcheck/
+
+# RStudio files
+.Rproj.user/
+
+# produced vignettes and rmarkdown documents
+vignettes/*.html
+vignettes/*.pdf
+devDocs/*.html
+devDocs/*.log
+devDocs/*.tex
+
+# Excel locks
+**/.~lock.*#
+
+# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
+.httr-oauth
+
+# knitr and R markdown default cache directories
+*_cache/
+/cache/
+**/*_cache/
+*.utf8.md
+*.knit.md
+
+# Temporary files created by R markdown
+*.utf8.md
+*.knit.md
+
+# R Environment Variables
+.Renviron
+
+# kate
+*.kate-swp
+# For now let's not follow the changes in the rmarkdown-produced documents, nor in any excel or such R results, what's important is code!
+*.pdf
+*.html
+*.xlsx
+*.RData
+*.png
+*.aux
+*.toc
+*.swp
+*.csv

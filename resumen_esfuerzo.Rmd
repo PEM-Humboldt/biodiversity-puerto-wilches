@@ -1,0 +1,427 @@
+---
+title: "Resumen: esfuerzo de muestreo, número de individuos y de especies"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+---
+
+
+************************
+
+Se trata en este documento de analisar el esfuerzo de muestreo. 
+
+*************
+
+
+```{r setup}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50,fig.path = "./Fig/esfuerzo_")
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+require(openxlsx)
+require(RPostgreSQL)
+source("./saveInExcel.R")
+```
+
+```{r}
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+```
+
+```{sql}
+CREATE OR REPLACE VIEW recap_samp_eff AS
+WITH a AS(
+SELECT 
+  cd_event,
+  cd_gp_event,
+  cd_gp_biol,
+  protocol,
+  protocol_spa,
+  dmt1.measurement_type meas_type1,
+  dfse1.var_samp_eff variable1,
+  samp_effort_1::double precision*u1.factor::double precision samp_effort_1,
+  dmt2.measurement_type meas_type2,
+  dfse2.var_samp_eff variable2,
+  u2.unit_spa unit2,
+  samp_effort_2::double precision*u2.factor::double precision samp_effort_2,
+  EXTRACT(EPOCH FROM(date_time_end-date_time_begin))/60 event_length_min
+FROM main.event e
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_protocol p USING (cd_protocol)
+LEFT JOIN main.def_var_samp_eff dfse1 ON p.cd_var_samp_eff_1=dfse1.cd_var_samp_eff
+LEFT JOIN main.def_var_samp_eff dfse2 ON p.cd_var_samp_eff_2=dfse2.cd_var_samp_eff
+LEFT JOIN main.def_unit u1 ON dfse1.cd_unit=u1.cd_unit
+LEFT JOIN main.def_unit u2 ON dfse2.cd_unit=u2.cd_unit
+LEFT JOIN main.def_measurement_type dmt1 ON u1.cd_measurement_type=dmt1.cd_measurement_type
+LEFT JOIN main.def_measurement_type dmt2 ON u2.cd_measurement_type=dmt2.cd_measurement_type
+),b AS(
+SELECT cd_event, cd_gp_event, cd_gp_biol, protocol, protocol_spa, event_length_min,
+  meas_type1 meas_type, variable1 variable, samp_effort_1 samp_effort
+FROM a
+UNION ALL
+(SELECT cd_event, cd_gp_event, cd_gp_biol, protocol, protocol_spa, event_length_min,
+  meas_type2, variable2, samp_effort_2
+FROM a
+WHERE variable2 IS NOT NULL
+)
+),c AS(
+SELECT cd_event,cd_gp_event,cd_gp_biol, protocol, protocol_spa,meas_type,variable,COALESCE(samp_effort,event_length_min) samp_effort
+FROM b
+WHERE meas_type='time'
+UNION ALL
+SELECT cd_event,cd_gp_event,cd_gp_biol, protocol, protocol_spa,meas_type,variable, samp_effort
+FROM b
+WHERE NOT meas_type='time'
+)
+SELECT * FROM c;
+
+SELECT  meas_type,cd_gp_biol,protocol_spa,SUM(samp_effort)
+FROM recap_samp_eff
+GROUP BY cd_gp_biol,protocol_spa, meas_type
+ORDER BY  meas_type,cd_gp_biol,protocol_spa;
+```
+
+
+# Medidas de tiempo
+
+```{r}
+SQL_samp_eff_time_inac <- "SELECT protocol_spa || ' ('|| biol_gp_spa ||')' metodo, sum(samp_effort)/60 tiempo_muestreo_horas
+FROM recap_samp_eff
+LEFT JOIN main.def_gp_biol USING(cd_gp_biol)
+WHERE meas_type='time' AND protocol_spa IN ('Fototrampeo','Pitfall para hormigas','Trampa Berlese para artropodos','Trampa de caída atún','Trampa de excrementos humanos','Trampa pitfall para artropodos','Trampa Sherman','Trampa VS-R','Trasmallo','Winkler para hormigas','Redes de niebla')
+GROUP BY protocol_spa,biol_gp_spa
+ORDER BY biol_gp_spa
+"
+samp_eff_time_inac<-dbGetQuery(fracking_db,SQL_samp_eff_time_inac)
+SQL_samp_eff_time_ac <- "SELECT protocol_spa || ' ('|| biol_gp_spa ||')' metodo, sum(samp_effort)/60 tiempo_muestreo_horas
+FROM recap_samp_eff
+LEFT JOIN main.def_gp_biol USING(cd_gp_biol)
+WHERE meas_type='time' AND protocol_spa NOT IN ('Fototrampeo','Pitfall para hormigas','Trampa Berlese para artropodos','Trampa de caída atún','Trampa de excrementos humanos','Trampa pitfall para artropodos','Trampa Sherman','Trampa VS-R','Trasmallo','Winkler para hormigas','Redes de niebla')
+GROUP BY protocol_spa,biol_gp_spa
+ORDER BY biol_gp_spa
+"
+samp_eff_time_ac<-dbGetQuery(fracking_db,SQL_samp_eff_time_ac)
+```
+
+
+## Metodos activos
+```{r tiempo_esfuerzo_activos, fig.width=10,fig.height=10, fig.cap="Duración acumulada de muestreo en días para los metodos de muestreo activos. Los tiempos totales están calculados, y luego traducidos en numeros de días completos para guardar una escala legible"}
+par(mar=c(14,10.1,4,1))
+A<-barplot(samp_eff_time_ac$tiempo_muestreo_horas/24,names.arg=NA,las=2,ylab='Duración acumulada (días)', main="Métodos activos")
+text(x=A,y=-.5,samp_eff_time_ac$metodo,xpd=NA,srt=45,adj=1)
+```
+
+
+## Metodos pasivos
+
+```{r tiempo_esfuerzo_pasivos,fig.width=10, fig.height=10, fig.cap="Duración acumulada de muestreo en días para los metodos de muestreo pasivos. Los tiempos totales están calculados, y luego traducidos en numeros de días completos para guardar una escala legible"}
+par(mar=c(14,7.1,4,1))
+A<-barplot(samp_eff_time_inac$tiempo_muestreo_horas/24,names.arg=NA,las=3,ylab='Duración acumulada (días)',main='Métodos pasivos')
+text(x=A,y=-200,samp_eff_time_inac$metodo,xpd=NA,srt=45,adj=1)
+
+```
+
+# Número de individuos
+
+```{sql, output.var="num_ind_metodo"}
+SELECT cd_gp_biol,protocol_spa||' ('||biol_gp_spa||')' metodo_gp,SUM(qt_int) nb_ind
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+LEFT JOIN main.def_protocol USING (cd_protocol)
+WHERE (super_gp IS NULL OR super_gp NOT IN ('Botany','Microorganisms')) AND cd_gp_biol NOT IN ('paso','mafi','catr') AND protocol_spa <> 'Encuentro accidental'
+GROUP BY cd_gp_biol,protocol_spa,biol_gp_spa
+UNION ALL
+-- calculo num individuos cameras trampa
+SELECT cd_gp_biol,metodo_gp,SUM(nb_ind) nb_ind
+FROM (
+  SELECT cd_gp_biol,protocol_spa||' ('||biol_gp_spa||')' metodo_gp,MAX(qt_int) nb_ind
+  FROM main.registros r 
+  LEFT JOIN main.event e USING (cd_event)
+  LEFT JOIN main.gp_event ge USING (cd_gp_event)
+  LEFT JOIN main.def_gp_biol USING (cd_gp_biol)
+  LEFT JOIN main.def_protocol USING (cd_protocol)
+  LEFT JOIN main.registros_extra re ON r.cd_reg=re.cd_reg AND cd_var_registros_extra=(SELECT cd_var_registros_extra FROM main.def_var_registros_extra WHERE var_registros_extra='30 minutes period') 
+  WHERE cd_gp_biol='catr'
+  GROUP BY cd_gp_biol,protocol_spa,biol_gp_spa, re.value_int
+  ) AS cal_catr
+GROUP BY metodo_gp,cd_gp_biol
+```
+
+# Escala normal
+
+```{r num_individuos, fig.width=10,fig.height=10}
+par(mar=c(16,12.1,4,1))
+num_ind_metodo<-num_ind_metodo[order(num_ind_metodo$cd_gp_biol),]
+A<-barplot(num_ind_metodo$nb_ind,names.arg=NA,las=3,ylab='Número de individuos')
+text(x=A,y=-5000,num_ind_metodo$metodo_gp,xpd=NA,srt=45,adj=1)
+```
+
+## Escala log
+
+```{r num_individuos_log, fig.width=10,fig.height=10}
+par(mar=c(16,12.1,1,1))
+num_ind_metodo<-num_ind_metodo[order(num_ind_metodo$cd_gp_biol),]
+A<-barplot(log10(num_ind_metodo$nb_ind),names.arg=NA,las=3,ylab='Número de individuos',axes=F, ylim=c(0,log10(200000)))
+ATX <- c(1,seq(10000,200000,10000))
+ATX <- ATX[1:(min(which(ATX>max(num_ind_metodo$nb_ind)))+1)]
+ATX <- unique(ATX[c(1,which(ATX%%10000==0),length(ATX))])
+show <- c(T,ATX[2:(length(ATX)-1)]%%50000==0|ATX[2:(length(ATX)-1)]<50000,T)
+axis(side=2,at=log10(ATX),labels=ifelse(show,format(ATX,scientific=F),NA),las=2,)
+text(x=A,y=-0.1,num_ind_metodo$metodo_gp,xpd=NA,srt=45,adj=1)
+```
+
+
+# Número de taxones
+
+Con el objetivo de mostrar el número de taxones que permitó encontrar 
+
+Para tener una idea general de las especies en la base de datos:
+
+```{sql, max.print=NA}
+SELECT tcl.name_tax "class", count(DISTINCT tsp.name_tax)
+FROM main.registros r
+LEFT JOIN main.taxo tsp ON find_higher_id(r.cd_tax,'SP')=tsp.cd_tax
+LEFT JOIN main.taxo tcl ON find_higher_id(r.cd_tax,'CL')=tcl.cd_tax
+GROUP BY tcl.name_tax
+```
+
+El problema con la consulta anterior es que no toma en cuenta los pseudo-rangos de los morfotipos ni los taxones que están con una resolución taxonomica diferente.
+
+Con Adriana, decidimos hacer las diferentes graficas:
+
+* Animales: Vertebrata por clase
+* Animales: Artropodas-generos por orden
+* Animales: Artropodas-especies por orden
+* Animales: zooplancton (generos) por orden
+* Plantas terrestres (arboles y herbaceas) por clase
+* Plantas acuaticas (angiospermas) por clase
+* Plantas acuaticas (otras: fitoplancton) por clase
+* 
+
+```{r}
+nbTaxon<-list()
+```
+
+
+## Animales: vertebrados
+
+```{sql, output.var='nbSp_class_vertebrates'}
+SELECT tcl.name_tax "class", ARRAY_AGG(DISTINCT cd_gp_biol) cds_gp_biol,
+  COUNT(DISTINCT
+   CASE
+    WHEN cd_morfo IS NULL AND tsp IS NOT NULL THEN 'sp'||tsp.cd_tax
+    WHEN cd_morfo IS NOT NULL THEN 'msp'||cd_morfo
+   END
+   ) num_esp
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo,cd_gp_biol)
+LEFT JOIN main.taxo tsp ON find_higher_id(r.cd_tax,'SP')=tsp.cd_tax
+LEFT JOIN main.taxo tcl ON find_higher_id(r.cd_tax,'CL')=tcl.cd_tax
+LEFT JOIN main.taxo tphy ON find_higher_id(r.cd_tax,'PHY')=tphy.cd_tax
+WHERE tphy.name_tax='Chordata' AND
+  ((cd_morfo IS NOT NULL AND mt.pseudo_rank='SP') OR tsp.cd_tax IS NOT NULL)
+GROUP BY tcl.name_tax
+ORDER BY ARRAY_AGG(DISTINCT cd_gp_biol), tcl.name_tax
+```
+
+
+```{r nbTax_sp_class_verteb, fig.cap='Número de especies (o morfoespecies) por clases de animales vertebrados. Cada morfoespecie cuenta como una especie diferente de las especies determinadas en la base de datos'}
+par(mar=c(6,6.1,1,1))
+nbTaxon$nbSp_class_vertebrates<-nbSp_class_vertebrates
+A<-barplot(nbSp_class_vertebrates$num_esp,names.arg=NA,ylab="Número de especies")
+text(x=A,y=-15,nbSp_class_vertebrates$class,xpd=NA,srt=45,adj=1)
+```
+
+## Animales: artropodos
+
+### Determinados a nivel de especies o morfo-especies
+
+```{sql, output.var='nbSp_order_arthropods'}
+SELECT tor.name_tax "orden",ARRAY_AGG(DISTINCT cd_gp_biol) cds_gp_biol,
+  COUNT(DISTINCT
+   CASE
+    WHEN cd_morfo IS NULL AND tsp IS NOT NULL THEN 'sp'||tsp.cd_tax
+    WHEN cd_morfo IS NOT NULL THEN 'msp'||cd_morfo
+   END
+   ) num_esp
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo,cd_gp_biol)
+LEFT JOIN main.taxo tsp ON find_higher_id(r.cd_tax,'SP')=tsp.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.taxo tphy ON find_higher_id(r.cd_tax,'PHY')=tphy.cd_tax
+WHERE tphy.name_tax='Arthropoda' AND
+  ((cd_morfo IS NOT NULL AND mt.pseudo_rank='SP') OR tsp.cd_tax IS NOT NULL)
+  AND cd_gp_biol IN ('mari','esca','horm','minv')
+GROUP BY tor.name_tax
+ORDER BY ARRAY_AGG(DISTINCT cd_gp_biol),tor.name_tax
+```
+
+
+```{r nbTax_sp_order_arthropods, fig.cap='Número de especies (o morfoespecies) por ordenes de artrópodos. Cada morfoespecie cuenta como una especie diferente de las especies determinadas en la base de datos. Anotar: los artrópodos encontrados unicamente en los grupos zooplancton o colémbolos fueron excluídos de esta grafica. Los grupos biologicos considerados acá son: mariposas, escarabajos, hormigas y macroinvertebrados acuaticos'}
+par(mar=c(6,6.1,1,1))
+nbTaxon$nbSp_order_arthropods<-nbSp_order_arthropods
+A<-barplot(nbSp_order_arthropods$num_esp,names.arg=NA,ylab="Número de especies")
+text(x=A,y=-15,nbSp_order_arthropods$orden,xpd=NA,srt=45,adj=1)
+```
+### Determinados a nivel de generos o morfo-generos
+
+```{sql, output.var='nbGn_order_arthropods'}
+SELECT tor.name_tax "orden",ARRAY_AGG(DISTINCT cd_gp_biol) cds_gp_biol,
+  COUNT(DISTINCT
+   CASE
+    WHEN cd_morfo IS NULL AND tgn IS NOT NULL THEN 'gn'||tgn.cd_tax
+    WHEN cd_morfo IS NOT NULL THEN 'mgn'||cd_morfo
+   END
+   ) num_gen
+FROM main.registros r
+LEFT JOIN main.event e USING (cd_event)
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo,cd_gp_biol)
+LEFT JOIN main.taxo tgn ON find_higher_id(r.cd_tax,'GN')=tgn.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(r.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.taxo tphy ON find_higher_id(r.cd_tax,'PHY')=tphy.cd_tax
+WHERE tphy.name_tax='Arthropoda' AND
+  ((cd_morfo IS NOT NULL AND mt.pseudo_rank='GN') OR tgn.cd_tax IS NOT NULL)
+  AND cd_gp_biol IN ('mari','esca','horm','minv','cole')
+GROUP BY tor.name_tax
+ORDER BY ARRAY_AGG(DISTINCT cd_gp_biol), tor.name_tax
+```
+
+
+```{r nbTax_gn_order_arthropods, fig.cap='Número de generos (o morfogeneros) por ordenes de artrópodos. Cada morfogeneros cuenta como una especie diferente de las especies determinadas en la base de datos. Anotar: los artrópodos encontrados unicamente en el grupos zooplancton fueron excluídos de esta grafica. Los grupos biologicos considerados acá son: mariposas, escarabajos, hormigas, colémbolos y macroinvertebrados acuaticos'}
+par(mar=c(6,6.1,1,1))
+nbTaxon$nbGn_order_arthropods<-nbGn_order_arthropods
+A<-barplot(nbGn_order_arthropods$num_gen,names.arg=NA,ylab="Número de generos")
+text(x=A,y=-15,nbGn_order_arthropods$orden,xpd=NA,srt=45,adj=1)
+```
+
+
+
+## Animales: zooplancton
+
+```{sql, output.var='nbSp_order_zooplancton'}
+SELECT "orden", COUNT(DISTINCT taxon) num_esp
+FROM zopl_matrix
+GROUP BY "orden"
+```
+
+```{r nbTax_sp_order_zooplancton, fig.cap='Número de especies (o morfoespecies) por ordenes en el zooplancton. Cada morfoespecie cuenta como una especie diferente de las especies determinadas en la base de datos.'}
+par(mar=c(6,6.1,1,1))
+nbTaxon$nbSp_order_zooplancton<-nbSp_order_zooplancton
+A<-barplot(nbSp_order_zooplancton$num_esp,names.arg=NA,ylab="Número de especies")
+text(x=A,y=-3,nbSp_order_zooplancton$orden,xpd=NA,srt=45,adj=1)
+```
+
+## Plantas vasculares
+
+```{sql, output.var='nbSp_order_plantasVasc'}
+SELECT tor.name_tax "orden",ARRAY_AGG(DISTINCT table_orig) tables_orig,
+  COUNT(DISTINCT
+   CASE
+    WHEN cd_morfo IS NULL AND tsp IS NOT NULL THEN 'sp'||tsp.cd_tax
+    WHEN cd_morfo IS NOT NULL THEN 'msp'||cd_morfo
+   END
+   ) num_esp
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+LEFT JOIN main.taxo tsp ON find_higher_id(tt.cd_tax,'SP')=tsp.cd_tax
+--LEFT JOIN main.taxo tor ON find_higher_id(tt.cd_tax,'CL')=tor.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(tt.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.taxo tphy ON find_higher_id(tt.cd_tax,'PHY')=tphy.cd_tax
+WHERE tphy.name_tax='Tracheophyta' AND
+  ((cd_morfo IS NOT NULL AND mt.pseudo_rank='SP') OR tsp.cd_tax IS NOT NULL)
+  AND table_orig IN ('botanica_registros_arborea','botanica_registros_col','botanica_registros_epi_vas','hidrobiologico_registros_macrofitas')
+GROUP BY tor.name_tax
+ORDER BY tor.name_tax
+```
+
+
+```{r nbTax_sp_order_plantasVasc, fig.width=9, fig.cap='Número de especies (o morfoespecies) por ordenes de plantas vasculares. Cada morfoespecie cuenta como una especie diferente de las especies determinadas en la base de datos. Anotar: Los grupos biologicos considerados acá son: macrofitas, arboles, herbaceas y epifitas vasculares'}
+par(mar=c(6,6.1,1,1))
+nbTaxon$nbSp_order_plantasVasc<-nbSp_order_plantasVasc
+A<-barplot(nbSp_order_plantasVasc$num_esp,names.arg=NA,ylab="Número de especies")
+text(x=A,y=-1,nbSp_order_plantasVasc$orden,xpd=NA,srt=45,adj=1)
+```
+
+
+
+## Plantas no vasculares
+
+```{sql, output.var='nbSp_class_plantasNoVasc'}
+SELECT tcl.name_tax "class",ARRAY_AGG(DISTINCT table_orig) tables_orig,
+  COUNT(DISTINCT
+   CASE
+    WHEN cd_morfo IS NULL AND tsp IS NOT NULL THEN 'sp'||tsp.cd_tax
+    WHEN cd_morfo IS NOT NULL THEN 'msp'||cd_morfo
+   END
+   ) num_esp
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+LEFT JOIN main.taxo tsp ON find_higher_id(tt.cd_tax,'SP')=tsp.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(tt.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.taxo tcl ON find_higher_id(tt.cd_tax,'CL')=tcl.cd_tax
+LEFT JOIN main.taxo tphy ON find_higher_id(tt.cd_tax,'PHY')=tphy.cd_tax
+LEFT JOIN main.taxo tkg ON find_higher_id(tt.cd_tax,'KG')=tkg.cd_tax
+WHERE tphy.name_tax!='Tracheophyta' AND tkg.name_tax='Plantae' AND
+  ((cd_morfo IS NOT NULL AND mt.pseudo_rank='SP') OR tsp.cd_tax IS NOT NULL)
+  AND table_orig IN ('botanica_registros_epi_novas','hidrobiologico_registros_macrofitas','hidrobiologico_registros_perifiton','hidrobiologico_registros_fitoplancton')
+GROUP BY tcl.name_tax
+ORDER BY tcl.name_tax
+```
+
+
+```{r nbTax_sp_class_plantasNoVasc, fig.cap='Número de especies (o morfoespecies) por clases de plantas no-vasculares. Cada morfoespecie cuenta como una especie diferente de las especies determinadas en la base de datos. Anotar: Los grupos biologicos considerados acá son: macrofitas, perifiton, fitoplancton y epifitas no-vasculares'}
+par(mar=c(7,6.1,1,1))
+nbTaxon$nbSp_class_plantasNoVasc<-nbSp_class_plantasNoVasc
+A<-barplot(nbSp_class_plantasNoVasc$num_esp,names.arg=NA,ylab="Número de especies")
+text(x=A,y=-5,nbSp_class_plantasNoVasc$class,xpd=NA,srt=45,adj=1)
+```
+
+## Otros grupos (hongos, "algas" fuera del reino Plantae, etc)
+
+```{sql, output.var='nbSp_class_otrosNoPlantas'}
+SELECT tcl.name_tax "class",ARRAY_AGG(DISTINCT table_orig) tables_orig,
+  COUNT(DISTINCT
+   CASE
+    WHEN cd_morfo IS NULL AND tsp IS NOT NULL THEN 'sp'||tsp.cd_tax
+    WHEN cd_morfo IS NOT NULL THEN 'msp'||cd_morfo
+   END
+   ) num_esp
+FROM raw_dwc.taxonomy_total tt
+LEFT JOIN main.morfo_taxo mt USING (cd_morfo)
+LEFT JOIN main.taxo tsp ON find_higher_id(tt.cd_tax,'SP')=tsp.cd_tax
+LEFT JOIN main.taxo tor ON find_higher_id(tt.cd_tax,'OR')=tor.cd_tax
+LEFT JOIN main.taxo tcl ON find_higher_id(tt.cd_tax,'CL')=tcl.cd_tax
+LEFT JOIN main.taxo tphy ON find_higher_id(tt.cd_tax,'PHY')=tphy.cd_tax
+LEFT JOIN main.taxo tkg ON find_higher_id(tt.cd_tax,'KG')=tkg.cd_tax
+WHERE  tkg.name_tax!='Plantae' AND
+  ((cd_morfo IS NOT NULL AND mt.pseudo_rank='SP') OR tsp.cd_tax IS NOT NULL)
+  AND table_orig IN ('botanica_registros_epi_novas','hidrobiologico_registros_macrofitas','hidrobiologico_registros_perifiton','hidrobiologico_registros_fitoplancton')
+GROUP BY tcl.name_tax
+ORDER BY tcl.name_tax
+```
+
+
+```{r nbTax_sp_class_otrosGruposNoPlantas, fig.cap='Número de especies (o morfoespecies) por clases de organismos fuera del reino "Plantae" (Liquenes, hongos, "algas" no verdes etc.). Cada morfoespecie cuenta como una especie diferente de las especies determinadas en la base de datos. Anotar: Los grupos biologicos considerados acá son:  perifiton, fitoplancton y epifitas no-vasculares'}
+par(mar=c(7,6.1,1,1))
+nbTaxon$nbSp_class_otrosNoPlantas<-nbSp_class_otrosNoPlantas
+A<-barplot(nbSp_class_otrosNoPlantas$num_esp,names.arg=NA,ylab="Número de especies")
+text(x=A,y=-5,nbSp_class_otrosNoPlantas$class,xpd=NA,srt=45,adj=1)
+```
+
+```{r}
+save_in_excel("nbTaxons.xlsx",nbTaxon)
+```
+
+
