@@ -1,0 +1,55 @@
+---
+title: "Definición de los colores"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+       number_sections: true
+       toc: true
+---
+
+```{r message=FALSE,warning=FALSE,echo=F}
+require(RPostgreSQL)
+fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE,connection="fracking_db", max.print=100)
+require(openxlsx)
+require(readxl)
+require(knitr)
+require(kableExtra)
+require(sp)
+```
+
+
+
+# Reading Excel file
+```{r, message=FALSE,warning=FALSE}
+fol_data <- "../Data_Documents/ExtraData/"
+wb <- loadWorkbook(file.path(fol_data,'Colores.xlsx'))
+colList<-lapply(names(wb),read.xlsx,xlsxFile=file.path(fol_data,'Colores.xlsx'))
+names(colList) <- names(wb)
+```
+
+# Color tables
+
+```{r, message=FALSE,warning=FALSE}
+kable(colList[[1]])%>%
+  column_spec(3,background =colList[[1]]$color,color="white")
+kable(colList[[2]])%>%
+  column_spec(3,background =colList[[2]]$color,color="white")
+kable(colList[[3]])%>%
+  column_spec(3,background =colList[[3]]$color,color="white")
+```
+
+# Map
+
+```{r, fig.width=10,fig.height=19}
+require(rpostgis)
+landcov<-pgGetGeom(fracking_db,query="SELECT * FROM spat.landcov LEFT JOIN spat.def_landcov USING(cd_landcov)",geom="the_geom")
+plot(landcov,col=colList$habitats$color[match(landcov@data$cd_landcov,table = colList$habitats$cd_landcov)],border=NA)
+zonas<-pgGetGeom(fracking_db,c("main","platform"),geom='zona_geom')
+plot(zonas,add=T,col=NA,border="black",lwd=2)
+#pt_event <- pgGetGeom(fracking_db,query="SELECT event_id,pt_geom geom FROM main.event WHERE pt_geom IS NOT NULL")
+#plot(pt_event,add=T)
+legend("topleft",fill=colList$habitats$color,legend=colList$habitats$landcov)
+```
+
