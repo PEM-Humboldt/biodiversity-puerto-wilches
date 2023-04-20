@@ -1,3976 +1,0 @@
-
-R version 4.2.1 (2022-06-23) -- "Funny-Looking Kid"
-Copyright (C) 2022 The R Foundation for Statistical Computing
-Platform: x86_64-pc-linux-gnu (64-bit)
-
-R is free software and comes with ABSOLUTELY NO WARRANTY.
-You are welcome to redistribute it under certain conditions.
-Type 'license()' or 'licence()' for distribution details.
-
-  Natural language support but running in an English locale
-
-R is a collaborative project with many contributors.
-Type 'contributors()' for more information and
-'citation()' on how to cite R or R packages in publications.
-
-Type 'demo()' for some demos, 'help()' for on-line help, or
-'help.start()' for an HTML browser interface to help.
-Type 'q()' to quit R.
-
-> require(RPostgreSQL)
-Loading required package: RPostgreSQL
-Loading required package: DBI
-> require(rmarkdown)
-Loading required package: rmarkdown
-> fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
-> dbSendQuery(fracking_db,"DROP SCHEMA main CASCADE")
-NOTICE:  drop cascades to 113 other objects
-DETAIL:  drop cascades to table main.platform
-drop cascades to table main.punto_referencia
-drop cascades to constraint anfibios_event_cd_pt_ref_fkey on table raw_dwc.anfibios_event
-drop cascades to constraint reptiles_event_cd_pt_ref_fkey on table raw_dwc.reptiles_event
-drop cascades to constraint anfibios_registros_cd_pt_ref_fkey on table raw_dwc.anfibios_registros
-drop cascades to constraint reptiles_registros_cd_pt_ref_fkey on table raw_dwc.reptiles_registros
-drop cascades to constraint mariposas_event_cd_pt_ref_fkey on table raw_dwc.mariposas_event
-drop cascades to constraint mariposas_registros_cd_pt_ref_fkey on table raw_dwc.mariposas_registros
-drop cascades to constraint hormigas_event_cd_pt_ref_fkey on table raw_dwc.hormigas_event
-drop cascades to constraint hormigas_registros_cd_pt_ref_fkey on table raw_dwc.hormigas_registros
-drop cascades to constraint escarabajos_event_cd_pt_ref_fkey on table raw_dwc.escarabajos_event
-drop cascades to constraint escarabajos_registros_cd_pt_ref_fkey on table raw_dwc.escarabajos_registros
-drop cascades to constraint collembolos_event_cd_pt_ref_fkey on table raw_dwc.collembolos_event
-drop cascades to constraint collembolos_registros_cd_pt_ref_fkey on table raw_dwc.collembolos_registros
-drop cascades to constraint aves_event_cd_pt_ref_fkey on table raw_dwc.aves_event
-drop cascades to constraint aves_registros_cd_pt_ref_fkey on table raw_dwc.aves_registros
-drop cascades to constraint mamiferos_tot_event_cd_pt_ref_fkey on table raw_dwc.mamiferos_tot_event
-drop cascades to constraint mamiferos_tot_registros_cd_pt_ref_fkey on table raw_dwc.mamiferos_tot_registros
-drop cascades to constraint peces_event_cd_pt_ref_fkey on table raw_dwc.peces_event
-drop cascades to constraint peces_registros_cd_pt_ref_fkey on table raw_dwc.peces_registros
-drop cascades to constraint hidrobiologico_event_cd_pt_ref_fkey on table raw_dwc.hidrobiologico_event
-drop cascades to constraint hidrobiologico_registros_cd_pt_ref_fkey on table raw_dwc.hidrobiologico_registros
-drop cascades to table main.def_gp_biol
-drop cascades to table main.def_measurement_type
-drop cascades to table main.def_unit
-drop cascades to table main.def_var_samp_eff
-drop cascades to table main.def_var_ind_qt
-drop cascades to table main.def_protocol
-drop cascades to table main.institution
-drop cascades to table main.people
-drop cascades to table main.gp_event
-drop cascades to constraint anfibios_event_cd_gp_event_fkey on table raw_dwc.anfibios_event
-drop cascades to constraint reptiles_event_cd_gp_event_fkey on table raw_dwc.reptiles_event
-drop cascades to constraint atropellamientos_event_cd_gp_event_fkey on table raw_dwc.atropellamientos_event
-drop cascades to constraint mariposas_event_cd_gp_event_fkey on table raw_dwc.mariposas_event
-drop cascades to constraint hormigas_event_cd_gp_event_fkey on table raw_dwc.hormigas_event
-drop cascades to constraint escarabajos_event_cd_gp_event_fkey on table raw_dwc.escarabajos_event
-drop cascades to constraint collembolos_event_cd_gp_event_fkey on table raw_dwc.collembolos_event
-drop cascades to constraint aves_event_cd_gp_event_fkey on table raw_dwc.aves_event
-drop cascades to constraint mamiferos_tot_event_cd_gp_event_fkey on table raw_dwc.mamiferos_tot_event
-drop cascades to constraint peces_event_cd_gp_event_fkey on table raw_dwc.peces_event
-drop cascades to constraint hidrobiologico_event_cd_gp_event_fkey on table raw_dwc.hidrobiologico_event
-drop cascades to table main.event
-drop cascades to constraint anfibios_event_cd_event_fkey on table raw_dwc.anfibios_event
-drop cascades to constraint anfibios_registros_cd_event_fkey on table raw_dwc.anfibios_registros
-drop cascades to constraint reptiles_event_cd_event_fkey on table raw_dwc.reptiles_event
-drop cascades to constraint reptiles_registros_cd_event_fkey on table raw_dwc.reptiles_registros
-drop cascades to constraint atropellamientos_event_cd_event_fkey on table raw_dwc.atropellamientos_event
-drop cascades to constraint atropellamientos_registros_cd_event_fkey on table raw_dwc.atropellamientos_registros
-drop cascades to constraint mariposas_event_cd_event_fkey on table raw_dwc.mariposas_event
-drop cascades to constraint mariposas_registros_cd_event_fkey on table raw_dwc.mariposas_registros
-drop cascades to constraint hormigas_event_cd_event_fkey on table raw_dwc.hormigas_event
-drop cascades to constraint hormigas_registros_cd_event_fkey on table raw_dwc.hormigas_registros
-drop cascades to constraint escarabajos_event_cd_event_fkey on table raw_dwc.escarabajos_event
-drop cascades to constraint escarabajos_registros_cd_event_fkey on table raw_dwc.escarabajos_registros
-drop cascades to constraint collembolos_event_cd_event_fkey on table raw_dwc.collembolos_event
-drop cascades to constraint collembolos_registros_cd_event_fkey on table raw_dwc.collembolos_registros
-drop cascades to constraint aves_event_cd_event_fkey on table raw_dwc.aves_event
-drop cascades to constraint aves_registros_cd_event_fkey on table raw_dwc.aves_registros
-drop cascades to constraint mamiferos_tot_event_cd_event_fkey on table raw_dwc.mamiferos_tot_event
-drop cascades to constraint mamiferos_tot_registros_cd_event_fkey on table raw_dwc.mamiferos_tot_registros
-drop cascades to constraint peces_event_cd_event_fkey on table raw_dwc.peces_event
-drop cascades to constraint peces_registros_cd_event_fkey on table raw_dwc.peces_registros
-drop cascades to constraint hidrobiologico_event_cd_event_fkey on table raw_dwc.hidrobiologico_event
-drop cascades to constraint hidrobiologico_registros_cd_event_fkey on table raw_dwc.hidrobiologico_registros
-drop cascades to materialized view spat.anh_info
-drop cascades to table main.def_tax_rank
-drop cascades to table main.taxo
-drop cascades to constraint taxonomy_total_cd_tax_fkey on table raw_dwc.taxonomy_total
-drop cascades to table main.morfo_taxo
-drop cascades to constraint taxonomy_total_cd_morfo_fkey on table raw_dwc.taxonomy_total
-drop cascades to table main.registros
-drop cascades to constraint anfibios_registros_cd_reg_fkey on table raw_dwc.anfibios_registros
-drop cascades to constraint reptiles_registros_cd_reg_fkey on table raw_dwc.reptiles_registros
-drop cascades to constraint atropellamientos_registros_cd_reg_fkey on table raw_dwc.atropellamientos_registros
-drop cascades to constraint mariposas_registros_cd_reg_fkey on table raw_dwc.mariposas_registros
-drop cascades to constraint hormigas_registros_cd_reg_fkey on table raw_dwc.hormigas_registros
-drop cascades to constraint escarabajos_registros_cd_reg_fkey on table raw_dwc.escarabajos_registros
-drop cascades to constraint collembolos_registros_cd_reg_fkey on table raw_dwc.collembolos_registros
-drop cascades to constraint aves_registros_cd_reg_fkey on table raw_dwc.aves_registros
-drop cascades to constraint mamiferos_tot_registros_cd_reg_fkey on table raw_dwc.mamiferos_tot_registros
-drop cascades to constraint peces_registros_cd_reg_fkey on table raw_dwc.peces_registros
-drop cascades to constraint hidrobiologico_registros_cd_reg_fkey on table raw_dwc.hidrobiologico_registros
-drop cascades to table main.def_organ
-drop cascades to table main.def_var_biometry
-drop cascades to table main.biometry
-drop cascades to table main.catalog
-drop cascades to table main.def_multimedia_type
-drop cascades to table main.multimedia
-drop cascades to table main.def_var_ind_charac
-drop cascades to table main.def_ind_charac_categ
-drop cascades to table main.individual_characteristics
-drop cascades to table main.individual_tag
-drop cascades to table main.assign_individual_tag
-drop cascades to table main.def_var_habitat
-drop cascades to table main.def_categ_habitat
-drop cascades to table main.habitat
-drop cascades to materialized view habitat_event
-drop cascades to view landcov_gp_event_terrestrial
-drop cascades to view habitat_gp_event_aquatic
-and 13 other objects (see server log for list)
-<PostgreSQLResult>
-> dbSendQuery(fracking_db,"DROP SCHEMA spat CASCADE")
-NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to table spat.def_landcov
-drop cascades to constraint homolog_def_landcov_spa_fkey on table raw_geom.homolog_def
-drop cascades to table spat.landcov
-<PostgreSQLResult>
-> dbSendQuery(fracking_db,paste(readLines("./tableCreation.sql"),collapse="\n"))
-<PostgreSQLResult>
-> dbDisconnect(fracking_db)
-[1] TRUE
-> render("./rawdata.Rmd")
-
-
-processing file: rawdata.Rmd
-  |                                                                              |                                                                      |   0%  |                                                                              |...                                                                   |   4%
-   inline R code fragments
-
-  |                                                                              |......                                                                |   9%
-label: unnamed-chunk-1
-  |                                                                              |.........                                                             |  13%
-  ordinary text without R code
-
-  |                                                                              |............                                                          |  17%
-label: unnamed-chunk-2
-  |                                                                              |...............                                                       |  22%
-  ordinary text without R code
-
-  |                                                                              |..................                                                    |  26%
-label: unnamed-chunk-3 (with options) 
-List of 2
- $ message: logi FALSE
- $ warning: logi FALSE
-
-New names:
-* `type` -> `type...4`
-* `title` -> `title...19`
-* `type` -> `type...20`
-* `format` -> `format...21`
-* `creator` -> `creator...22`
-* `created` -> `created...23`
-* `title` -> `title...41`
-* `type` -> `type...42`
-* `format` -> `format...43`
-* `creator` -> `creator...44`
-* `created` -> `created...45`
-  |                                                                              |.....................                                                 |  30%
-  ordinary text without R code
-
-  |                                                                              |........................                                              |  35%
-label: unnamed-chunk-4
-  |                                                                              |...........................                                           |  39%
-  ordinary text without R code
-
-  |                                                                              |..............................                                        |  43%
-label: unnamed-chunk-5
-NOTICE:  drop cascades to 37 other objects
-DETAIL:  drop cascades to table raw_dwc.anfibios_event
-drop cascades to table raw_dwc.anfibios_registros
-drop cascades to table raw_dwc.reptiles_event
-drop cascades to table raw_dwc.reptiles_registros
-drop cascades to table raw_dwc.atropellamientos_event
-drop cascades to table raw_dwc.atropellamientos_registros
-drop cascades to table raw_dwc.aves_event
-drop cascades to table raw_dwc.aves_registros
-drop cascades to table raw_dwc.botanica_event
-drop cascades to table raw_dwc.botanica_registros_arborea
-drop cascades to table raw_dwc.botanica_registros_epi_vas
-drop cascades to table raw_dwc.botanica_registros_epi_novas
-drop cascades to table raw_dwc.botanica_registros_col
-drop cascades to table raw_dwc.collembolos_event
-drop cascades to table raw_dwc.collembolos_registros
-drop cascades to table raw_dwc.escarabajos_event
-drop cascades to table raw_dwc.escarabajos_registros
-drop cascades to table raw_dwc.hormigas_event
-drop cascades to table raw_dwc.hormigas_registros
-drop cascades to table raw_dwc.mamiferos_event
-drop cascades to table raw_dwc.mamiferos_registros
-drop cascades to table raw_dwc.mamiferos_us_event
-drop cascades to table raw_dwc.mamiferos_us_registros
-drop cascades to table raw_dwc.mariposas_event
-drop cascades to table raw_dwc.mariposas_registros
-drop cascades to table raw_dwc.peces_event
-drop cascades to table raw_dwc.peces_registros
-drop cascades to table raw_dwc.hidrobiologico_event
-drop cascades to table raw_dwc.hidrobiologico_registros_macroinvertebrados
-drop cascades to table raw_dwc.hidrobiologico_registros_macrofitas
-drop cascades to table raw_dwc.hidrobiologico_registros_zooplancton
-drop cascades to table raw_dwc.hidrobiologico_registros_fitoplancton
-drop cascades to table raw_dwc.hidrobiologico_registros_perifiton
-drop cascades to table raw_dwc.taxonomy_total
-drop cascades to table raw_dwc.mamiferos_tot_event
-drop cascades to table raw_dwc.mamiferos_tot_registros
-drop cascades to table raw_dwc.hidrobiologico_registros
-  |                                                                              |.................................                                     |  48%
-  ordinary text without R code
-
-  |                                                                              |.....................................                                 |  52%
-label: unnamed-chunk-6
-NOTICE:  identifier "measurement_value__área_total_muestreada_en_zona_de_helófitas_" will be truncated to "measurement_value__área_total_muestreada_en_zona_de_helófitas"
-NOTICE:  identifier "measurement_value__área_total_muestreada_en_zona_de_helófitas_" will be truncated to "measurement_value__área_total_muestreada_en_zona_de_helófitas"
-  |                                                                              |........................................                              |  57%
-  ordinary text without R code
-
-  |                                                                              |...........................................                           |  61%
-label: unnamed-chunk-7 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................................                        |  65%
-  ordinary text without R code
-
-  |                                                                              |.................................................                     |  70%
-label: unnamed-chunk-8 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................................                  |  74%
-  ordinary text without R code
-
-  |                                                                              |.......................................................               |  78%
-label: unnamed-chunk-9 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................................            |  83%
-  ordinary text without R code
-
-  |                                                                              |.............................................................         |  87%
-label: unnamed-chunk-10 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................................................      |  91%
-  ordinary text without R code
-
-  |                                                                              |...................................................................   |  96%
-label: unnamed-chunk-11
-  |                                                                              |......................................................................| 100%
-  ordinary text without R code
-
-
-output file: rawdata.knit.md
-
-/usr/bin/pandoc +RTS -K512m -RTS rawdata.knit.md --to latex --from markdown+autolink_bare_uris+tex_math_single_backslash --output rawdata.tex --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --table-of-contents --toc-depth 2 --number-sections --highlight-style tango --pdf-engine pdflatex --variable graphics --variable 'geometry:margin=1in' 
-
-Output created: rawdata.pdf
-There were 50 or more warnings (use warnings() to see the first 50)
-> render("./taxonomy.Rmd")
-
-
-processing file: taxonomy.Rmd
-  |                                                                              |                                                                      |   0%
-   inline R code fragments
-
-  |                                                                              |.                                                                     |   1%
-label: setup
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-1
-  |                                                                              |.                                                                     |   2%
-  ordinary text without R code
-
-  |                                                                              |..                                                                    |   2%
-label: unnamed-chunk-2
-  |                                                                              |..                                                                    |   3%
-  ordinary text without R code
-
-
-label: unnamed-chunk-3
-
-  ordinary text without R code
-
-  |                                                                              |...                                                                   |   4%
-label: unnamed-chunk-4
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-5
-  |                                                                              |...                                                                   |   5%
-  ordinary text without R code
-
-  |                                                                              |....                                                                  |   5%
-label: unnamed-chunk-6
-
-  ordinary text without R code
-
-  |                                                                              |....                                                                  |   6%
-label: unnamed-chunk-7
-
-  ordinary text without R code
-
-  |                                                                              |.....                                                                 |   7%
-label: unnamed-chunk-8
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-9
-  |                                                                              |.....                                                                 |   8%
-  ordinary text without R code
-
-  |                                                                              |......                                                                |   8%
-label: unnamed-chunk-10 (with options) 
-List of 1
- $ results: chr "asis"
-
-
-  ordinary text without R code
-
-  |                                                                              |......                                                                |   9%
-label: unnamed-chunk-11
-
-  ordinary text without R code
-
-  |                                                                              |.......                                                               |   9%
-label: unnamed-chunk-12
-  |                                                                              |.......                                                               |  10%
-  ordinary text without R code
-
-
-label: unnamed-chunk-13 (with options) 
-List of 1
- $ engine: chr "sql"
-
-NOTICE:  table "taxonomy_total" does not exist, skipping
-  |                                                                              |.......                                                               |  11%
-  ordinary text without R code
-
-  |                                                                              |........                                                              |  11%
-label: unnamed-chunk-14 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |........                                                              |  12%
-label: unnamed-chunk-15 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.........                                                             |  12%
-label: unnamed-chunk-16 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.........                                                             |  13%
-  ordinary text without R code
-
-
-label: unnamed-chunk-17 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.........                                                             |  14%
-  ordinary text without R code
-
-  |                                                                              |..........                                                            |  14%
-label: unnamed-chunk-18 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..........                                                            |  15%
-label: unnamed-chunk-19 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...........                                                           |  15%
-label: unnamed-chunk-20 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-  |                                                                              |...........                                                           |  16%
-  ordinary text without R code
-
-
-label: unnamed-chunk-21 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |............                                                          |  17%
-label: unnamed-chunk-22 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |............                                                          |  18%
-label: unnamed-chunk-23 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-  |                                                                              |.............                                                         |  18%
-  ordinary text without R code
-
-
-label: unnamed-chunk-24 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............                                                         |  19%
-  ordinary text without R code
-
-
-label: unnamed-chunk-25 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............                                                        |  19%
-  ordinary text without R code
-
-  |                                                                              |..............                                                        |  20%
-label: unnamed-chunk-26 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-27 (with options) 
-List of 2
- $ results: chr "hide"
- $ engine : chr "sql"
-
-  |                                                                              |...............                                                       |  21%
-  ordinary text without R code
-
-
-label: unnamed-chunk-28 (with options) 
-List of 2
- $ results: chr "hide"
- $ engine : chr "sql"
-
-  |                                                                              |...............                                                       |  22%
-  ordinary text without R code
-
-
-label: unnamed-chunk-29
-  |                                                                              |................                                                      |  22%
-  ordinary text without R code
-
-  |                                                                              |................                                                      |  23%
-label: unnamed-chunk-30 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-31 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.................                                                     |  24%
-label: unnamed-chunk-32 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-33 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.................                                                     |  25%
-  ordinary text without R code
-
-  |                                                                              |..................                                                    |  25%
-label: unnamed-chunk-34 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................                                                    |  26%
-  ordinary text without R code
-
-
-label: unnamed-chunk-35 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................                                                   |  27%
-label: unnamed-chunk-36 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-37 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................                                                   |  28%
-  ordinary text without R code
-
-  |                                                                              |....................                                                  |  28%
-label: unnamed-chunk-38 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |....................                                                  |  29%
-label: unnamed-chunk-39 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.....................                                                 |  30%
-label: unnamed-chunk-40 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-41 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.....................                                                 |  31%
-  ordinary text without R code
-
-  |                                                                              |......................                                                |  31%
-label: unnamed-chunk-42 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |......................                                                |  32%
-label: unnamed-chunk-43 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......................                                               |  32%
-label: unnamed-chunk-44 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.......................                                               |  33%
-  ordinary text without R code
-
-
-label: unnamed-chunk-45 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................                                              |  34%
-  ordinary text without R code
-
-
-label: unnamed-chunk-46 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |........................                                              |  35%
-label: unnamed-chunk-47 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.........................                                             |  35%
-  ordinary text without R code
-
-
-label: unnamed-chunk-48 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.........................                                             |  36%
-  ordinary text without R code
-
-
-label: unnamed-chunk-49 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................                                            |  36%
-  ordinary text without R code
-
-  |                                                                              |..........................                                            |  37%
-label: unnamed-chunk-50 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..........................                                            |  38%
-label: unnamed-chunk-51 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................                                           |  38%
-  ordinary text without R code
-
-
-label: unnamed-chunk-52 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................                                           |  39%
-  ordinary text without R code
-
-
-label: unnamed-chunk-53 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................                                          |  39%
-  ordinary text without R code
-
-  |                                                                              |............................                                          |  40%
-label: unnamed-chunk-54 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |............................                                          |  41%
-label: unnamed-chunk-55 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............................                                         |  41%
-  ordinary text without R code
-
-
-label: unnamed-chunk-56 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............................                                         |  42%
-  ordinary text without R code
-
-
-label: unnamed-chunk-57 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................                                        |  42%
-  ordinary text without R code
-
-  |                                                                              |..............................                                        |  43%
-label: unnamed-chunk-58 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-59 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...............................                                       |  44%
-  ordinary text without R code
-
-
-label: unnamed-chunk-60 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...............................                                       |  45%
-  ordinary text without R code
-
-
-label: unnamed-chunk-61 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................                                      |  45%
-  ordinary text without R code
-
-  |                                                                              |................................                                      |  46%
-label: unnamed-chunk-62 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-63 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.................................                                     |  47%
-  ordinary text without R code
-
-
-label: unnamed-chunk-64 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.................................                                     |  48%
-label: unnamed-chunk-65 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................                                    |  48%
-  ordinary text without R code
-
-  |                                                                              |..................................                                    |  49%
-label: unnamed-chunk-66 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-67 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................................                                   |  50%
-  ordinary text without R code
-
-
-label: unnamed-chunk-68 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |....................................                                  |  51%
-label: unnamed-chunk-69 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-70 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................                                  |  52%
-  ordinary text without R code
-
-  |                                                                              |.....................................                                 |  52%
-label: unnamed-chunk-71 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.....................................                                 |  53%
-  ordinary text without R code
-
-
-label: unnamed-chunk-72 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |......................................                                |  54%
-label: unnamed-chunk-73 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-74 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................................                                |  55%
-  ordinary text without R code
-
-  |                                                                              |.......................................                               |  55%
-label: unnamed-chunk-75 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......................................                               |  56%
-label: unnamed-chunk-76 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |........................................                              |  57%
-label: unnamed-chunk-77 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-78 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................................                              |  58%
-  ordinary text without R code
-
-  |                                                                              |.........................................                             |  58%
-label: unnamed-chunk-79 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.........................................                             |  59%
-label: unnamed-chunk-80 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..........................................                            |  59%
-label: unnamed-chunk-81 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................                            |  60%
-  ordinary text without R code
-
-
-label: unnamed-chunk-82 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................                            |  61%
-  ordinary text without R code
-
-  |                                                                              |...........................................                           |  61%
-label: unnamed-chunk-83 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...........................................                           |  62%
-label: unnamed-chunk-84 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |............................................                          |  62%
-label: unnamed-chunk-85 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-  |                                                                              |............................................                          |  63%
-  ordinary text without R code
-
-
-label: unnamed-chunk-86 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-  |                                                                              |............................................                          |  64%
-  ordinary text without R code
-
-  |                                                                              |.............................................                         |  64%
-label: unnamed-chunk-87 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.............................................                         |  65%
-label: unnamed-chunk-88 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..............................................                        |  65%
-label: unnamed-chunk-89
-  |                                                                              |..............................................                        |  66%
-  ordinary text without R code
-
-
-label: unnamed-chunk-90 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...............................................                       |  67%
-label: unnamed-chunk-91 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...............................................                       |  68%
-label: unnamed-chunk-92 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................................                      |  68%
-  ordinary text without R code
-
-
-label: unnamed-chunk-93 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................................                      |  69%
-  ordinary text without R code
-
-
-label: unnamed-chunk-94 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.................................................                     |  69%
-  ordinary text without R code
-
-  |                                                                              |.................................................                     |  70%
-label: unnamed-chunk-95 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-96 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................                    |  71%
-  ordinary text without R code
-
-
-label: unnamed-chunk-97 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................                    |  72%
-  ordinary text without R code
-
-
-label: unnamed-chunk-98 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................................................                   |  72%
-  ordinary text without R code
-
-  |                                                                              |...................................................                   |  73%
-label: unnamed-chunk-99 (with options) 
-List of 2
- $ max.print: num 50
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-100 (with options) 
-List of 2
- $ max.print: num 50
- $ engine   : chr "sql"
-
-  |                                                                              |....................................................                  |  74%
-  ordinary text without R code
-
-
-label: unnamed-chunk-101 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |....................................................                  |  75%
-label: unnamed-chunk-102 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.....................................................                 |  75%
-  ordinary text without R code
-
-  |                                                                              |.....................................................                 |  76%
-label: unnamed-chunk-103 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-104 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................................................                |  77%
-  ordinary text without R code
-
-
-label: unnamed-chunk-105 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |......................................................                |  78%
-label: unnamed-chunk-106 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.......................................................               |  78%
-  ordinary text without R code
-
-
-label: unnamed-chunk-107 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-  |                                                                              |.......................................................               |  79%
-  ordinary text without R code
-
-
-label: unnamed-chunk-108 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................................................              |  80%
-  ordinary text without R code
-
-
-label: unnamed-chunk-109 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |........................................................              |  81%
-label: unnamed-chunk-110 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-  |                                                                              |.........................................................             |  81%
-  ordinary text without R code
-
-
-label: unnamed-chunk-111 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-  |                                                                              |.........................................................             |  82%
-  ordinary text without R code
-
-
-label: unnamed-chunk-112 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................................            |  82%
-  ordinary text without R code
-
-  |                                                                              |..........................................................            |  83%
-label: unnamed-chunk-113 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...........................................................           |  84%
-label: unnamed-chunk-114 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-115 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................................................           |  85%
-  ordinary text without R code
-
-  |                                                                              |............................................................          |  85%
-label: unnamed-chunk-116 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |............................................................          |  86%
-label: unnamed-chunk-117 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.............................................................         |  86%
-label: unnamed-chunk-118 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............................................................         |  87%
-  ordinary text without R code
-
-
-label: unnamed-chunk-119 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-  |                                                                              |.............................................................         |  88%
-  ordinary text without R code
-
-  |                                                                              |..............................................................        |  88%
-label: unnamed-chunk-120 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..............................................................        |  89%
-label: unnamed-chunk-121 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...............................................................       |  89%
-label: unnamed-chunk-122 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-  |                                                                              |...............................................................       |  90%
-  ordinary text without R code
-
-
-label: unnamed-chunk-123 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-  |                                                                              |...............................................................       |  91%
-  ordinary text without R code
-
-  |                                                                              |................................................................      |  91%
-label: unnamed-chunk-124 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |................................................................      |  92%
-label: unnamed-chunk-125 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.................................................................     |  92%
-label: unnamed-chunk-126 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-  |                                                                              |.................................................................     |  93%
-  ordinary text without R code
-
-
-label: unnamed-chunk-127 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..................................................................    |  94%
-label: unnamed-chunk-128 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..................................................................    |  95%
-label: unnamed-chunk-129 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................................................................   |  95%
-label: unnamed-chunk-130 (with options) 
-List of 2
- $ max.print: num 100
- $ engine   : chr "sql"
-
-  |                                                                              |...................................................................   |  96%
-  ordinary text without R code
-
-
-label: unnamed-chunk-131 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |....................................................................  |  97%
-label: unnamed-chunk-132 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-133 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................................................  |  98%
-  ordinary text without R code
-
-  |                                                                              |..................................................................... |  98%
-label: unnamed-chunk-134 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................................... |  99%
-  ordinary text without R code
-
-
-label: unnamed-chunk-135 (with options) 
-List of 2
- $ results: chr "hide"
- $ engine : chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |......................................................................| 100%
-label: unnamed-chunk-136
-
-  ordinary text without R code
-
-
-output file: taxonomy.knit.md
-
-/usr/bin/pandoc +RTS -K512m -RTS taxonomy.knit.md --to latex --from markdown+autolink_bare_uris+tex_math_single_backslash --output taxonomy.tex --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --table-of-contents --toc-depth 4 --number-sections --highlight-style tango --pdf-engine xelatex --variable graphics --variable 'geometry:margin=1in' 
-
-Output created: taxonomy.pdf
-> render("./integración_estructura_muestreo.Rmd")
-
-
-processing file: integración_estructura_muestreo.Rmd
-  |                                                                              |                                                                      |   0%
-   inline R code fragments
-
-
-label: setup
-  |                                                                              |                                                                      |   1%
-  ordinary text without R code
-
-  |                                                                              |.                                                                     |   1%
-label: unnamed-chunk-1
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-2 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.                                                                     |   2%
-label: unnamed-chunk-3 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-4 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..                                                                    |   2%
-  ordinary text without R code
-
-
-label: unnamed-chunk-5 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..                                                                    |   3%
-  ordinary text without R code
-
-
-label: unnamed-chunk-6 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-7 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...                                                                   |   4%
-label: unnamed-chunk-8 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-9 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-10 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...                                                                   |   5%
-  ordinary text without R code
-
-
-label: unnamed-chunk-11 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....                                                                  |   5%
-  ordinary text without R code
-
-
-label: unnamed-chunk-12 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....                                                                  |   6%
-  ordinary text without R code
-
-
-label: unnamed-chunk-13 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-14 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.....                                                                 |   7%
-label: unnamed-chunk-15 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-16 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-17 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.....                                                                 |   8%
-  ordinary text without R code
-
-
-label: unnamed-chunk-18 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......                                                                |   8%
-  ordinary text without R code
-
-
-label: unnamed-chunk-19 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |......                                                                |   9%
-label: unnamed-chunk-20 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-21 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......                                                               |   9%
-label: unnamed-chunk-22 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.......                                                               |  10%
-  ordinary text without R code
-
-
-label: unnamed-chunk-23 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-24 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......                                                               |  11%
-label: unnamed-chunk-25 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........                                                              |  11%
-  ordinary text without R code
-
-
-label: unnamed-chunk-26 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-27 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........                                                              |  12%
-  ordinary text without R code
-
-
-label: unnamed-chunk-28 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.........                                                             |  12%
-label: unnamed-chunk-29 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.........                                                             |  13%
-label: unnamed-chunk-30 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-31 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-32 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........                                                            |  14%
-  ordinary text without R code
-
-
-label: unnamed-chunk-33 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-34 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..........                                                            |  15%
-label: unnamed-chunk-35 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...........                                                           |  15%
-label: unnamed-chunk-36 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...........                                                           |  16%
-label: unnamed-chunk-37 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-38 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-39 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............                                                          |  17%
-  ordinary text without R code
-
-
-label: unnamed-chunk-40 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-41 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |............                                                          |  18%
-label: unnamed-chunk-42 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.............                                                         |  18%
-label: unnamed-chunk-43 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-44 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............                                                         |  19%
-  ordinary text without R code
-
-
-label: unnamed-chunk-45 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-46 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............                                                        |  19%
-  ordinary text without R code
-
-  |                                                                              |..............                                                        |  20%
-label: unnamed-chunk-47 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-48 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-49 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............                                                        |  21%
-  ordinary text without R code
-
-  |                                                                              |...............                                                       |  21%
-label: unnamed-chunk-50 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-51 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...............                                                       |  22%
-label: unnamed-chunk-52 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-53 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................                                                      |  22%
-  ordinary text without R code
-
-
-label: unnamed-chunk-54 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................                                                      |  23%
-  ordinary text without R code
-
-
-label: unnamed-chunk-55 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-56 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.................                                                     |  24%
-label: unnamed-chunk-57 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-58 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-59 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.................                                                     |  25%
-  ordinary text without R code
-
-
-label: unnamed-chunk-60 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................                                                    |  25%
-  ordinary text without R code
-
-
-label: unnamed-chunk-61 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................                                                    |  26%
-  ordinary text without R code
-
-
-label: unnamed-chunk-62 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-63 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................                                                   |  27%
-label: unnamed-chunk-64 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-65 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-66 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................                                                   |  28%
-  ordinary text without R code
-
-
-label: unnamed-chunk-67 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................                                                  |  28%
-  ordinary text without R code
-
-
-label: unnamed-chunk-68 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |....................                                                  |  29%
-label: unnamed-chunk-69 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-70 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.....................                                                 |  29%
-label: unnamed-chunk-71 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.....................                                                 |  30%
-  ordinary text without R code
-
-
-label: unnamed-chunk-72 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-73 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.....................                                                 |  31%
-label: unnamed-chunk-74 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................                                                |  31%
-  ordinary text without R code
-
-
-label: unnamed-chunk-75 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-76 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................                                                |  32%
-  ordinary text without R code
-
-
-label: unnamed-chunk-77 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......................                                               |  32%
-label: unnamed-chunk-78 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......................                                               |  33%
-label: unnamed-chunk-79 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-80 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-81 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................                                              |  34%
-  ordinary text without R code
-
-
-label: unnamed-chunk-82 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-83 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |........................                                              |  35%
-label: unnamed-chunk-84 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.........................                                             |  35%
-label: unnamed-chunk-85 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.........................                                             |  36%
-label: unnamed-chunk-86 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-87 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-88 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................                                            |  37%
-  ordinary text without R code
-
-
-label: unnamed-chunk-89 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-90 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..........................                                            |  38%
-label: unnamed-chunk-91 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...........................                                           |  38%
-label: unnamed-chunk-92 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-93 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................                                           |  39%
-  ordinary text without R code
-
-
-label: unnamed-chunk-94 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-95 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................                                          |  39%
-  ordinary text without R code
-
-  |                                                                              |............................                                          |  40%
-label: unnamed-chunk-96 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-97 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-98 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................                                          |  41%
-  ordinary text without R code
-
-  |                                                                              |.............................                                         |  41%
-label: unnamed-chunk-99 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-100 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.............................                                         |  42%
-label: unnamed-chunk-101 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-102 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................                                        |  42%
-  ordinary text without R code
-
-
-label: unnamed-chunk-103 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................                                        |  43%
-  ordinary text without R code
-
-
-label: unnamed-chunk-104 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-105 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...............................                                       |  44%
-label: unnamed-chunk-106 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-107 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-108 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...............................                                       |  45%
-  ordinary text without R code
-
-
-label: unnamed-chunk-109 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................                                      |  45%
-  ordinary text without R code
-
-
-label: unnamed-chunk-110 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................                                      |  46%
-  ordinary text without R code
-
-
-label: unnamed-chunk-111 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-112 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.................................                                     |  47%
-label: unnamed-chunk-113 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-114 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-115 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.................................                                     |  48%
-  ordinary text without R code
-
-
-label: unnamed-chunk-116 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................                                    |  48%
-  ordinary text without R code
-
-
-label: unnamed-chunk-117 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..................................                                    |  49%
-label: unnamed-chunk-118 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-119 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................................                                   |  49%
-label: unnamed-chunk-120 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................................                                   |  50%
-  ordinary text without R code
-
-
-label: unnamed-chunk-121 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-122 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................................                                   |  51%
-label: unnamed-chunk-123 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................                                  |  51%
-  ordinary text without R code
-
-
-label: unnamed-chunk-124 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-125 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................                                  |  52%
-  ordinary text without R code
-
-
-label: unnamed-chunk-126 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.....................................                                 |  52%
-label: unnamed-chunk-127 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.....................................                                 |  53%
-label: unnamed-chunk-128 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-129 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-130 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................................                                |  54%
-  ordinary text without R code
-
-
-label: unnamed-chunk-131 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-132 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |......................................                                |  55%
-label: unnamed-chunk-133 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......................................                               |  55%
-label: unnamed-chunk-134 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......................................                               |  56%
-label: unnamed-chunk-135 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-136 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-137 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................................                              |  57%
-  ordinary text without R code
-
-
-label: unnamed-chunk-138 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-139 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |........................................                              |  58%
-label: unnamed-chunk-140 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.........................................                             |  58%
-label: unnamed-chunk-141 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-142 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.........................................                             |  59%
-  ordinary text without R code
-
-
-label: unnamed-chunk-143 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-144 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................                            |  59%
-  ordinary text without R code
-
-  |                                                                              |..........................................                            |  60%
-label: unnamed-chunk-145 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-146 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-147 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................                            |  61%
-  ordinary text without R code
-
-  |                                                                              |...........................................                           |  61%
-label: unnamed-chunk-148 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-149 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...........................................                           |  62%
-label: unnamed-chunk-150 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-151 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................................                          |  62%
-  ordinary text without R code
-
-
-label: unnamed-chunk-152 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................................                          |  63%
-  ordinary text without R code
-
-
-label: unnamed-chunk-153 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-154 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.............................................                         |  64%
-label: unnamed-chunk-155 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-156 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-157 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............................................                         |  65%
-  ordinary text without R code
-
-
-label: unnamed-chunk-158 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................................                        |  65%
-  ordinary text without R code
-
-
-label: unnamed-chunk-159 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................................                        |  66%
-  ordinary text without R code
-
-
-label: unnamed-chunk-160 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-161 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...............................................                       |  67%
-label: unnamed-chunk-162 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-163 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-164 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...............................................                       |  68%
-  ordinary text without R code
-
-
-label: unnamed-chunk-165 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................................                      |  68%
-  ordinary text without R code
-
-
-label: unnamed-chunk-166 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |................................................                      |  69%
-label: unnamed-chunk-167 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-168 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.................................................                     |  69%
-label: unnamed-chunk-169 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.................................................                     |  70%
-  ordinary text without R code
-
-
-label: unnamed-chunk-170 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-171 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.................................................                     |  71%
-label: unnamed-chunk-172 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................                    |  71%
-  ordinary text without R code
-
-
-label: unnamed-chunk-173 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-174 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................                    |  72%
-  ordinary text without R code
-
-
-label: unnamed-chunk-175 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................................................                   |  72%
-label: unnamed-chunk-176 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................................................                   |  73%
-label: unnamed-chunk-177 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-178 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-179 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................................                  |  74%
-  ordinary text without R code
-
-
-label: unnamed-chunk-180 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-181 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |....................................................                  |  75%
-label: unnamed-chunk-182 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.....................................................                 |  75%
-label: unnamed-chunk-183 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.....................................................                 |  76%
-label: unnamed-chunk-184 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-185 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-186 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................................................                |  77%
-  ordinary text without R code
-
-
-label: unnamed-chunk-187 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-188 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |......................................................                |  78%
-label: unnamed-chunk-189 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.......................................................               |  78%
-label: unnamed-chunk-190 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-191 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.......................................................               |  79%
-  ordinary text without R code
-
-
-label: unnamed-chunk-192 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-193 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................................................              |  79%
-  ordinary text without R code
-
-  |                                                                              |........................................................              |  80%
-label: unnamed-chunk-194 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-195 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-196 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................................................              |  81%
-  ordinary text without R code
-
-  |                                                                              |.........................................................             |  81%
-label: unnamed-chunk-197 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-198 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.........................................................             |  82%
-label: unnamed-chunk-199 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-200 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................................            |  82%
-  ordinary text without R code
-
-
-label: unnamed-chunk-201 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................................            |  83%
-  ordinary text without R code
-
-
-label: unnamed-chunk-202 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-203 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...........................................................           |  84%
-label: unnamed-chunk-204 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-205 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-206 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................................................           |  85%
-  ordinary text without R code
-
-
-label: unnamed-chunk-207 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................................................          |  85%
-  ordinary text without R code
-
-
-label: unnamed-chunk-208 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................................................          |  86%
-  ordinary text without R code
-
-
-label: unnamed-chunk-209 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-210 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.............................................................         |  87%
-label: unnamed-chunk-211 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-212 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-213 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............................................................         |  88%
-  ordinary text without R code
-
-
-label: unnamed-chunk-214 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................................................        |  88%
-  ordinary text without R code
-
-
-label: unnamed-chunk-215 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..............................................................        |  89%
-label: unnamed-chunk-216 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-217 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...............................................................       |  89%
-label: unnamed-chunk-218 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...............................................................       |  90%
-  ordinary text without R code
-
-
-label: unnamed-chunk-219 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-220 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...............................................................       |  91%
-label: unnamed-chunk-221 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................................................      |  91%
-  ordinary text without R code
-
-
-label: unnamed-chunk-222 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-223 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................................................      |  92%
-  ordinary text without R code
-
-
-label: unnamed-chunk-224 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.................................................................     |  92%
-label: unnamed-chunk-225 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |.................................................................     |  93%
-label: unnamed-chunk-226 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-227 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-228 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................................    |  94%
-  ordinary text without R code
-
-
-label: unnamed-chunk-229 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-230 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..................................................................    |  95%
-label: unnamed-chunk-231 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................................................................   |  95%
-label: unnamed-chunk-232 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |...................................................................   |  96%
-label: unnamed-chunk-233 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-234 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-235 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................................................  |  97%
-  ordinary text without R code
-
-
-label: unnamed-chunk-236 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-237 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |....................................................................  |  98%
-label: unnamed-chunk-238 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-  |                                                                              |..................................................................... |  98%
-label: unnamed-chunk-239 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-240 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-  |                                                                              |..................................................................... |  99%
-  ordinary text without R code
-
-
-label: unnamed-chunk-241 (with options) 
-List of 2
- $ results: chr "hide"
- $ engine : chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-242 (with options) 
-List of 2
- $ max.print: logi NA
- $ engine   : chr "sql"
-
-  |                                                                              |......................................................................|  99%
-  ordinary text without R code
-
-  |                                                                              |......................................................................| 100%
-label: unnamed-chunk-243 (with options) 
-List of 1
- $ engine: chr "sql"
-
-
-  ordinary text without R code
-
-
-label: unnamed-chunk-244
-
-output file: integración_estructura_muestreo.knit.md
-
-/usr/bin/pandoc +RTS -K512m -RTS integración_estructura_muestreo.knit.md --to latex --from markdown+autolink_bare_uris+tex_math_single_backslash --output integración_estructura_muestreo.tex --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --table-of-contents --toc-depth 4 --number-sections --highlight-style tango --pdf-engine xelatex --variable graphics --variable 'geometry:margin=1in' 
-
-Output created: integración_estructura_muestreo.pdf
-Warning messages:
-1: In postgresqlExecStatement(conn, statement, ...) :
-  RPosgreSQL warning: unrecognized PostgreSQL field type geometry (id:81720) in column 9
-2: In postgresqlExecStatement(conn, statement, ...) :
-  RPosgreSQL warning: unrecognized PostgreSQL field type geometry (id:81720) in column 9
-3: In postgresqlExecStatement(conn, statement, ...) :
-  RPosgreSQL warning: unrecognized PostgreSQL field type geometry (id:81720) in column 9
-4: In postgresqlExecStatement(conn, statement, ...) :
-  RPosgreSQL warning: unrecognized PostgreSQL field type geometry (id:81720) in column 9
-5: In postgresqlExecStatement(conn, statement, ...) :
-  RPosgreSQL warning: unrecognized PostgreSQL field type geometry (id:81720) in column 9
-6: In postgresqlExecStatement(conn, statement, ...) :
-  RPosgreSQL warning: unrecognized PostgreSQL field type geometry (id:81720) in column 9
-7: In postgresqlExecStatement(conn, statement, ...) :
-  RPosgreSQL warning: unrecognized PostgreSQL field type geometry (id:81720) in column 9
-8: In postgresqlExecStatement(conn, statement, ...) :
-  RPosgreSQL warning: unrecognized PostgreSQL field type geometry (id:81720) in column 9
-> render("./datos_registros_suplementarios.Rmd")
-
-
-processing file: datos_registros_suplementarios.Rmd
-  |                                                                              |                                                                      |   0%  |                                                                              |..                                                                    |   3%
-   inline R code fragments
-
-  |                                                                              |....                                                                  |   6%
-label: setup
-  |                                                                              |......                                                                |   9%
-  ordinary text without R code
-
-  |                                                                              |........                                                              |  12%
-label: unnamed-chunk-1 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........                                                            |  15%
-  ordinary text without R code
-
-  |                                                                              |............                                                          |  18%
-label: unnamed-chunk-2 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............                                                        |  21%
-  ordinary text without R code
-
-  |                                                                              |................                                                      |  24%
-label: unnamed-chunk-3 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................                                                   |  26%
-  ordinary text without R code
-
-  |                                                                              |.....................                                                 |  29%
-label: unnamed-chunk-4 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.......................                                               |  32%
-  ordinary text without R code
-
-  |                                                                              |.........................                                             |  35%
-label: unnamed-chunk-5 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................                                           |  38%
-  ordinary text without R code
-
-  |                                                                              |.............................                                         |  41%
-label: unnamed-chunk-6 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...............................                                       |  44%
-  ordinary text without R code
-
-  |                                                                              |.................................                                     |  47%
-label: unnamed-chunk-7 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................................                                   |  50%
-  ordinary text without R code
-
-  |                                                                              |.....................................                                 |  53%
-label: unnamed-chunk-8 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.......................................                               |  56%
-  ordinary text without R code
-
-  |                                                                              |.........................................                             |  59%
-label: unnamed-chunk-9 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................................                           |  62%
-  ordinary text without R code
-
-  |                                                                              |.............................................                         |  65%
-label: unnamed-chunk-10 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...............................................                       |  68%
-  ordinary text without R code
-
-  |                                                                              |.................................................                     |  71%
-label: unnamed-chunk-11 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................................................                   |  74%
-  ordinary text without R code
-
-  |                                                                              |......................................................                |  76%
-label: unnamed-chunk-12 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................................................              |  79%
-label: unnamed-chunk-13 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................................            |  82%
-  ordinary text without R code
-
-  |                                                                              |............................................................          |  85%
-label: unnamed-chunk-14 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................................................        |  88%
-  ordinary text without R code
-
-  |                                                                              |................................................................      |  91%
-label: unnamed-chunk-15 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................................    |  94%
-  ordinary text without R code
-
-  |                                                                              |....................................................................  |  97%
-label: unnamed-chunk-16
-  |                                                                              |......................................................................| 100%
-  ordinary text without R code
-
-
-output file: datos_registros_suplementarios.knit.md
-
-/usr/bin/pandoc +RTS -K512m -RTS datos_registros_suplementarios.knit.md --to latex --from markdown+autolink_bare_uris+tex_math_single_backslash --output datos_registros_suplementarios.tex --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --table-of-contents --toc-depth 4 --number-sections --highlight-style tango --pdf-engine xelatex --variable graphics --variable 'geometry:margin=1in' 
-
-Output created: datos_registros_suplementarios.pdf
-> render("./puntos_referencia_habitats.Rmd")
-
-
-processing file: puntos_referencia_habitats.Rmd
-  |                                                                              |                                                                      |   0%  |                                                                              |.                                                                     |   1%
-   inline R code fragments
-
-  |                                                                              |..                                                                    |   2%
-label: setup
-  |                                                                              |..                                                                    |   4%
-  ordinary text without R code
-
-  |                                                                              |...                                                                   |   5%
-label: unnamed-chunk-1 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....                                                                  |   6%
-  ordinary text without R code
-
-  |                                                                              |.....                                                                 |   7%
-label: unnamed-chunk-2 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......                                                                |   8%
-  ordinary text without R code
-
-  |                                                                              |.......                                                               |  10%
-label: unnamed-chunk-3 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........                                                              |  11%
-  ordinary text without R code
-
-  |                                                                              |........                                                              |  12%
-label: unnamed-chunk-4 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.........                                                             |  13%
-  ordinary text without R code
-
-  |                                                                              |..........                                                            |  14%
-label: unnamed-chunk-5 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........                                                           |  15%
-  ordinary text without R code
-
-  |                                                                              |............                                                          |  17%
-label: unnamed-chunk-6 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............                                                          |  18%
-  ordinary text without R code
-
-  |                                                                              |.............                                                         |  19%
-label: unnamed-chunk-7 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............                                                        |  20%
-  ordinary text without R code
-
-  |                                                                              |...............                                                       |  21%
-label: unnamed-chunk-8 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................                                                      |  23%
-  ordinary text without R code
-
-  |                                                                              |.................                                                     |  24%
-label: unnamed-chunk-9 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................                                                    |  25%
-  ordinary text without R code
-
-  |                                                                              |..................                                                    |  26%
-label: unnamed-chunk-10 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................                                                   |  27%
-  ordinary text without R code
-
-  |                                                                              |....................                                                  |  29%
-label: unnamed-chunk-11 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.....................                                                 |  30%
-  ordinary text without R code
-
-  |                                                                              |......................                                                |  31%
-label: unnamed-chunk-12 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................                                                |  32%
-  ordinary text without R code
-
-  |                                                                              |.......................                                               |  33%
-label: unnamed-chunk-13 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |........................                                              |  35%
-  ordinary text without R code
-
-  |                                                                              |.........................                                             |  36%
-label: unnamed-chunk-14 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................                                            |  37%
-  ordinary text without R code
-
-  |                                                                              |...........................                                           |  38%
-label: unnamed-chunk-15
-  |                                                                              |............................                                          |  39%
-  ordinary text without R code
-
-  |                                                                              |............................                                          |  40%
-label: unnamed-chunk-16 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............................                                         |  42%
-  ordinary text without R code
-
-  |                                                                              |..............................                                        |  43%
-label: unnamed-chunk-17 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...............................                                       |  44%
-  ordinary text without R code
-
-  |                                                                              |................................                                      |  45%
-label: unnamed-chunk-18 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................                                      |  46%
-  ordinary text without R code
-
-  |                                                                              |.................................                                     |  48%
-label: unnamed-chunk-19 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................                                    |  49%
-  ordinary text without R code
-
-  |                                                                              |...................................                                   |  50%
-label: unnamed-chunk-20 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................                                  |  51%
-  ordinary text without R code
-
-  |                                                                              |.....................................                                 |  52%
-label: unnamed-chunk-21 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................................                                |  54%
-  ordinary text without R code
-
-  |                                                                              |......................................                                |  55%
-label: unnamed-chunk-22 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.......................................                               |  56%
-  ordinary text without R code
-
-  |                                                                              |........................................                              |  57%
-label: unnamed-chunk-23 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.........................................                             |  58%
-  ordinary text without R code
-
-  |                                                                              |..........................................                            |  60%
-label: unnamed-chunk-24 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................                            |  61%
-  ordinary text without R code
-
-  |                                                                              |...........................................                           |  62%
-label: unnamed-chunk-25 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................................                          |  63%
-  ordinary text without R code
-
-  |                                                                              |.............................................                         |  64%
-label: unnamed-chunk-26 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................................                        |  65%
-  ordinary text without R code
-
-  |                                                                              |...............................................                       |  67%
-label: unnamed-chunk-27
-  |                                                                              |................................................                      |  68%
-  ordinary text without R code
-
-  |                                                                              |................................................                      |  69%
-label: unnamed-chunk-28 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.................................................                     |  70%
-  ordinary text without R code
-
-  |                                                                              |..................................................                    |  71%
-label: unnamed-chunk-29 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...................................................                   |  73%
-  ordinary text without R code
-
-  |                                                                              |....................................................                  |  74%
-label: unnamed-chunk-30 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................................                  |  75%
-  ordinary text without R code
-
-  |                                                                              |.....................................................                 |  76%
-label: unnamed-chunk-31 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |......................................................                |  77%
-  ordinary text without R code
-
-  |                                                                              |.......................................................               |  79%
-label: unnamed-chunk-32 (with options) 
-List of 2
- $ results: chr "hide"
- $ engine : chr "sql"
-
-  |                                                                              |........................................................              |  80%
-  ordinary text without R code
-
-  |                                                                              |.........................................................             |  81%
-label: unnamed-chunk-33 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..........................................................            |  82%
-  ordinary text without R code
-
-  |                                                                              |..........................................................            |  83%
-label: unnamed-chunk-34 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................................................           |  85%
-  ordinary text without R code
-
-  |                                                                              |............................................................          |  86%
-label: unnamed-chunk-35 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.............................................................         |  87%
-  ordinary text without R code
-
-  |                                                                              |..............................................................        |  88%
-label: unnamed-chunk-36 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..............................................................        |  89%
-  ordinary text without R code
-
-  |                                                                              |...............................................................       |  90%
-label: unnamed-chunk-37 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................................................      |  92%
-  ordinary text without R code
-
-  |                                                                              |.................................................................     |  93%
-label: unnamed-chunk-38 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................................    |  94%
-  ordinary text without R code
-
-  |                                                                              |...................................................................   |  95%
-label: unnamed-chunk-39 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |....................................................................  |  96%
-  ordinary text without R code
-
-  |                                                                              |....................................................................  |  98%
-label: unnamed-chunk-40 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |..................................................................... |  99%
-  ordinary text without R code
-
-  |                                                                              |......................................................................| 100%
-label: unnamed-chunk-41
-
-output file: puntos_referencia_habitats.knit.md
-
-/usr/bin/pandoc +RTS -K512m -RTS puntos_referencia_habitats.knit.md --to latex --from markdown+autolink_bare_uris+tex_math_single_backslash --output puntos_referencia_habitats.tex --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --table-of-contents --toc-depth 4 --number-sections --highlight-style tango --pdf-engine xelatex --variable graphics --variable 'geometry:margin=1in' 
-
-Output created: puntos_referencia_habitats.pdf
-> render("./exportación_datos.Rmd")
-
-
-processing file: exportación_datos.Rmd
-  |                                                                              |                                                                      |   0%  |                                                                              |..                                                                    |   3%
-   inline R code fragments
-
-  |                                                                              |....                                                                  |   5%
-label: setup
-  |                                                                              |......                                                                |   8%
-  ordinary text without R code
-
-  |                                                                              |........                                                              |  11%
-label: unnamed-chunk-1
-  |                                                                              |.........                                                             |  14%
-  ordinary text without R code
-
-  |                                                                              |...........                                                           |  16%
-label: unnamed-chunk-2 (with options) 
-List of 1
- $ code: chr [1:14] "dbTab2mat <-" "function(dbTab,col_samplingUnits=\"SU\",col_species=\"sp\",col_content=\"abundance\",empty=NA,checklist=F)" "{" "  COLS<-unique(as.character(dbTab[,col_species]))" ...
-
-  |                                                                              |.............                                                         |  19%
-  ordinary text without R code
-
-  |                                                                              |...............                                                       |  22%
-label: unnamed-chunk-3 (with options) 
-List of 1
- $ code: chr [1:17] "save_in_excel<-function(file,lVar)" "{" "  if(!is.list(lVar)){" "    listVar<-mget(lVar,envir = .GlobalEnv)" ...
-
-  |                                                                              |.................                                                     |  24%
-  ordinary text without R code
-
-  |                                                                              |...................                                                   |  27%
-label: unnamed-chunk-4 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |.....................                                                 |  30%
-  ordinary text without R code
-
-  |                                                                              |.......................                                               |  32%
-label: unnamed-chunk-5 (with options) 
-List of 2
- $ result: chr "hide"
- $ engine: chr "sql"
-
-  |                                                                              |.........................                                             |  35%
-  ordinary text without R code
-
-  |                                                                              |..........................                                            |  38%
-label: unnamed-chunk-6 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |............................                                          |  41%
-  ordinary text without R code
-
-  |                                                                              |..............................                                        |  43%
-label: unnamed-chunk-7 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |................................                                      |  46%
-  ordinary text without R code
-
-  |                                                                              |..................................                                    |  49%
-label: unnamed-chunk-8 (with options) 
-List of 2
- $ result: chr "hide"
- $ engine: chr "sql"
-
-  |                                                                              |....................................                                  |  51%
-  ordinary text without R code
-
-  |                                                                              |......................................                                |  54%
-label: unnamed-chunk-9 (with options) 
-List of 2
- $ result: chr "hide"
- $ engine: chr "sql"
-
-  |                                                                              |........................................                              |  57%
-  ordinary text without R code
-
-  |                                                                              |..........................................                            |  59%
-label: unnamed-chunk-10 (with options) 
-List of 2
- $ result: chr "hide"
- $ engine: chr "sql"
-
-  |                                                                              |............................................                          |  62%
-  ordinary text without R code
-
-  |                                                                              |.............................................                         |  65%
-label: unnamed-chunk-11 (with options) 
-List of 2
- $ result: chr "hide"
- $ engine: chr "sql"
-
-  |                                                                              |...............................................                       |  68%
-  ordinary text without R code
-
-  |                                                                              |.................................................                     |  70%
-label: unnamed-chunk-12 (with options) 
-List of 2
- $ result: chr "hide"
- $ engine: chr "sql"
-
-  |                                                                              |...................................................                   |  73%
-  ordinary text without R code
-
-  |                                                                              |.....................................................                 |  76%
-label: unnamed-chunk-13
-  |                                                                              |.......................................................               |  78%
-  ordinary text without R code
-
-  |                                                                              |.........................................................             |  81%
-label: unnamed-chunk-14 (with options) 
-List of 1
- $ engine: chr "sql"
-
-  |                                                                              |...........................................................           |  84%
-  ordinary text without R code
-
-  |                                                                              |.............................................................         |  86%
-label: unnamed-chunk-15 (with options) 
-List of 2
- $ result: chr "hide"
- $ engine: chr "sql"
-
-  |                                                                              |..............................................................        |  89%
-  ordinary text without R code
-
-  |                                                                              |................................................................      |  92%
-label: unnamed-chunk-16
-  |                                                                              |..................................................................    |  95%
-  ordinary text without R code
-
-  |                                                                              |....................................................................  |  97%
-label: unnamed-chunk-17
-  |                                                                              |......................................................................| 100%
-  ordinary text without R code
-
-
-output file: exportación_datos.knit.md
-
-/usr/bin/pandoc +RTS -K512m -RTS exportación_datos.knit.md --to latex --from markdown+autolink_bare_uris+tex_math_single_backslash --output exportación_datos.tex --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /usr/lib64/R/site-library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --table-of-contents --toc-depth 4 --number-sections --highlight-style tango --pdf-engine pdflatex --variable graphics --variable 'geometry:margin=1in' 
-
-Output created: exportación_datos.pdf
-> 
-> 
-> proc.time()
-   user  system elapsed 
- 63.513   3.046 219.786 

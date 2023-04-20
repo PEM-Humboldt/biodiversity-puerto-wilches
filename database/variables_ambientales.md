@@ -1,0 +1,516 @@
+Variables ambientales acuáticas
+================
+Marius Bottin
+2023-04-20
+
+- [1 Reading files](#1-reading-files)
+  - [1.1 Peces](#11-peces)
+  - [1.2 Hidrobiologicos](#12-hidrobiologicos)
+  - [1.3 Sending in the database
+    (raw_dwc)](#13-sending-in-the-database-raw_dwc)
+  - [1.4 Checking data](#14-checking-data)
+    - [1.4.1 Peces](#141-peces)
+    - [1.4.2 Hidrobiologicos](#142-hidrobiologicos)
+- [2 Inserting in database](#2-inserting-in-database)
+
+------------------------------------------------------------------------
+
+En este documento, se trata de añadir las variables ambientales, en
+particular en el caso de
+
+``` r
+require(openxlsx)
+```
+
+    ## Loading required package: openxlsx
+
+``` r
+require(RPostgreSQL)
+```
+
+    ## Loading required package: RPostgreSQL
+
+    ## Loading required package: DBI
+
+``` r
+fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+opts <- options(knitr.kable.NA = "---")
+```
+
+# 1 Reading files
+
+## 1.1 Peces
+
+``` r
+fol_dwc <- "../../bpw_data_repo/dwc/"
+phy_chi_peces <- read.xlsx(file.path(fol_dwc, "VariablesAmbientales_Peces_FaseI y II_V2.xlsx"),
+    startRow = 4, colNames = F)
+col_phy_chi_peces <- read.xlsx(file.path(fol_dwc, "VariablesAmbientales_Peces_FaseI y II_V2.xlsx"),
+    rows = 1:3, colNames = F)
+COLNAMES <- as.character(col_phy_chi_peces[3, ])
+COLNAMES[is.na(COLNAMES)] <- as.character(col_phy_chi_peces[2, is.na(COLNAMES)])
+COLNAMES[is.na(COLNAMES)] <- as.character(col_phy_chi_peces[1, is.na(COLNAMES)])
+colnames(phy_chi_peces) <- gsub("[_ ().-/]+", "_", tolower(gsub("([a-z])([A-Z]+)",
+    "\\1_\\L\\2", COLNAMES, perl = T)))
+```
+
+## 1.2 Hidrobiologicos
+
+``` r
+hidrobiologicos_phy_chi <- list(phy_chi_events_hidrobiologico = read.xlsx(file.path(fol_dwc,
+    "I2D-BIO_2021_090_v2.xlsx"), sheet = "coordevento_fisicoquimico_santa"),
+    phy_chi_general_hidrobiologico = read.xlsx(file.path(fol_dwc, "I2D-BIO_2021_090_v2.xlsx"),
+        sheet = "Fisicoquímico General "), phy_chi_aguas_hidrobiologico = read.xlsx(file.path(fol_dwc,
+        "I2D-BIO_2021_090_v2.xlsx"), sheet = "Fisicoquimico Aguas"), phy_chi_sedimento_hidrobiologico = read.xlsx(file.path(fol_dwc,
+        "I2D-BIO_2021_090_v2.xlsx"), sheet = "Fisicoquimico Sedimento"))
+for (i in 1:length(hidrobiologicos_phy_chi)) {
+    colnames(hidrobiologicos_phy_chi[[i]]) <- gsub("[_ ().-/]+", "_", tolower(gsub("([a-z])([A-Z]+)",
+        "\\1_\\L\\2", colnames(hidrobiologicos_phy_chi[[i]]), perl = T)))
+}
+```
+
+## 1.3 Sending in the database (raw_dwc)
+
+``` r
+dbWriteTable(fracking_db, c("raw_dwc", "phy_chi_peces"), phy_chi_peces,
+    overwrite = T)
+```
+
+    ## [1] TRUE
+
+``` r
+for (i in 1:length(hidrobiologicos_phy_chi)) {
+    dbWriteTable(fracking_db, c("raw_dwc", names(hidrobiologicos_phy_chi)[i]),
+        hidrobiologicos_phy_chi[[i]])
+}
+```
+
+## 1.4 Checking data
+
+### 1.4.1 Peces
+
+``` sql
+SELECT anh,pr.name_pt_ref, s.cd_tempo,h.tipo_cuerp_agua,tipo_de_cuerpo_de_agua
+FROM main.gp_event ge
+LEFT JOIN main.punto_referencia pr USING (cd_pt_ref)
+LEFT JOIN habitat_gp_event_aquatic h USING (cd_gp_event)
+LEFT JOIN main.event e USING (cd_gp_event)
+LEFT JOIN main.def_season s ON e.date_time_begin <@ s.date_range
+FULL OUTER JOIN raw_dwc.phy_chi_peces 
+   ON 
+       REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?','\1')::int=pr.num_anh
+       AND(
+         (REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?','\2')='_II' AND s.cd_tempo='T2')
+         OR
+         (REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?','\2')='' AND s.cd_tempo='T1')
+        )
+WHERE ge.cd_gp_biol='pece' AND tipo_cuerp_agua!=tipo_de_cuerpo_de_agua
+GROUP BY h.cd_gp_event,h.tipo_cuerp_agua, pr.name_pt_ref, s.cd_tempo, pr.num_anh, anh,tipo_de_cuerpo_de_agua
+```
+
+<div class="knitsql-table">
+
+| anh      | name_pt_ref | cd_tempo | tipo_cuerp_agua | tipo_de_cuerpo_de_agua |
+|:---------|:------------|:---------|:----------------|:-----------------------|
+| ANH19    | ANH_19      | T1       | Río             | Río Magdalena          |
+| ANH19    | ANH_19      | T1       | Río             | Río Magdalena          |
+| ANH19    | ANH_19      | T1       | Río             | Río Magdalena          |
+| ANH20    | ANH_20      | T1       | Río             | Río Magdalena          |
+| ANH20    | ANH_20      | T1       | Río             | Río Magdalena          |
+| ANH20    | ANH_20      | T1       | Río             | Río Magdalena          |
+| ANH21    | ANH_21      | T1       | Río             | Río Magdalena          |
+| ANH21    | ANH_21      | T1       | Río             | Río Magdalena          |
+| ANH21    | ANH_21      | T1       | Río             | Río Magdalena          |
+| ANH32    | ANH_32      | T1       | Río             | Río Magdalena          |
+| ANH32    | ANH_32      | T1       | Río             | Río Magdalena          |
+| ANH32    | ANH_32      | T1       | Río             | Río Magdalena          |
+| ANH33    | ANH_33      | T1       | Río             | Río Magdalena          |
+| ANH33    | ANH_33      | T1       | Río             | Río Magdalena          |
+| ANH33    | ANH_33      | T1       | Río             | Río Magdalena          |
+| ANH19_II | ANH_19      | T2       | Río             | Río Magdalena          |
+| ANH19_II | ANH_19      | T2       | Río             | Río Magdalena          |
+| ANH19_II | ANH_19      | T2       | Río             | Río Magdalena          |
+| ANH20_II | ANH_20      | T2       | Río             | Río Magdalena          |
+| ANH20_II | ANH_20      | T2       | Río             | Río Magdalena          |
+| ANH20_II | ANH_20      | T2       | Río             | Río Magdalena          |
+| ANH21_II | ANH_21      | T2       | Río             | Río Magdalena          |
+| ANH21_II | ANH_21      | T2       | Río             | Río Magdalena          |
+| ANH21_II | ANH_21      | T2       | Río             | Río Magdalena          |
+| ANH32_II | ANH_32      | T2       | Río             | Río Magdalena          |
+| ANH32_II | ANH_32      | T2       | Río             | Río Magdalena          |
+| ANH32_II | ANH_32      | T2       | Río             | Río Magdalena          |
+| ANH33_II | ANH_33      | T2       | Río             | Río Magdalena          |
+| ANH33_II | ANH_33      | T2       | Río             | Río Magdalena          |
+| ANH33_II | ANH_33      | T2       | Río             | Río Magdalena          |
+
+30 records
+
+</div>
+
+**La ANH 39 está como Quebrada en nuestros datos y como caño en los
+datos phy_chi de peces** (el resto está en acuerdo)
+
+### 1.4.2 Hidrobiologicos
+
+Los nombres de ANH en los archivos de datos physico-quimicos de
+Hidrobiologicos son bien raros, pero los datos tienen tambien unas
+coordenadas. Una primera estrategía para entender los que pasa sería ver
+a que corresponden esos puntos en los eventos de hidrobiologico:
+
+``` sql
+WITH coord AS(
+SELECT event_id, ST_SetSrid(ST_Transform(ST_SetSrid(ST_MakePoint(decimal_longitude,decimal_latitude),4326),(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.phy_chi_events_hidrobiologico
+)
+SELECT c.event_id event_id_pc, ARRAY_AGG(DISTINCT num_anh), ARRAY_AGG(DISTINCT cd_gp_biol)
+FROM coord c
+LEFT JOIN main.event e ON c.geom=e.pt_geom--ST_DWithin(c.geom,e.pt_geom,1)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+GROUP BY c.event_id
+```
+
+<div class="knitsql-table">
+
+| event_id_pc   | array_agg | array_agg                       |
+|:--------------|:----------|:--------------------------------|
+| ANH10-A       | {10}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH10-SE      | {10}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH11-A       | {11}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH11-SE      | {11}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH12-A       | {12}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH12-SE      | {12}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH13-A       | {13}      | {fipl,mafi,minv,pece,peri,zopl} |
+| ANH13-SE      | {13}      | {fipl,mafi,minv,pece,peri,zopl} |
+| ANH14-A       | {14}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH14-SE      | {14}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH15-A       | {15}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH15-SE      | {15}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH16-A       | {16}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH16-SE      | {16}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH17-A       | {17}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH17-SE      | {17}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH18-A       | {18}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH18-SE      | {18}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH19-A       | {19}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH19-SE      | {19}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH20-A       | {20}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH20-SE      | {20}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH21-A       | {21}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH21-SE      | {21}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH22/297-A   | {297}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH22/297-SE  | {297}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH27/298-A   | {298}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH27/298-SE  | {298}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH291-A      | {291}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH291-SE     | {291}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH292-A      | {292}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH29/301-A   | {301}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH29/301-SE  | {301}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH293-A      | {293}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH294-A      | {294}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH295-A      | {295}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH295-SE     | {295}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH296-A      | {296}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A10      | {10}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A11      | {11}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A12      | {12}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A13      | {13}      | {fipl,mafi,minv,pece,peri,zopl} |
+| ANH2_A14      | {14}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A15      | {15}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A16      | {16}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A17      | {17}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A18      | {18}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A19      | {19}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A20      | {20}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A21      | {21}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A22/297  | {297}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A27/298  | {298}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A291     | {291}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A292     | {292}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A293     | {293}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A29/301  | {301}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A294     | {294}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A295     | {295}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A296     | {296}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A302     | {302}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A303     | {303}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A304     | {304}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A305     | {305}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A31/299  | {299}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A32      | {32}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A33      | {33}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A34      | {34}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A35      | {35}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A36/300  | {300}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A37      | {37}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A38      | {38}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A39      | {39}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A40      | {40}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A41      | {41}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A42      | {42}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A43      | {43}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A7       | {7}       | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A8       | {8}       | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_A9       | {9}       | {fipl,mafi,minv,zopl}           |
+| ANH2_SE10     | {10}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE11     | {11}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE12     | {12}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE13     | {13}      | {fipl,mafi,minv,pece,peri,zopl} |
+| ANH2_SE14     | {14}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE15     | {15}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE16     | {16}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE17     | {17}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE18     | {18}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE19     | {19}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE20     | {20}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE21     | {21}      | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE22/297 | {297}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE27/298 | {298}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE291    | {291}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE29/301 | {301}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE295    | {295}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE302    | {302}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE303    | {303}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE31/299 | {299}     | {fipl,mafi,minv,peri,zopl}      |
+| ANH2_SE32     | {32}      | {fipl,mafi,minv,peri,zopl}      |
+
+Displaying records 1 - 100
+
+</div>
+
+# 2 Inserting in database
+
+``` sql
+INSERT INTO main.phy_chi_peces
+SELECT 
+  cd_pt_ref,
+  s.cd_tempo,
+  temp_°c_,
+  p_h,
+  o_d_mg_l_::double precision,
+  cond_µs_cm_,
+  película_de_grasas_=1,
+  material_flotante=1,
+  inidice_de_complejidad_de_sustrato,
+  indice_de_complejidad_estructural,
+  cobertura_del_dosel_
+FROM raw_dwc.phy_chi_peces
+LEFT JOIN main.punto_referencia pr ON pr.num_anh=REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?$','\1')::int
+LEFT JOIN main.def_season s ON s.cd_tempo=CASE
+    WHEN REGEXP_REPLACE(anh,'^ANH([0-9]{1,3})(_II)?$','\2')='_II' THEN 'T2'
+    ELSE 'T1'
+  END
+RETURNING cd_pt_ref,cd_tempo;
+```
+
+``` sql
+INSERT INTO main.phy_chi_hidro_event(cd_pt_ref,event_id_phy_chi,cd_phy_chi_type,date_time,the_geom)
+WITH coord AS(
+SELECT event_id, ST_SetSrid(ST_Transform(ST_SetSrid(ST_MakePoint(decimal_longitude,decimal_latitude),4326),(SELECT proj4text FROM spatial_ref_sys WHERE srid=3116)),3116) geom
+FROM raw_dwc.phy_chi_events_hidrobiologico
+),a AS(
+SELECT DISTINCT c.event_id event_id, cd_pt_ref
+FROM coord c
+LEFT JOIN main.event e ON c.geom=e.pt_geom--ST_DWithin(c.geom,e.pt_geom,1)
+LEFT JOIN main.gp_event USING (cd_gp_event)
+LEFT JOIN main.punto_referencia USING (cd_pt_ref)
+ORDER BY c.event_id
+)
+SELECT  cd_pt_ref,
+  event_id,
+  CASE
+   WHEN event_id ~ 'ANH.*SE.*$' THEN (SELECT cd_phy_chi_type FROM main.def_phy_chi_type WHERE phy_chi_type='sediment') 
+   WHEN event_id ~ 'ANH.*A.*$' THEN (SELECT cd_phy_chi_type FROM main.def_phy_chi_type WHERE phy_chi_type='water') 
+  END cd_phy_chi_type,
+  (event_date||' '||event_time)::timestamp date_time,
+  geom
+FROM raw_dwc.phy_chi_events_hidrobiologico
+LEFT JOIN a USING (event_id)
+LEFT JOIN coord USING(event_id)
+RETURNING cd_event_phy_chi
+```
+
+**NOTE: limite de detección dividido por 2**
+
+``` sql
+INSERT INTO main.phy_chi_hidro_aguas
+SELECT cd_event_phy_chi,
+measurement_value_sistema_hidrográfico_,
+measurement_value_profundidad_promedio_,
+measurement_value_ancho_aproximado_,
+measurement_value_profundidad_de_capa_fótica_,
+measurement_value_clasificación_del_río_,
+measurement_value_temperatura_,
+measurement_value_p_h_,
+measurement_value_oxígeno_disuelto_,
+measurement_value_conductividad_,
+"measurement_value_%_saturación_o2_",
+measurement_value_sólidos_disueltos_totales_in_situ_,
+measurement_value_carbono_organico_total_,
+measurement_value_fosforo_disponible_,
+measurement_value_magnesio_,
+measurement_value_calcio_,
+CASE
+ WHEN measurement_value_sodio_='<0.100' THEN 0.05
+ ELSE measurement_value_sodio_::double precision
+END,
+measurement_value_total_de_sólidos_disueltos_,
+measurement_value_sólidos_totales_,
+measurement_value_sólidos_en_suspensión_,
+measurement_value_sólidos_solubles_,
+measurement_value_fosfatos_,
+measurement_value_nitratos_,
+measurement_value_silicatos_,
+measurement_value_grasas_y_aceites_,
+measurement_value_sustancias_activas_al_azul_de_metileno_,
+measurement_value_carbonatos_,
+measurement_value_dureza_calcica_,
+measurement_value_dureza_total_,
+measurement_value_alcalinidad_,
+measurement_value_bicarbonatos_
+FROM main.phy_chi_hidro_event he
+LEFT JOIN main.def_phy_chi_type USING (cd_phy_chi_type)
+FULL OUTER JOIN raw_dwc.phy_chi_general_hidrobiologico pcgh ON he.event_id_phy_chi=pcgh.event_id
+FULL OUTER JOIN raw_dwc.phy_chi_aguas_hidrobiologico pcah ON he.event_id_phy_chi=pcah.event_id
+WHERE cd_phy_chi_type IS NULL OR phy_chi_type='water'
+RETURNING cd_event_phy_chi;
+```
+
+**Problemas de event_id en las tablas de variables ambientales de
+hidrobiología (aguas)**
+
+``` sql
+SELECT e.event_id AS "event", g.event_id general, a.event_id aguas
+FROM raw_dwc.phy_chi_events_hidrobiologico e
+LEFT JOIN main.phy_chi_hidro_event ee ON ee.event_id_phy_chi=e.event_id
+LEFT JOIN main.def_phy_chi_type USING (cd_phy_chi_type)
+FULL OUTER JOIN raw_dwc.phy_chi_aguas_hidrobiologico a ON e.event_id=a.event_id
+FULL OUTER JOIN raw_dwc.phy_chi_general_hidrobiologico g ON e.event_id=g.event_id
+WHERE cd_phy_chi_type IS NULL OR phy_chi_type = 'water'
+```
+
+<div class="knitsql-table">
+
+| event        | general      | aguas        |
+|:-------------|:-------------|:-------------|
+| ANH7-A       | ANH7-A       | ANH7-A       |
+| ANH8-A       | ANH8-A       | ANH8-A       |
+| ANH9-A       | ANH9-A       | ANH9-A       |
+| ANH10-A      | ANH10-A      | ANH10-A      |
+| ANH11-A      | ANH11-A      | ANH11-A      |
+| ANH12-A      | ANH12-A      | ANH12-A      |
+| ANH20-A      | ANH20-A      | ANH20-A      |
+| ANH13-A      | ANH13-A      | ANH13-A      |
+| ANH14-A      | ANH14-A      | ANH14-A      |
+| ANH15-A      | ANH15-A      | ANH15-A      |
+| ANH16-A      | ANH16-A      | ANH16-A      |
+| ANH17-A      | ANH17-A      | ANH17-A      |
+| ANH18-A      | ANH18-A      | ANH18-A      |
+| ANH19-A      | ANH19-A      | ANH19-A      |
+| ANH21-A      | ANH21-A      | ANH21-A      |
+| ANH32-A      | ANH32-A      | ANH32-A      |
+| ANH33-A      | ANH33-A      | ANH33-A      |
+| ANH34-A      | ANH34-A      | ANH34-A      |
+| ANH35-A      | ANH35-A      | ANH35-A      |
+| ANH37-A      | ANH37-A      | ANH37-A      |
+| ANH2_A292    | —            | ANH2_A292    |
+| ANH38-A      | ANH38-A      | ANH38-A      |
+| ANH39-A      | ANH39-A      | ANH39-A      |
+| ANH40-A      | ANH40-A      | ANH40-A      |
+| ANH41-A      | ANH41-A      | ANH41-A      |
+| ANH42-A      | ANH42-A      | ANH42-A      |
+| ANH43-A      | ANH43-A      | ANH43-A      |
+| ANH291-A     | ANH291-A     | ANH291-A     |
+| ANH292-A     | ANH292-A     | ANH292-A     |
+| ANH293-A     | ANH293-A     | ANH293-A     |
+| ANH294-A     | ANH294-A     | ANH294-A     |
+| ANH295-A     | ANH295-A     | ANH295-A     |
+| ANH296-A     | ANH296-A     | ANH296-A     |
+| ANH22/297-A  | ANH22/297-A  | ANH22/297-A  |
+| ANH27/298-A  | ANH27/298-A  | ANH27/298-A  |
+| ANH31/299-A  | ANH31/299-A  | ANH31/299-A  |
+| ANH36/300-A  | ANH36/300-A  | ANH36/300-A  |
+| ANH29/301-A  | ANH29/301-A  | ANH29/301-A  |
+| ANH302-A     | ANH302-A     | ANH302-A     |
+| ANH303-A     | ANH303-A     | ANH303-A     |
+| ANH304-A     | ANH304-A     | ANH304-A     |
+| ANH305-A     | ANH305-A     | ANH305-A     |
+| ANH2_A291    | ANH2_A291    | ANH2_A291    |
+| ANH2_A43     | ANH2_A43     | ANH2_A43     |
+| ANH2_A7      | ANH2_A7      | ANH2_A7      |
+| ANH2_A8      | ANH2_A8      | ANH2_A8      |
+| ANH2_A9      | ANH2_A9      | ANH2_A9      |
+| ANH2_A10     | ANH2_A10     | ANH2_A10     |
+| ANH2_A11     | ANH2_A11     | ANH2_A11     |
+| ANH2_A12     | ANH2_A12     | ANH2_A12     |
+| ANH2_A13     | ANH2_A13     | ANH2_A13     |
+| ANH2_A14     | ANH2_A14     | ANH2_A14     |
+| ANH2_A15     | ANH2_A15     | ANH2_A15     |
+| ANH2_A16     | ANH2_A16     | ANH2_A16     |
+| ANH2_A17     | ANH2_A17     | ANH2_A17     |
+| ANH2_A18     | ANH2_A18     | ANH2_A18     |
+| ANH2_A19     | ANH2_A19     | ANH2_A19     |
+| ANH2_A20     | ANH2_A20     | ANH2_A20     |
+| ANH2_A21     | ANH2_A21     | ANH2_A21     |
+| ANH2_A32     | ANH2_A32     | ANH2_A32     |
+| ANH2_A33     | ANH2_A33     | ANH2_A33     |
+| ANH2_A34     | ANH2_A34     | ANH2_A34     |
+| ANH2_A35     | ANH2_A35     | ANH2_A35     |
+| ANH2_A37     | ANH2_A37     | ANH2_A37     |
+| ANH2_A38     | ANH2_A38     | ANH2_A38     |
+| ANH2_A39     | ANH2_A39     | ANH2_A39     |
+| ANH2_A40     | ANH2_A40     | ANH2_A40     |
+| ANH2_A41     | ANH2_A41     | ANH2_A41     |
+| ANH2_A42     | ANH2_A42     | ANH2_A42     |
+| ANH2_A293    | —            | ANH2_A293    |
+| ANH2_A294    | —            | ANH2_A294    |
+| ANH2_A295    | ANH2_A295    | ANH2_A295    |
+| ANH2_A296    | —            | ANH2_A296    |
+| ANH2_A22/297 | ANH2_A22/297 | ANH2_A22/297 |
+| ANH2_A27/298 | ANH2_A27/298 | ANH2_A27/298 |
+| ANH2_A31/299 | ANH2_A31/299 | ANH2_A31/299 |
+| ANH2_A36/300 | ANH2_A36/300 | ANH2_A36/300 |
+| ANH2_A29/301 | ANH2_A29/301 | ANH2_A29/301 |
+| ANH2_A302    | ANH2_A302    | ANH2_A302    |
+| ANH2_A303    | ANH2_A303    | ANH2_A303    |
+| ANH2_A304    | ANH2_A304    | ANH2_A304    |
+| ANH2_A305    | ANH2_A305    | ANH2_A305    |
+
+82 records
+
+</div>
+
+``` sql
+INSERT INTO main.phy_chi_hidro_sedi
+SELECT he.cd_event_phy_chi,
+ measurement_value_textura1_,
+ measurement_value_textura2_,
+ measurement_value_textura3_,
+ measurement_value_textura4_,
+ measurement_value_carbono_orgánico_,
+ measurement_value_fósforo_disponible_,
+ measurement_value_magnesio_,
+ measurement_value_calcio_,
+ measurement_value_sodio_,
+ measurement_value_boro_,
+ measurement_value_hierro_,
+ measurement_value_nitrogeno_total_
+FROM main.phy_chi_hidro_event he
+LEFT JOIN main.def_phy_chi_type USING (cd_phy_chi_type)
+FULL OUTER JOIN raw_dwc.phy_chi_sedimento_hidrobiologico pcsh ON he.event_id_phy_chi=pcsh.event_id
+WHERE cd_phy_chi_type IS NULL OR phy_chi_type='sediment'
+;
+```
+
+``` r
+dbDisconnect(fracking_db)
+```
+
+    ## [1] TRUE

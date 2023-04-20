@@ -1,13 +1,15 @@
 ---
-title: "Integración de los datos suplementarios de los grupos"
+title: "Datos Habitats"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
        toc_depth: 4
-       latex_engine: xelatex
+       fig_width: 5
+       fig_height: 5
+       dev: jpeg
 ---
 
 
@@ -19,7 +21,7 @@ En este documento, se trata de añadir las coberturas y los datos de habitat acu
 require(openxlsx)
 require(RPostgreSQL)
 fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
-knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100, fig.path="./Fig/habitat_")
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
@@ -304,7 +306,7 @@ RETURNING cd_habitat,cd_pt_ref,cd_categ
 
 
 ```{r}
-wb <- loadWorkbook("../Data_Documents/ExtraData/Coberturas_MB.xlsx")
+wb <- loadWorkbook("../../bpw_data_repo/habitat/Coberturas_MB.xlsx")
 cob_def<-read.xlsx(wb,sheet = "N3 Cobertura")
 hab_def<-read.xlsx(wb,sheet = "Cob Homologada")
 colnames(hab_def) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(hab_def),perl = T)))

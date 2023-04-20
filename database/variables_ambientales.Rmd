@@ -3,11 +3,10 @@ title: "Variables ambientales acuáticas"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
        toc_depth: 4
-       latex_engine: xelatex
 ---
 
 
@@ -34,9 +33,9 @@ opts <- options(knitr.kable.NA = "---")
 
 
 ```{r}
-fol_extra <- "../Data_Documents/ExtraData/"
-phy_chi_peces <- read.xlsx(file.path(fol_extra,"VariablesAmbientales_Peces_FaseI y II_V2.xlsx"), startRow = 4, colNames = F)
-col_phy_chi_peces <- read.xlsx(file.path(fol_extra,"VariablesAmbientales_Peces_FaseI y II_V2.xlsx"), rows=1:3, colNames = F)
+fol_dwc <- "../../bpw_data_repo/dwc/"
+phy_chi_peces <- read.xlsx(file.path(fol_dwc,"VariablesAmbientales_Peces_FaseI y II_V2.xlsx"), startRow = 4, colNames = F)
+col_phy_chi_peces <- read.xlsx(file.path(fol_dwc,"VariablesAmbientales_Peces_FaseI y II_V2.xlsx"), rows=1:3, colNames = F)
 COLNAMES <- as.character(col_phy_chi_peces[3,])
 COLNAMES[is.na(COLNAMES)] <- as.character(col_phy_chi_peces[2,is.na(COLNAMES)])
 COLNAMES[is.na(COLNAMES)] <- as.character(col_phy_chi_peces[1,is.na(COLNAMES)])
@@ -47,17 +46,16 @@ colnames(phy_chi_peces) <- gsub("[_ ().-/]+","_",tolower(gsub("([a-z])([A-Z]+)",
 ## Hidrobiologicos
 
 ```{r}
-fol_dwc <- "../Data_Documents/DwC Finales/"
 hidrobiologicos_phy_chi <-
   list(
     phy_chi_events_hidrobiologico = 
-      read.xlsx(file.path(fol_dwc, "Hidrobiologicos", 'I2D-BIO_2021_090_v2.xlsx'), sheet = "coordevento_fisicoquimico_santa"),
+      read.xlsx(file.path(fol_dwc,  'I2D-BIO_2021_090_v2.xlsx'), sheet = "coordevento_fisicoquimico_santa"),
     phy_chi_general_hidrobiologico =
-      read.xlsx(file.path(fol_dwc, "Hidrobiologicos", 'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquímico General "),
+      read.xlsx(file.path(fol_dwc,  'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquímico General "),
     phy_chi_aguas_hidrobiologico =
-      read.xlsx(file.path(fol_dwc, "Hidrobiologicos", 'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquimico Aguas"),
+      read.xlsx(file.path(fol_dwc,  'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquimico Aguas"),
     phy_chi_sedimento_hidrobiologico =
-      read.xlsx(file.path(fol_dwc, "Hidrobiologicos", 'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquimico Sedimento")
+      read.xlsx(file.path(fol_dwc,  'I2D-BIO_2021_090_v2.xlsx'), sheet = "Fisicoquimico Sedimento")
     )
 for(i in 1:length(hidrobiologicos_phy_chi))
 {

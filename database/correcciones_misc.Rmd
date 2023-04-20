@@ -3,11 +3,14 @@ title: "Correcciones sobre los datos (después de la integración de las estruct
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
        toc_depth: 4
 ---
+
+
+
 
 
 ************************
@@ -16,6 +19,14 @@ Se trata en este documento de ejecutar las correcciones sobre la base de datos
 
 *************
 
+************************
+
+**Note**:
+
+I do not have a way to share the documents that are used in this steps.
+Those correction have been done by other people, which transmitted excel files to me through emails...
+
+************************
 
 ```{r setup}
 knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=50)
@@ -38,7 +49,7 @@ fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
 
 
 ```{r}
-file <- "../Data_Documents/ExtraData/HerpetosCorreciones.xlsx"
+file <- "../../bpw_data_repo/Corrections/HerpetosCorreciones.xlsx"
 corr <- read.xlsx(file)
 colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
 dbWriteTable(fracking_db,c("raw_dwc","corr_coord_herp"),corr,overwrite=T)
@@ -78,7 +89,7 @@ RETURNING e.event_id, ST_length(li_geom)
 
 
 ```{r}
-file <- "../Data_Documents/ExtraData/EscarabajosCambio.xlsx"
+file <- "../../bpw_data_repo/Corrections/EscarabajosCambio.xlsx"
 corr <- read.xlsx(file)
 colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
 dbWriteTable(fracking_db,c("raw_dwc","corr_coord_esca"),corr,overwrite=T)
@@ -113,7 +124,7 @@ RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
 # Cambiar las coordenadas de Collembola
 
 ```{r}
-file <- "../Data_Documents/ExtraData/CollembolaCambio.xlsx"
+file <- "../../bpw_data_repo/Corrections/CollembolaCambio.xlsx"
 corr <- read.xlsx(file)
 colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
 dbWriteTable(fracking_db,c("raw_dwc","corr_coord_cole"),corr,overwrite=T)
@@ -167,7 +178,7 @@ RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
 # Cambiar las coordenadas de Hormigas
 
 ```{r}
-file <- "../Data_Documents/ExtraData/HormigasCambiar.xlsx"
+file <- "../../bpw_data_repo/Corrections/HormigasCambiar.xlsx"
 corr <- read.xlsx(file)
 colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
 dbWriteTable(fracking_db,c("raw_dwc","corr_coord_horm"),corr,overwrite=T)
@@ -218,7 +229,7 @@ RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
 # Cambio coordenadas mamiferos
 
 ```{r}
-file <- "../Data_Documents/ExtraData/MamiferosCambiar.xlsx"
+file <- "../../bpw_data_repo/Corrections/MamiferosCambiar.xlsx"
 corr <- read.xlsx(file)
 colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
 dbWriteTable(fracking_db,c("raw_dwc","corr_coord_mami"),corr,overwrite=T)
@@ -352,7 +363,7 @@ RETURNING ST_Length(li_geom);
 
 
 ```{r}
-file <- "../Data_Documents/ExtraData/Mariposas2023.xlsx"
+file <- "../../bpw_data_repo/Corrections/Mariposas2023.xlsx"
 corr <- read.xlsx(file)
 colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
 dbWriteTable(fracking_db,c("raw_dwc","corr_coord_mari"),corr,overwrite=T)
@@ -387,7 +398,7 @@ RETURNING e.event_id, ST_X(pt_geom),ST_Y(pt_geom)
 # Cambiar coordenadas de Aves
 
 ```{r}
-file <- "../Data_Documents/ExtraData/Coordenada Aves.xlsx"
+file <- "../../bpw_data_repo/Corrections/Coordenada Aves.xlsx"
 corr <- read.xlsx(file)
 colnames(corr) <- gsub("[().-]","_",tolower(gsub("([a-z])([A-Z]+)","\\1_\\L\\2",colnames(corr),perl = T)))
 dbWriteTable(fracking_db,c("raw_dwc","corr_coord_ave"),corr,overwrite=T)

@@ -3,7 +3,7 @@ title: "Exportación de los datos de los grupos"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
        toc_depth: 4
@@ -656,7 +656,7 @@ export_esca <- lapply(listTable,dbReadTable,conn=fracking_db)
 names(export_esca) <- listTable
 export_esca[grep("matrix",listTable)] <- lapply(export_esca[grep("matrix",listTable)],dbTab2mat, col_samplingUnits = "anh_tempo", col_species = "taxon", empty = 0)
 export_esca <- lapply(export_esca, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/esca_export.xlsx", lVar = export_esca)
+save_in_excel(file = "../../bpw_export//esca_export.xlsx", lVar = export_esca)
 ```
 
 
@@ -913,7 +913,7 @@ export_fipl <- c(export_fipl,lapply(export_fipl[grep("matrix",listTable)],functi
 names(export_fipl)[grepl("matrix",names(export_fipl)) & !sapply(lapply(export_fipl,class),function(x) "matrix"%in% x)]<- 
 	paste(names(export_fipl)[grepl("matrix",names(export_fipl)) & !sapply(lapply(export_fipl,class),function(x) "matrix"%in% x)],"_raw",sep="" )
 export_fipl <- lapply(export_fipl, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/fipl_export.xlsx", lVar = export_fipl)
+save_in_excel(file = "../../bpw_export//fipl_export.xlsx", lVar = export_fipl)
 ```
 
 
@@ -1189,7 +1189,7 @@ export_peri <- c(export_peri,lapply(export_peri[grep("matrix",listTable)],functi
 names(export_peri)[grepl("matrix",names(export_peri)) & !sapply(lapply(export_peri,class),function(x) "matrix"%in% x)]<- 
 	paste(names(export_peri)[grepl("matrix",names(export_peri)) & !sapply(lapply(export_peri,class),function(x) "matrix"%in% x)],"_raw",sep="" )
 export_peri <- lapply(export_peri, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/peri_export.xlsx", lVar = export_peri)
+save_in_excel(file = "../../bpw_export//peri_export.xlsx", lVar = export_peri)
 ```
 
 # Macroinvertebrados
@@ -1464,7 +1464,7 @@ export_minv <- c(export_minv,lapply(export_minv[grep("matrix",listTable)],functi
 names(export_minv)[grepl("matrix",names(export_minv)) & !sapply(lapply(export_minv,class),function(x) "matrix"%in% x)]<- 
 	paste(names(export_minv)[grepl("matrix",names(export_minv)) & !sapply(lapply(export_minv,class),function(x) "matrix"%in% x)],"_raw",sep="" )
 export_minv <- lapply(export_minv, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/minv_export.xlsx", lVar = export_minv)
+save_in_excel(file = "../../bpw_export//minv_export.xlsx", lVar = export_minv)
 ```
 
 # Macrofitas
@@ -1730,7 +1730,7 @@ export_mafi <- c(export_mafi,lapply(export_mafi[grep("matrix",listTable)],functi
 names(export_mafi)[grepl("matrix",names(export_mafi)) & !sapply(lapply(export_mafi,class),function(x) "matrix"%in% x)]<- 
 	paste(names(export_mafi)[grepl("matrix",names(export_mafi)) & !sapply(lapply(export_mafi,class),function(x) "matrix"%in% x)],"_raw",sep="" )
 export_mafi <- lapply(export_mafi, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/mafi_export.xlsx", lVar = export_mafi)
+save_in_excel(file = "../../bpw_export//mafi_export.xlsx", lVar = export_mafi)
 ```
 
 # Mariposas
@@ -1910,7 +1910,7 @@ export_mari[grep("matrix",listTable)] <- lapply(export_mari[grep("matrix",listTa
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
   })
 export_mari <- lapply(export_mari, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/mari_export.xlsx", lVar = export_mari)
+save_in_excel(file = "../../bpw_export//mari_export.xlsx", lVar = export_mari)
 ```
 
 # Hormigas
@@ -2106,7 +2106,7 @@ export_horm[grep("matrix",listTable)] <- lapply(export_horm[grep("matrix",listTa
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
   })
 export_horm <- lapply(export_horm, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/horm_export.xlsx", lVar = export_horm)
+save_in_excel(file = "../../bpw_export//horm_export.xlsx", lVar = export_horm)
 ```
 
 # Colémbolos
@@ -2555,7 +2555,7 @@ export_cole[grep("matrix",listTable)] <- lapply(export_cole[grep("matrix",listTa
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0)
   })
 export_cole <- lapply(export_cole, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/cole_export.xlsx", lVar = export_cole)
+save_in_excel(file = "../../bpw_export//cole_export.xlsx", lVar = export_cole)
 ```
 
 # Peces
@@ -3250,7 +3250,7 @@ export_pece[grep("matrix",listTable)] <- lapply(export_pece[grep("matrix",listTa
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
   })
 export_pece <- lapply(export_pece, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/pece_export.xlsx", lVar = export_pece)
+save_in_excel(file = "../../bpw_export//pece_export.xlsx", lVar = export_pece)
 ```
 
 # Mamiferos
@@ -3639,7 +3639,7 @@ export_mami[grep("matrix",listTable)] <- lapply(export_mami[grep("matrix",listTa
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
   })
 export_mami <- lapply(export_mami, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/mami_export.xlsx", lVar = export_mami)
+save_in_excel(file = "../../bpw_export//mami_export.xlsx", lVar = export_mami)
 ```
 
 
@@ -3863,7 +3863,7 @@ export_aves[grep("matrix",listTable)] <- lapply(export_aves[grep("matrix",listTa
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
   })
 export_aves <- lapply(export_aves, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/aves_export.xlsx", lVar = export_aves)
+save_in_excel(file = "../../bpw_export//aves_export.xlsx", lVar = export_aves)
 ```
 
 # Herpetos
@@ -4154,7 +4154,7 @@ export_herp[grep("matrix",listTable)] <- lapply(export_herp[grep("matrix",listTa
     dbTab2mat(x, col_samplingUnits = "anh_tempo", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
   })
 export_herp <- lapply(export_herp, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/herp_export.xlsx", lVar = export_herp)
+save_in_excel(file = "../../bpw_export//herp_export.xlsx", lVar = export_herp)
 ```
 
 
@@ -4503,7 +4503,7 @@ export_zopl <- c(export_zopl,lapply(export_zopl[grep("matrix",listTable)],functi
 names(export_zopl)[grepl("matrix",names(export_zopl)) & !sapply(lapply(export_zopl,class),function(x) "matrix"%in% x)]<- 
 	paste(names(export_zopl)[grepl("matrix",names(export_zopl)) & !sapply(lapply(export_zopl,class),function(x) "matrix"%in% x)],"_raw",sep="" )
 export_zopl <- lapply(export_zopl, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/zopl_export.xlsx", lVar = export_zopl)
+save_in_excel(file = "../../bpw_export//zopl_export.xlsx", lVar = export_zopl)
 ```
 
 
@@ -4886,7 +4886,7 @@ export_catr[grep("matrix",listTable)] <- lapply(export_catr[grep("matrix",listTa
     dbTab2mat(x, col_samplingUnits = "event_id", col_species = "taxon", col_content = col_content, empty = 0, checklist=o_checklist)
   })
 export_catr <- lapply(export_catr, as.data.frame)
-save_in_excel(file = "datos_exportados_BD/catr_export.xlsx", lVar = export_catr)
+save_in_excel(file = "../../bpw_export//catr_export.xlsx", lVar = export_catr)
 ```
 
 

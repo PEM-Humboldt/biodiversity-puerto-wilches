@@ -3,11 +3,10 @@ title: "Estructura y manejo de la taxonomía en la base de datos"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
        toc_depth: 4
-       latex_engine: xelatex
 ---
 
 

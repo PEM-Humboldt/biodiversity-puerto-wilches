@@ -3,11 +3,10 @@ title: "Integración de los datos de estructura de muestreo de los grupos"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
        toc_depth: 4
-       latex_engine: xelatex
 ---
 
 

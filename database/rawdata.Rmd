@@ -3,7 +3,7 @@ title: "Envio de los datos brutos en la base de datos"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
 ---
@@ -15,6 +15,59 @@ require(openxlsx)
 require(readxl)
 ```
 
+**************************************
+
+**Note**
+
+For now, I assembled all the DarwinCore data in excel files, as sent by the researcher to the I2D in a folder "bpw_data_repo" with the same root as the git repository...
+In the future, I will adapt my code to download the real darwin core files (zip folders with various text files).
+These files are here:
+
+https://ipt.biodiversidad.co/iavh/resource.do?r=hormigas_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=escarabajos_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=collembola_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=mariposas_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=mamiferos_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=hidrob_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=hidrobio_fq_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=peces_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=microorg_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=microorg_fq_anh_2022
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=sonidos-especaud_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=sonidos-ultra_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=paisajesonoro_anh_2022
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=aves_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=anf-rep_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=reptiles_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=plantas_anh_2021
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=rrbb_fototrampeo_anh_aguasaltas_2022
+
+http://ipt.biodiversidad.co/iavh/resource.do?r=atropellamiento_anh_2022
+
+However the code I use here is only working with excel files
+
+***************************
+
+
+
+
 Con el objetivo de poder tratar los datos brutos con códigos SQL, puede ser útil tener las tablas brutas en un schema de la base de datos.
 
 
@@ -25,99 +78,98 @@ fracking_db <- dbConnect(PostgreSQL(), dbname='fracking')
 # Reading rawFiles
 ```{r, message=FALSE,warning=FALSE}
 # Note: that is not complete just yet, we still have to add extra sheets in the files, and maybe the database with the covariables
-fol_data <- "../Data_Documents/DwC Finales/"
+fol_data <- "../../bpw_data_repo/dwc/"
 dataGrupos<-list()
-dataGrupos$Anfibios$event <- read.xlsx(file.path(fol_data,"Anfibios","DwC_ANH_Anfibios_v.2.2_Eventos y RegistrosFN 26_revCCastro_Corregido_29_Ago_2022FN.xlsx"),sheet="Eventos",startRow = 2)
-dataGrupos$Anfibios$registros <- read.xlsx(file.path(fol_data,"Anfibios","DwC_ANH_Anfibios_v.2.2_Eventos y RegistrosFN 26_revCCastro_Corregido_29_Ago_2022FN.xlsx"),sheet="Anfibios",startRow = 1)
-forTime <- read_xlsx(file.path(fol_data,"Anfibios","DwC_ANH_Anfibios_v.2.2_Eventos y RegistrosFN 26_revCCastro_Corregido_29_Ago_2022FN.xlsx"),sheet = "Anfibios")
+dataGrupos$Anfibios$event <- read.xlsx(file.path(fol_data,"DwC_ANH_Anfibios_v.2.2_Eventos y RegistrosFN 26_revCCastro_Corregido_29_Ago_2022FN.xlsx"),sheet="Eventos",startRow = 2)
+dataGrupos$Anfibios$registros <- read.xlsx(file.path(fol_data,"DwC_ANH_Anfibios_v.2.2_Eventos y RegistrosFN 26_revCCastro_Corregido_29_Ago_2022FN.xlsx"),sheet="Anfibios",startRow = 1)
+forTime <- read_xlsx(file.path(fol_data,"DwC_ANH_Anfibios_v.2.2_Eventos y RegistrosFN 26_revCCastro_Corregido_29_Ago_2022FN.xlsx"),sheet = "Anfibios")
 dataGrupos$Anfibios$registros$eventTime <- as.character(format(forTime$eventTime,"%H:%M:%S"))
-dataGrupos$Reptiles$event <- read.xlsx(file.path(fol_data, "Reptiles","I2D-BIO_2022_060.xlsx"), sheet="Evento",startRow = 1)
-dataGrupos$Reptiles$registros <- read.xlsx(file.path(fol_data, "Reptiles","I2D-BIO_2022_060.xlsx"), sheet="Reptiles")
-dataGrupos$Atropellamientos$event <- read.xlsx(file.path(fol_data, "Atropellamientos", "I2D-BIO_2022_057.xlsx"), sheet="DwCEventos")
-dataGrupos$Atropellamientos$registros <- read.xlsx(file.path(fol_data, "Atropellamientos", "I2D-BIO_2022_057.xlsx"), sheet="Registros")
-dataGrupos$Aves$event <- read.xlsx(file.path(fol_data, "Aves","I2D-BIO_2021_050_v7.xlsx"), sheet="Eventos",startRow = 2)
-dataGrupos$Aves$registros <- read.xlsx(file.path(fol_data, "Aves","I2D-BIO_2021_050_v7.xlsx"), sheet="Registros")
-dataGrupos$Botanica$event <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Eventos",startRow = 1)
-dataGrupos$Botanica$registros_Arborea <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Arbórea",startRow = 2)
-dataGrupos$Botanica$registros_Epi_vas <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Epífitas vasculares",startRow = 2)
-dataGrupos$Botanica$registros_Epi_novas <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Epífitas no vasculares",startRow = 2)
-dataGrupos$Botanica$registros_col <- read.xlsx(file.path(fol_data,"Botanica","I2D-BIO_2021_095.xlsx"),sheet="Colección",startRow = 2)
-dataGrupos$Collembolos$event <- read.xlsx(file.path(fol_data,"Collembolos","I2D-BIO_2021_099_v3.xlsx"),sheet="DwC_EvCol_2021-2022")
-dataGrupos$Collembolos$registros <- read.xlsx(file.path(fol_data,"Collembolos","I2D-BIO_2021_099_v3.xlsx"),sheet="DwC RegCol 2021-2022")
-dataGrupos$Collembolos$fotos <- read.xlsx(file.path(fol_data,"Collembolos","I2D-BIO_2021_099_v3.xlsx"),sheet="Imagenes-Collembola")
+dataGrupos$Reptiles$event <- read.xlsx(file.path(fol_data, "I2D-BIO_2022_060.xlsx"), sheet="Evento",startRow = 1)
+dataGrupos$Reptiles$registros <- read.xlsx(file.path(fol_data, "I2D-BIO_2022_060.xlsx"), sheet="Reptiles")
+dataGrupos$Atropellamientos$event <- read.xlsx(file.path(fol_data, "I2D-BIO_2022_057.xlsx"), sheet="DwCEventos")
+dataGrupos$Atropellamientos$registros <- read.xlsx(file.path(fol_data, "I2D-BIO_2022_057.xlsx"), sheet="Registros")
+dataGrupos$Aves$event <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_050_v7.xlsx"), sheet="Eventos",startRow = 2)
+dataGrupos$Aves$registros <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_050_v7.xlsx"), sheet="Registros")
+dataGrupos$Botanica$event <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_095.xlsx"),sheet="Eventos",startRow = 1)
+dataGrupos$Botanica$registros_Arborea <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_095.xlsx"),sheet="Arbórea",startRow = 2)
+dataGrupos$Botanica$registros_Epi_vas <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_095.xlsx"),sheet="Epífitas vasculares",startRow = 2)
+dataGrupos$Botanica$registros_Epi_novas <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_095.xlsx"),sheet="Epífitas no vasculares",startRow = 2)
+dataGrupos$Botanica$registros_col <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_095.xlsx"),sheet="Colección",startRow = 2)
+dataGrupos$Collembolos$event <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_099_v3.xlsx"),sheet="DwC_EvCol_2021-2022")
+dataGrupos$Collembolos$registros <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_099_v3.xlsx"),sheet="DwC RegCol 2021-2022")
+dataGrupos$Collembolos$fotos <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_099_v3.xlsx"),sheet="Imagenes-Collembola")
 
-dataGrupos$Escarabajos$event <- read.xlsx(file.path(fol_data,"Escarabajos","I2D-BIO_2021_069_v4_ev.xlsx"),sheet="I2D-BIO_2021_069_event")
-dataGrupos$Escarabajos$registros <- read.xlsx(file.path(fol_data,"Escarabajos","I2D-BIO_2021_069_v3_rrbb.xlsx"),sheet="Sheet4")
+dataGrupos$Escarabajos$event <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_069_v4_ev.xlsx"),sheet="I2D-BIO_2021_069_event")
+dataGrupos$Escarabajos$registros <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_069_v3_rrbb.xlsx"),sheet="Sheet4")
 types<-rep("skip",ncol(dataGrupos$Escarabajos$event))
 types[colnames(dataGrupos$Escarabajos$event)=="eventTime"]<-"date"
 
 
 
-A<-read_xlsx(file.path(fol_data,"Escarabajos","I2D-BIO_2021_069_v4_ev.xlsx"),sheet="I2D-BIO_2021_069_event",col_types = types)
+A<-read_xlsx(file.path(fol_data,"I2D-BIO_2021_069_v4_ev.xlsx"),sheet="I2D-BIO_2021_069_event",col_types = types)
 dataGrupos$Escarabajos$event$eventTime[!is.na(A)]<-as.character(format(A[!is.na(A)],"%H:%M:%S"))
 dataGrupos$Escarabajos$event$eventID <- gsub("2012","2021",dataGrupos$Escarabajos$event$eventID)
 types<-rep("skip",ncol(dataGrupos$Escarabajos$event))
 types[colnames(dataGrupos$Escarabajos$event)=="eventDate"]<-"date"
-A<-read_xlsx(file.path(fol_data,"Escarabajos","I2D-BIO_2021_069_v4_ev.xlsx"),sheet="I2D-BIO_2021_069_event",col_types = types)
+A<-read_xlsx(file.path(fol_data,"I2D-BIO_2021_069_v4_ev.xlsx"),sheet="I2D-BIO_2021_069_event",col_types = types)
 dataGrupos$Escarabajos$event$eventDate[!is.na(A)]<-as.character(format(A[!is.na(A)],"%Y:%m:%d"))
 dataGrupos$Escarabajos$event$eventID <- gsub("2012","2021",dataGrupos$Escarabajos$event$eventID)
 
 
 
 
-dataGrupos$Hormigas$event <- read.xlsx(file.path(fol_data,"Hormigas","I2D-BIO_2021_096_v2_ev.xlsx"),sheet="Eventos")
-dataGrupos$Hormigas$registros <- read.xlsx(file.path(fol_data,"Hormigas","I2D-BIO_2021_096_v2_rrbb.xlsx"),sheet="Hoja1")
-dataGrupos$Mamiferos$event <- read.xlsx(file.path(fol_data,"Mamiferos","I2D-BIO_2021_083_v3.xlsx"),sheet="Evento")
-dataGrupos$Mamiferos$registros <- read.xlsx(file.path(fol_data,"Mamiferos","I2D-BIO_2021_083_v3.xlsx"),sheet="Registros")
+dataGrupos$Hormigas$event <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_096_v2_ev.xlsx"),sheet="Eventos")
+dataGrupos$Hormigas$registros <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_096_v2_rrbb.xlsx"),sheet="Hoja1")
+dataGrupos$Mamiferos$event <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_083_v3.xlsx"),sheet="Evento")
+dataGrupos$Mamiferos$registros <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_083_v3.xlsx"),sheet="Registros")
 types<-rep("skip",ncol(dataGrupos$Mamiferos$registros))
 types[colnames(dataGrupos$Mamiferos$registros)=="eventTime"]<-"date"
-A<-read_xlsx(file.path(fol_data,"Mamiferos","I2D-BIO_2021_083_v3.xlsx"),sheet="Registros",col_types = types)
+A<-read_xlsx(file.path(fol_data,"I2D-BIO_2021_083_v3.xlsx"),sheet="Registros",col_types = types)
 dataGrupos$Mamiferos$registros$eventTime[!is.na(A)]<-as.character(format(A[!is.na(A)],"%H:%M:%S"))
 
 
-dataGrupos$Mamiferos_us$event <- read.xlsx(file.path(fol_data,"Mamiferos","I2D-BIO_2021_094_v4.xlsx"),sheet="Eventos")
-dataGrupos$Mamiferos_us$registros <- read.xlsx(file.path(fol_data,"Mamiferos","I2D-BIO_2021_094_v4.xlsx"),sheet="Registros")
+dataGrupos$Mamiferos_us$event <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_094_v4.xlsx"),sheet="Eventos")
+dataGrupos$Mamiferos_us$registros <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_094_v4.xlsx"),sheet="Registros")
 types<-rep("skip",ncol(dataGrupos$Mamiferos_us$registros))
 types[colnames(dataGrupos$Mamiferos_us$registros)=="eventTime"]<-"date"
-A<-read_xlsx(file.path(fol_data,"Mamiferos","I2D-BIO_2021_094_v4.xlsx"),sheet="Registros",col_types = types)
+A<-read_xlsx(file.path(fol_data,"I2D-BIO_2021_094_v4.xlsx"),sheet="Registros",col_types = types)
 dataGrupos$Mamiferos_us$registros$eventTime[!is.na(A)]<-as.character(format(A[!is.na(A)],"%H:%M:%S"))
 
-dataGrupos$Mariposas$event <- read.xlsx(file.path(fol_data, "Mariposas","I2D-BIO_2021_084_v3_ev_Sep.xlsx"), sheet="DwCEventos", detectDates = T)
-dataGrupos$Mariposas$registros <- read.xlsx(file.path(fol_data, "Mariposas","I2D-BIO_2021_084_v2_rrbb (1).xlsx"),sheet="Plantilla")
-dataGrupos$Mariposas$registros$eventTime <-as.character(format(read_xlsx(file.path(fol_data, "Mariposas","I2D-BIO_2021_084_v2_rrbb (1).xlsx"), sheet="Plantilla")$eventTime,"%H:%M:%S"))
+dataGrupos$Mariposas$event <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_084_v3_ev_Sep.xlsx"), sheet="DwCEventos", detectDates = T)
+dataGrupos$Mariposas$registros <- read.xlsx(file.path(fol_data,"I2D-BIO_2021_084_v2_rrbb (1).xlsx"),sheet="Plantilla")
+dataGrupos$Mariposas$registros$eventTime <-as.character(format(read_xlsx(file.path(fol_data,"I2D-BIO_2021_084_v2_rrbb (1).xlsx"), sheet="Plantilla")$eventTime,"%H:%M:%S"))
 types<-rep("skip",ncol(dataGrupos$Mariposas$event))
 types[colnames(dataGrupos$Mariposas$event)=="eventTime"]<-"date"
-A<-read_xlsx(file.path(fol_data,"Mariposas","I2D-BIO_2021_084_v3_ev_Sep.xlsx"),sheet="DwCEventos",col_types = types)$eventTime
+A<-read_xlsx(file.path(fol_data,"I2D-BIO_2021_084_v3_ev_Sep.xlsx"),sheet="DwCEventos",col_types = types)$eventTime
 dataGrupos$Mariposas$event$eventTime[!is.na(A)]<-as.character(format(A[!is.na(A)],"%H:%M:%S"))
 # Espacio raro que hace un bug en el codigo más adelante...
 dataGrupos$Mariposas$event$eventTime[dataGrupos$Mariposas$event$eventID=="ANH_136_T. Van Someren-Rydon1_2021-07-01/2021-07-03"]<-"09:55:00/10:20:00"
 
 
 
-dataGrupos$Peces$event <- read.xlsx(file.path(fol_data, "Peces","I2D-BIO_2021_049_v3.xlsx"),sheet="Evento")
-dataGrupos$Peces$registros <- read.xlsx(file.path(fol_data, "Peces","I2D-BIO_2021_049_v3.xlsx"),sheet="Registro")
-dataGrupos$Hidrobiologico$event <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx"),sheet="Hidrobiologicos evento", startRow = 1)
-dataGrupos$Hidrobiologico$registros_macroinvertebrados <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Macroinvertebrados acuáticos", startRow = 1)
-dataGrupos$Hidrobiologico$registros_macrofitas <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Macrofitas acuáticas", startRow = 1)
-dataGrupos$Hidrobiologico$registros_zooplancton <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Zooplancton ", startRow = 1)
-dataGrupos$Hidrobiologico$registros_fitoplancton <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Fitoplancton", startRow = 1)
-dataGrupos$Hidrobiologico$registros_perifiton <- read.xlsx(file.path(fol_data, "Hidrobiologicos","I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Perifiton ", startRow = 1)
+dataGrupos$Peces$event <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_049_v3.xlsx"),sheet="Evento")
+dataGrupos$Peces$registros <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_049_v3.xlsx"),sheet="Registro")
+dataGrupos$Hidrobiologico$event <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_068_v3 Fn2022.xlsx"),sheet="Hidrobiologicos evento", startRow = 1)
+dataGrupos$Hidrobiologico$registros_macroinvertebrados <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Macroinvertebrados acuáticos", startRow = 1)
+dataGrupos$Hidrobiologico$registros_macrofitas <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Macrofitas acuáticas", startRow = 1)
+dataGrupos$Hidrobiologico$registros_zooplancton <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Zooplancton ", startRow = 1)
+dataGrupos$Hidrobiologico$registros_fitoplancton <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Fitoplancton", startRow = 1)
+dataGrupos$Hidrobiologico$registros_perifiton <- read.xlsx(file.path(fol_data, "I2D-BIO_2021_068_v3 Fn2022.xlsx") ,sheet="Perifiton ", startRow = 1)
 
-dataGrupos$Cameras_trampa$event <- read.xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"), sheet = "Eventos")
-dataGrupos$Cameras_trampa$registros <- read.xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"), sheet = "Registros")
-dataGrupos$Cameras_trampa$registros$eventDate
+dataGrupos$Cameras_trampa$event <- read.xlsx(file.path(fol_data,"DwC camaras ANH_13octubre2022_DMM.xlsx"), sheet = "Eventos")
+dataGrupos$Cameras_trampa$registros <- read.xlsx(file.path(fol_data,"DwC camaras ANH_13octubre2022_DMM.xlsx"), sheet = "Registros")
 types<-rep("skip",ncol(dataGrupos$Cameras_trampa$registros))
 types[colnames(dataGrupos$Cameras_trampa$registros)=="dateIdentified"]<-"date"
-A<-read_xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
+A<-read_xlsx(file.path(fol_data,"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
 dataGrupos$Cameras_trampa$registros$dateIdentified[!is.na(A)]<-as.character(format(A[!is.na(A)],"%Y/%m/%d"))
 types<-rep("skip",ncol(dataGrupos$Cameras_trampa$registros))
 types[colnames(dataGrupos$Cameras_trampa$registros)=="eventDate"]<-"date"
-A<-read_xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
+A<-read_xlsx(file.path(fol_data,"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
 dataGrupos$Cameras_trampa$registros$eventDate[!is.na(A)]<-as.character(format(A[!is.na(A)],"%Y-%m-%d"))
 
 types<-rep("skip",ncol(dataGrupos$Cameras_trampa$registros))
 types[colnames(dataGrupos$Cameras_trampa$registros)=="eventDate"]<-"text"
-A<-read_xlsx(file.path(fol_data,'..','ExtraData',"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
+A<-read_xlsx(file.path(fol_data,"DwC camaras ANH_13octubre2022_DMM.xlsx"),sheet="Registros",col_types = types)
 dataGrupos$Cameras_trampa$registros$eventDate[grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$",A$eventDate)]<-A$eventDate[grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$",A$eventDate)]
 
 
