@@ -1,13 +1,14 @@
-# biodiversidad-puerto-wilches
+# biodiversity-puerto-wilches
 
-## Objeto y objetivo
+## Object y objetives
 
-Se trata de compartir los codigos R y SQL (postgres) que se utilizaron para manejar los datos y analizar los datos de la línea base de biodiversidad en Puerto Wilches, Santander, Colombia.
-Este trabajo se realizó por el instituto Humboldt, en un convenio con la Agencia Nacional de Hidrocarburos, en el marco de un proyecto piloto de fracking.
+The main objective of this repository is to share R and SQL code which we used to manage data and analyse the baseline biodiversity in Puerto Wilches, Santander, Colombia.
+This project has been conducted around a project of fracking test phase in this municipality, since then fracking projects have been paused in Colombia.
+One of the main interesting part of this study is that a very extensive biodiversity sampling effort have been conducted by the Instituto Alexander von Humboldt, concerning plants, insects, other arthropods, birds and mammals, as a collaboration with the ANH (Agencia Nacional de Hidrocarburos).
 
-## Contenido
+## Content
 
-El repositorio incluye:
+The repository includes:
 
-1. carpeta "database": incluye el tratamiento de los datos (en R y SQL, presentados en archivos Rmarkdown) para incluirlos en una base de datos manejada con el SGBD *PostgreSQL*. Los datos brutos están en los archivos publicos en formatos DarwinCore.
-2. carpeta "analyses": incluye los archivos de análisis de los datos (principalmente en R, presentados en archivos Rmarkdown)
+1. folder [database](./database): data integration in a *postgreSQL* database ( code in R y SQL, presented as Rmarkdown files). 
+2. folder [analyses](.analyses): includes analyses code (mainly in R, presented in Rmarkdown files)
