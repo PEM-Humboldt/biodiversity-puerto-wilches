@@ -1,3 +1,5 @@
+# In this file we define ggplot2 options and the function to represent iNEXT results of species diversity estimation, in a common form
+
 th <- theme(
   axis.title = element_text(face = "bold", size = 18),
   #axis.line = element_line(colour = "black", size = 1),

@@ -4,22 +4,12 @@ author: "Marius Bottin"
 date: "`r Sys.Date()`"
 lang: "es"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
        toc_depth: 4
-header-includes:
-- \usepackage{booktabs}
-- \usepackage{longtable}
-- \usepackage{array}
-- \usepackage{multirow}
-- \usepackage{wrapfig}
-- \usepackage{float}
-- \usepackage{colortbl}
-- \usepackage{pdflscape}
-- \usepackage{tabu}
-- \usepackage{threeparttable}
-- \usepackage[normalem]{ulem}
+       dev: jpeg
+always_allow_html: true
 ---
 
 
@@ -98,7 +88,7 @@ import_aves[grep("matrix",listTable)] <- lapply(import_aves[grep("matrix",listTa
 
 
 ```{r, cache=F, message=FALSE,warning=FALSE}
-fol_data <- "../../Data_Documents/ExtraData/"
+fol_data <- "../../../bpw_data_repo/colors/"
 wb <- loadWorkbook(file.path(fol_data,'Colores.xlsx'))
 colList<-lapply(names(wb),read.xlsx,xlsxFile=file.path(fol_data,'Colores.xlsx'))
 names(colList) <- names(wb)
