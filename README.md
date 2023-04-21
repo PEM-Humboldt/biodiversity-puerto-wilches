@@ -19,6 +19,7 @@ In order to run the codes presented in this repository, you will need:
 
 * PostgreSQL
 * postgis extension
+* pandoc
 * R with the following packages:
    + rmarkdown
    + knitr
@@ -52,4 +53,27 @@ CREATE EXTENSION postgis;
 ```
 
 We recommend the use of [pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) to be able to connect to the database without needing to give the password (nor the host in a server based setup).
+
+# Rmarkdown documents
+
+Most of the codes of this repository are presented in rmarkdown document (Rmd extension).
+
+You may render them as github documents with the following command in R:
+
+```
+rmarkdown::render("filename.Rmd")
+```
+
+However, since github document are not easy to read on a local machine, you may want to use:
+
+```
+rmarkdown::render("filename.Rmd", output_format="html_document")
+```
+
+If you have a functional latex distribution on your computer (see tinytex R package to install one otherwise), you may even create pdf report out of the rmarkdown files using:
+
+```
+rmarkdown::render("filename.Rmd", output_format="pdf_document")
+```
+
 
