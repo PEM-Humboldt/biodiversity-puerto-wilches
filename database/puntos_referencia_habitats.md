@@ -1,7 +1,7 @@
 Datos Habitats
 ================
 Marius Bottin
-2023-04-19
+2023-05-17
 
 - [1 Habitats acuaticos](#1-habitats-acuaticos)
   - [1.1 Datos generales:](#11-datos-generales)
@@ -43,19 +43,7 @@ los puntos de referencia (“ANH”), cuando sea posible…
 
 ``` r
 require(openxlsx)
-```
-
-    ## Loading required package: openxlsx
-
-``` r
 require(RPostgreSQL)
-```
-
-    ## Loading required package: RPostgreSQL
-
-    ## Loading required package: DBI
-
-``` r
 fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
 knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100, fig.path="./Fig/habitat_")
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
@@ -85,8 +73,8 @@ GROUP BY habitat, water_body
 | Lótico  | Caño Negro             | Caño           | Negro           |    40 |
 | Léntico | Caño El Salado         | Caño           | El Salado       |     4 |
 | Lótico  | Río Magdalena          | Río            | Magdalena       |    30 |
-| Lótico  | Quebrada La Arenosa    | Quebrada       | La Arenosa      |    16 |
 | Lótico  | Quebrada La Morena     | Quebrada       | La Morena       |    19 |
+| Lótico  | Quebrada La Arenosa    | Quebrada       | La Arenosa      |    16 |
 | Lótico  | Caño La Gómez          | Caño           | La Gómez        |     6 |
 | Léntico | Ciénaga de Corredor    | Ciénaga        | de Corredor     |     3 |
 | Léntico | Ciénaga Corredor       | Ciénaga        | Corredor        |     3 |
@@ -94,8 +82,8 @@ GROUP BY habitat, water_body
 | Lótico  | Caño El Salado         | Caño           | El Salado       |    19 |
 | Lótico  | Quebrada la Arenosa    | Quebrada       | la Arenosa      |     2 |
 | Lótico  | Quebrada Agua Bonita   | Quebrada       | Agua Bonita     |    10 |
-| Léntico | Ciénaga Aguas Negras   | Ciénaga        | Aguas Negras    |     4 |
 | Lótico  | Quebrada Sogamosito    | Quebrada       | Sogamosito      |     6 |
+| Léntico | Ciénaga Aguas Negras   | Ciénaga        | Aguas Negras    |     4 |
 | Léntico | Ciénaga de Montecristo | Ciénaga        | de Montecristo  |     6 |
 | Lótico  | Quebrada La Cristalina | Quebrada       | La Cristalina   |     6 |
 | Léntico | Ciénaga El Salado      | Ciénaga        | El Salado       |     6 |
@@ -103,8 +91,8 @@ GROUP BY habitat, water_body
 | Lótico  | Caño Angustias         | Caño           | Angustias       |     7 |
 | Léntico | Poza de los Caimanes   | Poza           | de los Caimanes |     6 |
 | Lótico  | Quebrada Corredor      | Quebrada       | Corredor        |    11 |
-| Lótico  | Quebrada San Martin    | Quebrada       | San Martin      |    12 |
 | Lótico  | Quebarda San Martin    | Quebarda       | San Martin      |     7 |
+| Lótico  | Quebrada San Martin    | Quebrada       | San Martin      |    12 |
 | Lótico  | Caño La Gómez          | Caño           | La Gómez        |     7 |
 | Léntico | Ciénaga de Paredes     | Ciénaga        | de Paredes      |     5 |
 | Léntico | Cienaga de Paredes     | Cienaga        | de Paredes      |     6 |
@@ -829,14 +817,14 @@ GROUP BY grupo_biolo
 
 | grupo_biolo | count |
 |:------------|------:|
-| Cualquiera  |     1 |
-| Herpetos    |    42 |
-| Mariposas   |    40 |
 | Mamiferos   |    32 |
 | Escarabajos |    40 |
-| Hormigas    |    40 |
-| Aves        |    65 |
 | Collembolos |    40 |
+| Cualquiera  |     1 |
+| Mariposas   |    40 |
+| Herpetos    |    42 |
+| Aves        |    65 |
+| Hormigas    |    40 |
 
 8 records
 
@@ -1259,106 +1247,106 @@ LEFT JOIN main.punto_referencia USING (cd_pt_ref)
 
 | name_pt_ref | aqu_ter     |
 |:------------|:------------|
-| ANH_258     | terrestrial |
 | ANH_305     | aquatic     |
-| ANH_145     | terrestrial |
 | ANH_148     | terrestrial |
 | ANH_393     | terrestrial |
 | ANH_404     | terrestrial |
-| ANH_64      | terrestrial |
 | ANH_370     | terrestrial |
 | ANH_374     | terrestrial |
 | ANH_72      | terrestrial |
-| ANH_65      | terrestrial |
-| ANH_144     | terrestrial |
-| ANH_306     | terrestrial |
 | ANH_142     | terrestrial |
-| ANH_289     | terrestrial |
-| ANH_40      | aquatic     |
-| ANH_151     | terrestrial |
-| ANH_239     | terrestrial |
-| ANH_403     | terrestrial |
-| ANH_398     | terrestrial |
-| ANH_296     | aquatic     |
 | ANH_312     | terrestrial |
-| ANH_106     | terrestrial |
 | ANH_130     | terrestrial |
-| ANH_85      | terrestrial |
-| ANH_314     | terrestrial |
 | ANH_215     | terrestrial |
 | ANH_307     | terrestrial |
 | ANH_112     | terrestrial |
 | ANH_302     | aquatic     |
 | ANH_132     | terrestrial |
 | ANH_167     | terrestrial |
-| ANH_71      | terrestrial |
 | ANH_118     | terrestrial |
-| ANH_108     | terrestrial |
-| ANH_185     | terrestrial |
 | ANH_369     | terrestrial |
 | ANH_171     | terrestrial |
 | ANH_37      | aquatic     |
-| ANH_113     | terrestrial |
-| ANH_387     | terrestrial |
 | ANH_8       | aquatic     |
 | ANH_98      | terrestrial |
-| ANH_12      | terrestrial |
 | ANH_360     | terrestrial |
-| ANH_94      | terrestrial |
-| ANH_388     | terrestrial |
-| ANH_230     | terrestrial |
 | ANH_371     | terrestrial |
-| ANH_208     | terrestrial |
-| ANH_43      | aquatic     |
 | ANH_244     | terrestrial |
-| ANH_183     | terrestrial |
-| ANH_75      | terrestrial |
-| ANH_197     | terrestrial |
-| ANH_69      | terrestrial |
 | ANH_134     | terrestrial |
-| ANH_88      | terrestrial |
-| ANH_165     | terrestrial |
 | ANH_298     | aquatic     |
-| ANH_7       | aquatic     |
-| ANH_391     | terrestrial |
 | ANH_32      | aquatic     |
-| ANH_334     | terrestrial |
-| ANH_13      | aquatic     |
-| ANH_220     | terrestrial |
 | ANH_232     | terrestrial |
-| ANH_74      | terrestrial |
 | ANH_240     | terrestrial |
-| ANH_254     | terrestrial |
 | ANH_223     | terrestrial |
 | ANH_12      | aquatic     |
-| ANH_147     | terrestrial |
-| ANH_333     | terrestrial |
-| ANH_210     | terrestrial |
-| ANH_35      | aquatic     |
-| ANH_214     | terrestrial |
 | ANH_90      | terrestrial |
 | ANH_309     | terrestrial |
 | ANH_390     | terrestrial |
 | ANH_11      | aquatic     |
-| ANH_275     | terrestrial |
-| ANH_293     | aquatic     |
 | ANH_294     | aquatic     |
-| ANH_77      | terrestrial |
-| ANH_242     | terrestrial |
 | ANH_315     | terrestrial |
 | ANH_363     | terrestrial |
 | ANH_228     | terrestrial |
 | ANH_331     | terrestrial |
-| NA          | terrestrial |
-| ANH_168     | terrestrial |
 | ANH_324     | terrestrial |
-| ANH_18      | aquatic     |
-| ANH_16      | aquatic     |
 | ANH_9       | aquatic     |
 | ANH_213     | terrestrial |
 | ANH_329     | terrestrial |
 | ANH_229     | terrestrial |
 | ANH_292     | aquatic     |
+| ANH_372     | terrestrial |
+| ANH_401     | terrestrial |
+| ANH_125     | terrestrial |
+| ANH_157     | terrestrial |
+| ANH_73      | terrestrial |
+| ANH_284     | terrestrial |
+| ANH_169     | terrestrial |
+| ANH_21      | aquatic     |
+| ANH_396     | terrestrial |
+| ANH_359     | terrestrial |
+| ANH_364     | terrestrial |
+| ANH_31      | terrestrial |
+| ANH_92      | terrestrial |
+| ANH_138     | terrestrial |
+| ANH_42      | aquatic     |
+| ANH_101     | terrestrial |
+| ANH_159     | terrestrial |
+| Kapla       | terrestrial |
+| ANH_335     | terrestrial |
+| ANH_235     | terrestrial |
+| ANH_397     | terrestrial |
+| Carac       | terrestrial |
+| ANH_252     | terrestrial |
+| ANH_38      | terrestrial |
+| ANH_10      | aquatic     |
+| ANH_301     | aquatic     |
+| ANH_283     | terrestrial |
+| ANH_15      | aquatic     |
+| ANH_350     | terrestrial |
+| ANH_400     | terrestrial |
+| ANH_353     | terrestrial |
+| ANH_39      | aquatic     |
+| ANH_117     | terrestrial |
+| ANH_361     | terrestrial |
+| ANH_116     | terrestrial |
+| ANH_68      | terrestrial |
+| ANH_66      | terrestrial |
+| ANH_38      | aquatic     |
+| ANH_123     | terrestrial |
+| ANH_299     | terrestrial |
+| ANH_154     | terrestrial |
+| ANH_120     | terrestrial |
+| ANH_238     | terrestrial |
+| ANH_137     | terrestrial |
+| ANH_218     | terrestrial |
+| ANH_91      | terrestrial |
+| ANH_234     | terrestrial |
+| ANH_250     | terrestrial |
+| ANH_194     | terrestrial |
+| ANH_18      | terrestrial |
+| ANH_225     | terrestrial |
+| ANH_93      | terrestrial |
+| ANH_109     | terrestrial |
 
 Displaying records 1 - 100
 

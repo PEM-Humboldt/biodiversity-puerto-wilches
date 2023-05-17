@@ -1,7 +1,7 @@
 Exportación de los datos de los grupos
 ================
 Marius Bottin
-2023-04-20
+2023-05-17
 
 - [1 Definición de la functiones](#1-definición-de-la-functiones)
   - [1.1 Pasar a un formato de matriz](#11-pasar-a-un-formato-de-matriz)
@@ -193,17 +193,8 @@ knitr::knit_hooks$set(chunk = function(x, options) {
   paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
 })
 require(openxlsx)
-```
-
-    ## Loading required package: openxlsx
-
-``` r
 require(RPostgreSQL)
 ```
-
-    ## Loading required package: RPostgreSQL
-
-    ## Loading required package: DBI
 
 ``` r
 fracking_db <- dbConnect(PostgreSQL(), dbname = "fracking")
@@ -293,18 +284,6 @@ GROUP BY life_stage, name_tax, protocol
 
 <div class="knitsql-table">
 
-| life_stage | subfamily     | protocol               | occurrences | total_abundance |
-|:-----------|:--------------|:-----------------------|------------:|----------------:|
-| Adult      | Scarabaeinae  | Human excrement trap   |        3867 |           25952 |
-| Larva      | Orphinae      | Insect hand collection |           5 |               6 |
-| Larva      | Rutelinae     | Insect hand collection |           2 |               3 |
-| Adult      | Orphinae      | Insect hand collection |           2 |              17 |
-| Adult      | Dynastinae    | Insect hand collection |           2 |               2 |
-| Larva      | Dynastinae    | Insect hand collection |           3 |               9 |
-| Larva      | Melolonthinae | Insect hand collection |          27 |              52 |
-
-7 records
-
 </div>
 
 Realmente el filtro coprofagos corresponde al filtro de protocol: todos
@@ -362,61 +341,6 @@ SELECT * FROM esca_coprophage_matrix;
 
 <div class="knitsql-table">
 
-| cd_gp_event | anh_tempo  | taxon                     | abundance |
-|------------:|:-----------|:--------------------------|----------:|
-|         503 | ANH_108_T1 | Onthophagus sp. (01H)     |        48 |
-|         503 | ANH_108_T1 | Canthon juvencus          |        13 |
-|         503 | ANH_108_T1 | Canthidium sp. (02H)      |        12 |
-|         503 | ANH_108_T1 | Trichillidium pilosum     |         5 |
-|         503 | ANH_108_T1 | Onthophagus lebasi        |         4 |
-|         503 | ANH_108_T1 | Dichotomius agenor        |         3 |
-|         503 | ANH_108_T1 | Coprophanaeus corythus    |         3 |
-|         503 | ANH_108_T1 | Phanaeus hermes           |         1 |
-|         583 | ANH_108_T2 | Onthophagus sp. (01H)     |       391 |
-|         583 | ANH_108_T2 | Dichotomius agenor        |        17 |
-|         583 | ANH_108_T2 | Onthophagus lebasi        |        11 |
-|         583 | ANH_108_T2 | Trichillidium pilosum     |        10 |
-|         583 | ANH_108_T2 | Canthon juvencus          |         4 |
-|         583 | ANH_108_T2 | Ateuchus aeneomicans      |         3 |
-|         583 | ANH_108_T2 | Canthidium sp. (05H)      |         1 |
-|         583 | ANH_108_T2 | Eurysternus mexicanus     |         1 |
-|         583 | ANH_108_T2 | Coprophanaeus corythus    |         1 |
-|         491 | ANH_109_T1 | Pseudocanthon perplexus   |        30 |
-|         491 | ANH_109_T1 | Onthophagus sp. (01H)     |        28 |
-|         491 | ANH_109_T1 | Coprophanaeus gamezi      |         1 |
-|         491 | ANH_109_T1 | Canthon juvencus          |         1 |
-|         571 | ANH_109_T2 | Onthophagus sp. (01H)     |       154 |
-|         571 | ANH_109_T2 | Pseudocanthon perplexus   |       127 |
-|         571 | ANH_109_T2 | Canthon juvencus          |        33 |
-|         571 | ANH_109_T2 | Coprophanaeus gamezi      |         8 |
-|         571 | ANH_109_T2 | Onthophagus lebasi        |         2 |
-|         571 | ANH_109_T2 | Uroxys sp. (02H)          |         1 |
-|         571 | ANH_109_T2 | Deltochilum guildingii    |         1 |
-|         571 | ANH_109_T2 | Canthon sp. (09H)         |         1 |
-|         571 | ANH_109_T2 | Canthon septemmaculatus   |         1 |
-|         505 | ANH_110_T1 | Pseudocanthon perplexus   |       106 |
-|         505 | ANH_110_T1 | Onthophagus sp. (01H)     |        53 |
-|         505 | ANH_110_T1 | Canthon sp. (06H)         |        31 |
-|         505 | ANH_110_T1 | Onthophagus marginicollis |        18 |
-|         505 | ANH_110_T1 | Canthon septemmaculatus   |        15 |
-|         505 | ANH_110_T1 | Canthon sp. (10H)         |         8 |
-|         505 | ANH_110_T1 | Coprophanaeus gamezi      |         6 |
-|         505 | ANH_110_T1 | Canthon juvencus          |         4 |
-|         505 | ANH_110_T1 | Canthon sp. (05H)         |         3 |
-|         505 | ANH_110_T1 | Uroxys sp. (02H)          |         2 |
-|         505 | ANH_110_T1 | Onthophagus lebasi        |         1 |
-|         585 | ANH_110_T2 | Onthophagus sp. (01H)     |       729 |
-|         585 | ANH_110_T2 | Canthon septemmaculatus   |       555 |
-|         585 | ANH_110_T2 | Pseudocanthon perplexus   |        94 |
-|         585 | ANH_110_T2 | Canthon juvencus          |        90 |
-|         585 | ANH_110_T2 | Eurysternus mexicanus     |        73 |
-|         585 | ANH_110_T2 | Dichotomius agenor        |        28 |
-|         585 | ANH_110_T2 | Onthophagus lebasi        |        14 |
-|         585 | ANH_110_T2 | Canthon sp. (06H)         |        13 |
-|         585 | ANH_110_T2 | Canthidium sp. (02H)      |        12 |
-
-Displaying records 1 - 50
-
 </div>
 
 Los registros **excluidos** son:
@@ -458,52 +382,6 @@ ORDER BY
 ```
 
 <div class="knitsql-table">
-
-| cd_gp_event | name_pt_ref | cd_tempo | taxon                   | abundance | life_stage | protocol               |
-|------------:|:------------|:---------|:------------------------|----------:|:-----------|:-----------------------|
-|         586 | ANH_112     | T2       | Aegidinus candezei      |         1 | Larva      | Insect hand collection |
-|         586 | ANH_112     | T2       | Plectris                |         1 | Larva      | Insect hand collection |
-|         492 | ANH_117     | T1       | Plectris                |         1 | Larva      | Insect hand collection |
-|         492 | ANH_117     | T1       | Ceraspis                |         1 | Larva      | Insect hand collection |
-|         518 | ANH_120     | T1       | Cyclocephala            |         5 | Larva      | Insect hand collection |
-|         522 | ANH_122     | T1       | Cyclocephala            |         1 | Larva      | Insect hand collection |
-|         524 | ANH_123     | T1       | Plectris                |         1 | Larva      | Insect hand collection |
-|         524 | ANH_123     | T1       | Phyllophaga             |         1 | Larva      | Insect hand collection |
-|         526 | ANH_125     | T1       | Ceraspis                |         2 | Larva      | Insect hand collection |
-|         526 | ANH_125     | T1       | Plectris                |         1 | Larva      | Insect hand collection |
-|         526 | ANH_125     | T1       | Stenocrates bicarinatus |         1 | Adult      | Insect hand collection |
-|         526 | ANH_125     | T1       | Stenocrates bicarinatus |         1 | Adult      | Insect hand collection |
-|         526 | ANH_125     | T1       | Ceraspis                |         1 | Larva      | Insect hand collection |
-|         494 | ANH_133     | T1       | Plectris                |         2 | Larva      | Insect hand collection |
-|         574 | ANH_133     | T2       | Aegidinus candezei      |        13 | Adult      | Insect hand collection |
-|         574 | ANH_133     | T2       | Aegidinus candezei      |         4 | Adult      | Insect hand collection |
-|         534 | ANH_134     | T1       | Ceraspis                |         7 | Larva      | Insect hand collection |
-|         534 | ANH_134     | T1       | Plectris                |         3 | Larva      | Insect hand collection |
-|         534 | ANH_134     | T1       | Phyllophaga             |         1 | Larva      | Insect hand collection |
-|         616 | ANH_137     | T2       | Aegidinus candezei      |         2 | Larva      | Insect hand collection |
-|         538 | ANH_138     | T1       | Ceraspis                |         5 | Larva      | Insect hand collection |
-|         538 | ANH_138     | T1       | Plectris                |         4 | Larva      | Insect hand collection |
-|         538 | ANH_138     | T1       | Ceraspis                |         4 | Larva      | Insect hand collection |
-|         538 | ANH_138     | T1       | Barybas                 |         3 | Larva      | Insect hand collection |
-|         538 | ANH_138     | T1       | Ceraspis                |         1 | Larva      | Insect hand collection |
-|         618 | ANH_138     | T2       | Plectris                |         1 | Larva      | Insect hand collection |
-|         618 | ANH_138     | T2       | Aegidinus candezei      |         1 | Larva      | Insect hand collection |
-|         620 | ANH_142     | T2       | Aegidinus candezei      |         1 | Larva      | Insect hand collection |
-|         542 | ANH_144     | T1       | Plectris                |         1 | Larva      | Insect hand collection |
-|         546 | ANH_147     | T1       | Cyclocephala            |         3 | Larva      | Insect hand collection |
-|         546 | ANH_147     | T1       | Plectris                |         2 | Larva      | Insect hand collection |
-|         626 | ANH_147     | T2       | Leucothyreus            |         2 | Larva      | Insect hand collection |
-|         626 | ANH_147     | T2       | Plectris                |         1 | Larva      | Insect hand collection |
-|         628 | ANH_365     | T2       | Aegidinus candezei      |         1 | Larva      | Insect hand collection |
-|         632 | ANH_368     | T2       | Plectris                |         1 | Larva      | Insect hand collection |
-|         560 | ANH_372     | T1       | Phyllophaga             |         2 | Larva      | Insect hand collection |
-|         562 | ANH_373     | T1       | Plectris                |         1 | Larva      | Insect hand collection |
-|         562 | ANH_373     | T1       | Ceraspis                |         1 | Larva      | Insect hand collection |
-|         562 | ANH_373     | T1       | Ceraspis                |         1 | Larva      | Insect hand collection |
-|         564 | ANH_391     | T1       | Astaena                 |         2 | Larva      | Insect hand collection |
-|         564 | ANH_391     | T1       | Leucothyreus            |         1 | Larva      | Insect hand collection |
-
-41 records
 
 </div>
 
@@ -1011,16 +889,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| CL      | OR          |     6 |
-| OR      | FAM         |    20 |
-| FAM     | GN          |    34 |
-| GN      | SP          |  2264 |
-| SP      | NA          |    59 |
-
-5 records
-
 </div>
 
 Viendo esos resultados, lo más lógico es trabajar al nivel de la especie
@@ -1296,17 +1164,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| CL      | OR          |     3 |
-| OR      | FAM         |     8 |
-| FAM     | GN          |   201 |
-| GN      | NA          |    36 |
-| GN      | SP          |  3025 |
-| SP      | NA          |    37 |
-
-6 records
-
 </div>
 
 Es mejor trabajar al nivel de genero porque algunos generos o
@@ -1548,15 +1405,6 @@ GROUP BY COALESCE(pseudo_rank,tax_rank);
 
 <div class="knitsql-table">
 
-| rank_pseudo_rank |   sum_abund | mean_abund |
-|:-----------------|------------:|-----------:|
-| family           |   3169.3653 |   633.8731 |
-| genus            |  46379.4318 |  1449.3572 |
-| order            |    209.4514 |   104.7257 |
-| species          | 161869.9935 |   489.0332 |
-
-4 records
-
 </div>
 
 <!--
@@ -1615,21 +1463,6 @@ ORDER BY rank_level DESC
 ```
 
 <div class="knitsql-table">
-
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| PHY     | CL          |     2 |
-| OR      | FAM         |   140 |
-| OR      | NA          |     2 |
-| SOR     | FAM         |     4 |
-| FAM     | GN          |   315 |
-| SFAM    | GN          |   584 |
-| TR      | GN          |     1 |
-| GN      | SP          |  3334 |
-| GN      | NA          |    15 |
-| SP      | NA          |    77 |
-
-10 records
 
 </div>
 
@@ -1871,16 +1704,6 @@ GROUP BY COALESCE(pseudo_rank,tax_rank);
 
 <div class="knitsql-table">
 
-| rank_pseudo_rank |   sum_abund | mean_abund |
-|:-----------------|------------:|-----------:|
-| class            |   0.0103884 |  0.0103884 |
-| family           |   4.3988051 |  0.2315161 |
-| genus            | 143.4887904 |  2.2775998 |
-| order            |   0.2800361 |  0.2800361 |
-| species          | 206.6766564 |  1.0131209 |
-
-5 records
-
 </div>
 
 <!--
@@ -1939,14 +1762,6 @@ ORDER BY rank_level DESC
 ```
 
 <div class="knitsql-table">
-
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| FAM     | GN          |    25 |
-| GN      | SP          |   121 |
-| SP      | NA          |   387 |
-
-3 records
 
 </div>
 
@@ -2183,13 +1998,6 @@ GROUP BY COALESCE(pseudo_rank,tax_rank);
 ```
 
 <div class="knitsql-table">
-
-| rank_pseudo_rank | sum_cover | mean_cover |
-|:-----------------|----------:|-----------:|
-| genus            |  1.328425 |  0.1107021 |
-| species          | 35.499204 |  0.2218700 |
-
-2 records
 
 </div>
 
@@ -3096,14 +2904,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| SFAM    | SP          |     4 |
-| GN      | SP          |    86 |
-| SP      | NA          |  1767 |
-
-3 records
-
 </div>
 
 ## 10.2 Matrices
@@ -3821,14 +3621,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| FAM     | NA          |    89 |
-| GN      | NA          |   447 |
-| SP      | NA          |  4142 |
-
-3 records
-
 </div>
 
 ### 11.1.2 Ultrasonidos
@@ -3848,14 +3640,6 @@ ORDER BY rank_level DESC
 ```
 
 <div class="knitsql-table">
-
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| FAM     | NA          |    89 |
-| GN      | NA          |   127 |
-| SP      | NA          |   753 |
-
-3 records
 
 </div>
 
@@ -3877,13 +3661,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| GN      | NA          |   317 |
-| SP      | NA          |  3326 |
-
-2 records
-
 </div>
 
 ### 11.1.4 Trampas Sherman
@@ -3903,13 +3680,6 @@ ORDER BY rank_level DESC
 ```
 
 <div class="knitsql-table">
-
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| GN      | NA          |     3 |
-| SP      | NA          |    50 |
-
-2 records
 
 </div>
 
@@ -4261,14 +4031,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| FAM     | NA          |     1 |
-| GN      | NA          |    14 |
-| SP      | NA          | 10234 |
-
-3 records
-
 </div>
 
 ### 12.1.2 Punto fijo
@@ -4288,14 +4050,6 @@ ORDER BY rank_level DESC
 ```
 
 <div class="knitsql-table">
-
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| FAM     | NA          |     1 |
-| GN      | NA          |    14 |
-| SP      | NA          |  9142 |
-
-3 records
 
 </div>
 
@@ -4514,13 +4268,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| OR      | NA          |     1 |
-| SP      | NA          |  2210 |
-
-2 records
-
 </div>
 
 Casi todos los anfibios están a nivel de especie: no hay debate acá
@@ -4655,13 +4402,6 @@ ORDER BY rank_level DESC
 ```
 
 <div class="knitsql-table">
-
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| GN      | SP          |    20 |
-| SP      | NA          |   894 |
-
-2 records
 
 </div>
 
@@ -4822,15 +4562,6 @@ ORDER BY rank_level DESC
 ```
 
 <div class="knitsql-table">
-
-| cd_rank | pseudo_rank | count |  sum |
-|:--------|:------------|------:|-----:|
-| PHY     | CL          |    28 |   56 |
-| CL      | OR          |   165 | 3675 |
-| GN      | SP          |   483 | 4240 |
-| SP      | NA          |   166 |  353 |
-
-4 records
 
 </div>
 
@@ -5202,13 +4933,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| GN      | NA          |    36 |
-| SP      | NA          | 41051 |
-
-2 records
-
 </div>
 
 ### 15.1.2 Matrices
@@ -5329,12 +5053,6 @@ ORDER BY rank_level DESC
 
 <div class="knitsql-table">
 
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| SP      | NA          |  1299 |
-
-1 records
-
 </div>
 
 ### 15.2.2 Matrices
@@ -5454,13 +5172,6 @@ ORDER BY rank_level DESC
 ```
 
 <div class="knitsql-table">
-
-| cd_rank | pseudo_rank | count |
-|:--------|:------------|------:|
-| GN      | NA          |  1876 |
-| SP      | NA          | 23294 |
-
-2 records
 
 </div>
 

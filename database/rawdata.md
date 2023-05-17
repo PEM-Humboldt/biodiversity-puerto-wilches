@@ -1,7 +1,7 @@
 Envio de los datos brutos en la base de datos
 ================
 Marius Bottin
-2023-04-19
+2023-05-17
 
 - [1 Reading rawFiles](#1-reading-rawfiles)
 - [2 Getting information to create the
@@ -25,8 +25,15 @@ Marius Bottin
 knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE,connection="fracking_db", max.print=100)
 require(RPostgreSQL)
 require(openxlsx)
+```
+
+    ## Loading required package: openxlsx
+
+``` r
 require(readxl)
 ```
+
+    ## Loading required package: readxl
 
 ------------------------------------------------------------------------
 
@@ -373,85 +380,13 @@ RETURNING event_id,mu.decimal_latitude,mu.decimal_longitude;
 
 <div class="knitsql-table">
 
-<table>
-<caption>
+| event_id | decimal_latitude | decimal_longitude |
+|:---------|-----------------:|------------------:|
+| ANH_90_1 |         7.273222 |         -73.88242 |
+| ANH_90_2 |         7.273222 |         -73.88242 |
+| ANH_90_3 |         7.273222 |         -73.88242 |
 
 3 records
-
-</caption>
-<thead>
-<tr>
-<th style="text-align:left;">
-
-event_id
-
-</th>
-<th style="text-align:right;">
-
-decimal_latitude
-
-</th>
-<th style="text-align:right;">
-
-decimal_longitude
-
-</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left;">
-
-ANH_90_1
-
-</td>
-<td style="text-align:right;">
-
-7.273222
-
-</td>
-<td style="text-align:right;">
-
--73.88242
-
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-
-ANH_90_2
-
-</td>
-<td style="text-align:right;">
-
-7.273222
-
-</td>
-<td style="text-align:right;">
-
--73.88242
-
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-
-ANH_90_3
-
-</td>
-<td style="text-align:right;">
-
-7.273222
-
-</td>
-<td style="text-align:right;">
-
--73.88242
-
-</td>
-</tr>
-</tbody>
-</table>
 
 </div>
 

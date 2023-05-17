@@ -1,7 +1,7 @@
 Variables ambientales acuáticas
 ================
 Marius Bottin
-2023-04-20
+2023-05-17
 
 - [1 Reading files](#1-reading-files)
   - [1.1 Peces](#11-peces)
@@ -20,19 +20,7 @@ particular en el caso de
 
 ``` r
 require(openxlsx)
-```
-
-    ## Loading required package: openxlsx
-
-``` r
 require(RPostgreSQL)
-```
-
-    ## Loading required package: RPostgreSQL
-
-    ## Loading required package: DBI
-
-``` r
 fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
 knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")

@@ -12,5 +12,6 @@ render("./correcciones_misc.Rmd")
 render("./datos_registros_suplementarios.Rmd")
 render("./puntos_referencia_habitats.Rmd")
 render("./variables_ambientales.Rmd")
+render("./biometry.Rmd")
 render("./exportación_datos.Rmd")
 

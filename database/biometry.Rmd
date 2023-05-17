@@ -1,5 +1,5 @@
 ---
-title: "Integración de los datos suplementarios de los grupos"
+title: "Integración de los datos biometricos de los grupos"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
@@ -19,6 +19,8 @@ Se trata en este documento de añadir los datos de biometría que se anotaron pa
 ```{r setup}
 require(openxlsx)
 require(RPostgreSQL)
+require(knitr)
+require(kableExtra)
 fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
 knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
@@ -140,4 +142,118 @@ VALUES
 );
 
 ```
+
+
+## Inserting biometry values
+
+### Peso
+```{sql}
+INSERT INTO main.biometry (cd_reg,cd_var_biometry,cd_unit,valor_biometry)
+SELECT cd_reg,
+  (SELECT cd_var_biometry FROM main.def_var_biometry WHERE var_biometry='Total weight'),
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Grams'),
+  measurement_value__peso_::double precision
+FROM raw_dwc.mamiferos_tot_registros
+WHERE measurement_value__peso_ <> '/' AND measurement_value__peso_::double precision IS NOT NULL;
+```
+
+Parece que hay pesos particularmente altos...
+
+```{r}
+peso<-dbGetQuery(fracking_db,"
+           SELECT
+                dvb.var_biometry,
+                du.unit,
+                b.valor_biometry,
+                t.name_tax
+           FROM main.biometry b
+           LEFT JOIN main.registros r USING (cd_reg)
+           LEFT JOIN main.taxo t USING (cd_tax)
+           LEFT JOIN main.def_unit du USING (cd_unit)
+           LEFT JOIN main.def_var_biometry dvb USING (cd_var_biometry)
+           WHERE cd_var_biometry = (SELECT cd_var_biometry FROM main.def_var_biometry WHERE var_biometry='Total weight')")
+hist(peso$valor_biometry, nclass=100)
+kable(peso[peso$valor_biometry>5000,])
+```
+
+TODO: mirar a que corresponden esos pesos de 40kg con los colegas expertos!
+
+### Wingspan
+
+```{sql}
+INSERT INTO main.biometry (cd_reg,cd_var_biometry,cd_unit,valor_biometry)
+SELECT cd_reg,
+  (SELECT cd_var_biometry FROM main.def_var_biometry WHERE var_biometry='Wingspan'),
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  measurement_value__envergadura_::double precision
+FROM raw_dwc.mamiferos_tot_registros
+WHERE measurement_value__envergadura_ <> '/' AND measurement_value__envergadura_::double precision IS NOT NULL;
+```
+
+### Total length
+
+```{sql}
+INSERT INTO main.biometry (cd_reg,cd_var_biometry,cd_unit,valor_biometry)
+SELECT cd_reg,
+  (SELECT cd_var_biometry FROM main.def_var_biometry WHERE var_biometry='Total length'),
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  regexp_replace(measurement_value__longitud_total_,'[\[\]]','','g')::double precision
+FROM raw_dwc.mamiferos_tot_registros
+WHERE measurement_value__longitud_total_ <> '/' AND measurement_value__longitud_total_ IS NOT NULL
+;
+```
+### Tail length
+
+```{sql}
+INSERT INTO main.biometry (cd_reg,cd_var_biometry,cd_unit,valor_biometry)
+SELECT cd_reg,
+  (SELECT cd_var_biometry FROM main.def_var_biometry WHERE var_biometry='Tail length'),
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+   regexp_replace(measurement_value__longitud_cola_,'[\[\]]','','g')::double precision
+FROM raw_dwc.mamiferos_tot_registros
+WHERE measurement_value__longitud_cola_ <> '/' AND measurement_value__longitud_cola_ IS NOT NULL;
+```
+
+### Ear length
+
+```{sql}
+INSERT INTO main.biometry (cd_reg,cd_var_biometry,cd_unit,valor_biometry)
+SELECT cd_reg,
+  (SELECT cd_var_biometry FROM main.def_var_biometry WHERE var_biometry='Ear length'),
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  measurement_value__longitud_oreja_::double precision
+FROM raw_dwc.mamiferos_tot_registros
+WHERE  measurement_value__longitud_oreja_::double precision IS NOT NULL;
+```
+
+### Leg length
+
+```{sql}
+INSERT INTO main.biometry (cd_reg,cd_var_biometry,cd_unit,valor_biometry)
+SELECT cd_reg,
+  (SELECT cd_var_biometry FROM main.def_var_biometry WHERE var_biometry='Leg length'),
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  measurement_value__longitud_pata_::double precision
+FROM raw_dwc.mamiferos_tot_registros
+WHERE measurement_value__longitud_pata_::double precision IS NOT NULL;
+```
+
+### Forearm length
+
+```{sql}
+INSERT INTO main.biometry (cd_reg,cd_var_biometry,cd_unit,valor_biometry)
+SELECT cd_reg,
+  (SELECT cd_var_biometry FROM main.def_var_biometry WHERE var_biometry='Forearm length'),
+  (SELECT cd_unit FROM main.def_unit WHERE unit='Millimeters'),
+  measurement_value__antebrazo_::double precision
+FROM raw_dwc.mamiferos_tot_registros
+WHERE measurement_value__antebrazo_ <> '/' AND measurement_value__antebrazo_::double precision IS NOT NULL;
+```
+
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
+
 
