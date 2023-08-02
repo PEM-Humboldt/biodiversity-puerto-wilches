@@ -284,6 +284,43 @@ FROM raw_dwc.mamiferos_tot_registros
 WHERE (sex IS NOT NULL OR life_stage IS NOT NULL OR reproductive_condition IS NOT NULL) AND organism_quantity::int>1
 ```
 
+Por ahora, vamos a olvidar este problema y considerar que dar caracteristicas individuales a registros que tienen más de un individuo.
+En el futuro:
+
+1. es importante que los responsables de grupos no hagan este tipo de simplificación en los archivos (poner una regla en los archivos DwC sería una buena practica)
+1. en caso de integración de archivos con este tipo de problemas, transformar los archivos (separar los registros individuales para todos los individuos que tienen caracteristicas individuales) antes de integrarlos es la unica solución correcta para asegurar una integridad de los datos
+
+### contar los casos
+
+```{sql}
+SELECT organism_quantity, sex, life_stage, reproductive_condition, count(*)
+FROM raw_dwc.mamiferos_tot_registros 
+WHERE (sex IS NOT NULL OR life_stage IS NOT NULL OR reproductive_condition IS NOT NULL)
+GROUP BY organism_quantity, sex, life_stage, reproductive_condition
+ORDER BY count(*) DESC
+```
+
+
+### Preparar variables y categorias para los datos de individuos de mamiferos
+
+```{sql}
+--variables
+INSERT INTO main.def_var_ind_charac (var_ind_char, type_var, var_ind_char_spa)
+VALUES('Reproductive condition', 'categorial', 'Condición reproductiva');
+
+--categorias
+INSERT INTO main.def_ind_charac_categ(categ, categ_spa, cd_var_ind_char)
+VALUES('Juvenile', 'Juvenil', (SELECT cd_var_ind_char FROM main.def_var_ind_char WHERE var_ind_char='Life stage')),
+  ('Pregnant','Gestante', (SELECT cd_var_ind_char FROM main.def_var_ind_char WHERE var_ind_char='Reproductive condition')),
+  ('Lactating','Lactante', (SELECT cd_var_ind_char FROM main.def_var_ind_char WHERE var_ind_char='Reproductive condition')),
+  ('External testes','Testículos escrotales', (SELECT cd_var_ind_char FROM main.def_var_ind_char WHERE var_ind_char='Reproductive condition')),
+  ('No external testes','Testículos inguinales', (SELECT cd_var_ind_char FROM main.def_var_ind_char WHERE var_ind_char='Reproductive condition')),
+  ('Non reproductive','No reproductiva', (SELECT cd_var_ind_char FROM main.def_var_ind_char WHERE var_ind_char='Reproductive condition'))
+
+```
+
+
+
 
 ```{r}
 dbDisconnect(fracking_db)

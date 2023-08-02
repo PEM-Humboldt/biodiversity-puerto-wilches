@@ -1,0 +1,84 @@
+---
+title: "Problemas en las caracteristicas individuales de los murcielagos"
+author: "Marius Bottin"
+date: "`r Sys.Date()`"
+output: 
+    github_document:
+       number_sections: true
+       toc: true
+       toc_depth: 4
+---
+
+
+************************
+
+La idea de este documento es mirar cuales son las modificaciones que hay que hacer sobre los datos de los murcielagos para que tengan sentido.
+
+```{r setup}
+require(openxlsx)
+require(RPostgreSQL)
+fracking_db <- dbConnect(PostgreSQL(),dbname='fracking')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE, connection="fracking_db", max.print=100)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  paste0("\n \\", "footnotesize","\n\n", x, "\n\n \\normalsize\n\n")
+})
+```
+
+# Mamiferos
+## contar los casos
+
+```{sql}
+SELECT organism_quantity, sex, life_stage, reproductive_condition, count(*)
+FROM raw_dwc.mamiferos_tot_registros 
+WHERE (sex IS NOT NULL OR life_stage IS NOT NULL OR reproductive_condition IS NOT NULL)
+GROUP BY organism_quantity, sex, life_stage, reproductive_condition
+ORDER BY count(*) DESC
+```
+
+
+## Anotar los casos problematicos
+
+```{sql output.var="tab_problemas"}
+SELECT cd_reg, mtr.cd_event, cd_gp_event, e.event_id,
+      mtr.occurrence_id,catalog_number, other_catalog_numbers,record_number, mtr.organism_id,
+      protocol,organism_quantity, sex, life_stage, reproductive_condition,
+      CASE
+        WHEN sex~'Hembra' AND reproductive_condition ~ '[Tt]est[ií]' THEN true
+        WHEN sex~'Macho' AND (reproductive_condition ~ '[Gg]estante' OR reproductive_condition ~ '[Ll]actante') THEN true
+        WHEN sex~'Macho' AND reproductive_condition ~ 'reproductiva' THEN true
+        ELSE false
+      END "resolver_problema",
+      CASE
+        WHEN life_stage ~ 'Adult' AND reproductive_condition ~ 'No repro' THEN true
+        WHEN life_stage ~ 'Adult' AND reproductive_condition ~ 'ingui' THEN true
+        ELSE false
+      END "averiguar",
+      CASE
+        WHEN sex~'Hembra' AND reproductive_condition ~ '[Tt]est[ií]' THEN 'Hembra con testículos'
+        WHEN sex~'Macho' AND (reproductive_condition ~ '[Gg]estante' OR reproductive_condition ~ '[Ll]actante') THEN 'Macho gestante'
+        WHEN sex~'Macho' AND reproductive_condition ~ 'reproductiva' THEN 'Macho no reproductiva?'
+        WHEN life_stage ~ 'Adult' AND reproductive_condition ~ 'No repro' THEN 'Adult, pero no reproductivo?'
+        WHEN life_stage ~ 'Adult' AND reproductive_condition ~ 'ingui' THEN 'Adult, pero no reproductivo?'
+      END "descripcion_problema"
+FROM raw_dwc.mamiferos_tot_registros mtr
+LEFT JOIN main.registros r USING (cd_reg)
+LEFT JOIN main.event e ON mtr.cd_event=e.cd_event
+LEFT JOIN main.gp_event ge USING (cd_gp_event)
+LEFT JOIN main.def_protocol p USING (cd_protocol)
+WHERE --(sex IS NOT NULL OR life_stage IS NOT NULL OR reproductive_condition IS NOT NULL) AND
+  protocol='Mist nets'
+
+```
+
+```{r}
+require(openxlsx)
+write.xlsx(tab_problemas,file="../../bpw_export/pb_murcielagos_carac_ind.xlsx")
+```
+
+
+```{r}
+dbDisconnect(fracking_db)
+```
+
