@@ -61,3 +61,6 @@ Vladimir/*
 *.toc
 *.swp
 *.csv
+
+# exeption
+!tables_database.csv

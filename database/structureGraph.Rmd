@@ -3,7 +3,7 @@ title: "Estructura y descripción de la base de datos"
 author: "Marius Bottin"
 date: "`r Sys.Date()`"
 output: 
-    pdf_document:
+    github_document:
        number_sections: true
        toc: true
 ---
